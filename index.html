@@ -850,30 +850,6 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
             height: 12px !important;
         }
 
-        /* Fondu pour les notes recadrées */
-        .note-clipped {
-            mask-image: linear-gradient(to bottom, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0)) !important;
-        }
-
-        /* Bouton Focus */
-        #focus-button {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background-color: #ff3c00;
-            color: white;
-            border: none;
-            cursor: pointer;
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-        }
-
         /* Modale de suppression */
         #delete-modal {
             display: none;
@@ -1071,9 +1047,6 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   </div><!-- /board-body -->
 </div><!-- /board-screen -->
 
-<!-- Bouton Focus ajouté -->
-<button id="focus-button">F</button>
-
 <!-- Modale de suppression ajoutée -->
 <div id="delete-modal">
     <p>Supprimer définitivement ?</p>
@@ -1244,10 +1217,6 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <button id="vlb-close-btn" class="vlb-close">✕</button>
   <video id="vlb-video" controls preload="metadata"></video>
 </div>
-
-<script src="app.js"></script>
-
-
 <div id="preview-toast"></div>
 </body>
 </html>

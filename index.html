@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MoodBoard App</title>
+<script src="html2canvas.min.js"></script>
+<script src="jspdf.umd.min.js"></script>
+<style>
+/* ===== FONTS ===== */
+@font-face {
+  font-family: 'HelveticaRoman';
+  src: url('Helvetica LT Pro Roman.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'HelveticaBold';
+  src: url('Helvetica LT Pro Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background: #f4f4f6; color: #1a1a2e;
+  user-select: none; overflow: hidden;
+  height: 100vh; width: 100vw;
+}
+
+/* ===== ÉCRAN D'ACCUEIL ===== */
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.05); }
+  to   { opacity: 1; transform: scale(1); }
+}
+#home-screen {
+  position: fixed; inset: 0; background: #f4f4f6;
+  display: flex; flex-direction: column; align-items: center; z-index: 1000;
+  overflow: hidden;
+}
+.home-main-title {
+  font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 26px; font-weight: 700; color: #ff3c00;
+  text-align: center; padding: 28px 0 0; letter-spacing: 0.5px;
+  flex-shrink: 0; z-index: 2; width: 100%; pointer-events: none;
+}
+.boards-container {
+  position: absolute; inset: 0;
+  overflow: hidden;
+  cursor: default;
+}
+.boards-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+}
+/* Animation d'entrée des cartes */
+.board-card { animation: zoomIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+.board-card {
+  background: #ff3c00; color: #fff;
+  width: 180px; border: none; padding: 0;
+  border-radius: 0;
+  display: flex; flex-direction: column; align-items: stretch;
+  cursor: pointer; transition: box-shadow 0.2s; position: absolute;
+  box-shadow: 0 2px 14px rgba(0,0,0,0.10); overflow: visible; user-select: none;
+}
+.board-card:hover { box-shadow: 0 8px 28px rgba(255,60,0,0.28); }
+.board-card .board-thumb {
+  width: 180px; height: 135px; object-fit: cover; display: block;
+  flex-shrink: 0; background: #cc3000;
+}
+.board-card .board-info {
+  width: 180px; height: 55px; padding: 8px 12px;
+  position: relative; overflow: hidden; flex-shrink: 0;
+  display: flex; flex-direction: column; justify-content: flex-start;
+}
+.board-card .board-name {
+  font-size: 12px; font-weight: 700; color: #fff; text-align: center;
+  white-space: normal; word-break: break-word; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  line-clamp: 2;
+}
+.board-card .board-save-date {
+  font-size: 9px; color: rgba(255,255,255,0.85);
+  display: flex; justify-content: space-between; align-items: center;
+  position: absolute; bottom: 6px; left: 12px; right: 12px;
+}
+.board-card .board-actions {
+  position: absolute; bottom: -48px; top: auto; left: 50%; transform: translateX(-50%);
+  display: none; gap: 4px; background: #fff; padding: 3px 5px;
+  border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.12); white-space: nowrap;
+}
+.board-card.selected .board-actions { display: flex; }
+.board-action-btn {
+  width: 26px; height: 26px; border-radius: 6px; border: none;
+  background: #fff; cursor: pointer; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.board-action-btn:hover { background: #f5f5f5; }
+.board-action-btn.delete:hover { background: #fee2e2; color: #ef4444; }
+
+/* Bouton nouveau moodboard — carré orange fixe */
+#new-board-btn {
+  position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%);
+  width: 56px; height: 56px; background: #ff3c00; color: #fff;
+  border: none; border-radius: 0; cursor: pointer; z-index: 1010;
+  font-size: 28px; font-weight: 300; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 20px rgba(255,60,0,0.35);
+  transition: background 0.15s, transform 0.15s;
+}
+#new-board-btn:hover { background: #e03500; transform: translateX(-50%) scale(1.08); }
+
+/* ===== INTERFACE BOARD ===== */
+#board-screen { position: fixed; inset: 0; display: none; flex-direction: column; }
+
+/* ── HEADER BOARD (barre horizontale pleine largeur) ── */
+#board-header {
+  width: 100%; height: 48px; background: #fff;
+  border-bottom: 1px solid #eaeaf0;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0; z-index: 200;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  padding: 0 12px;
+  position: relative;
+}
+.back-btn {
+  background: none; border: none; cursor: pointer; color: #999;
+  font-size: 18px; padding: 6px 8px; border-radius: 6px; transition: all 0.15s;
+  display: flex; align-items: center; line-height: 1;
+}
+.back-btn:hover { background: #f0f0f6; color: #2d2d2d; }
+#board-header .board-title-display {
+  font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 15px; font-weight: 700; color: #1a1a2e;
+  position: absolute; left: 50%; transform: translateX(-50%);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 40%;
+}
+.fit-btn-group {
+  position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 4px; z-index: 300;
+}
+.fit-screen-btn {
+  width: 36px; height: 36px; background: #ff3c00; color: #fff;
+  border: none; border-radius: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; transition: background 0.15s;
+  box-shadow: 0 2px 10px rgba(255,60,0,0.25);
+}
+.fit-screen-btn:hover { background: #e03500; }
+.preview-btn {
+  width: 36px; height: 36px; background: #ff3c00; color: #fff;
+  border: none; border-radius: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; transition: background 0.15s;
+  box-shadow: 0 2px 10px rgba(255,60,0,0.25);
+}
+.preview-btn:hover { background: #e03500; }
+
+/* ── MODE APERÇU PLEIN ÉCRAN ── */
+body.preview-mode #header,
+body.preview-mode #toolbar,
+body.preview-mode #lib-panel,
+body.preview-mode .fit-btn-group,
+body.preview-mode #zoom-toast,
+body.preview-mode #context-menu,
+body.preview-mode .modal-overlay,
+body.preview-mode #multi-resize-handle,
+body.preview-mode .element-toolbar,
+body.preview-mode .resize-handle,
+body.preview-mode .color-eyedropper { display: none !important; }
+body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !important; z-index: 9999 !important; }
+
+/* ── CORPS DU BOARD (toolbar + canvas + panneau) ── */
+.board-body {
+  flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0;
+}
+
+/* ── TOOLBAR GAUCHE ── */
+.toolbar {
+  width: 80px; min-width: 80px; background: #fff;
+  border-right: 1px solid #eaeaf0;
+  display: flex; flex-direction: column; align-items: center;
+  z-index: 100; box-shadow: 2px 0 8px rgba(0,0,0,0.04);
+  padding: 16px 0; gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Outils : icône + label */
+.tool-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px; width: 64px; padding: 10px 4px; border-radius: 6px;
+  border: none; background: none; cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+.tool-btn:hover {
+  background: rgba(255,60,0,0.07);
+  transform: translateY(-2px) scale(1.06);
+}
+.tool-btn:hover img { filter: brightness(0) saturate(100%) invert(20%) sepia(90%) saturate(2500%) hue-rotate(5deg) brightness(115%); }
+.tool-btn:hover .tool-label { color: #ff3c00; }
+.tool-btn:active { transform: scale(0.94); }
+.tool-btn.active { background: rgba(255,60,0,0.08); }
+.tool-btn img { width: 28px; height: 28px; object-fit: contain; display: block; transition: filter 0.15s; }
+.tool-btn .tool-label {
+  font-size: 10px; color: #777; font-weight: 500; text-align: center;
+  white-space: nowrap; line-height: 1; transition: color 0.15s;
+}
+.tool-btn.active .tool-label { color: #ff3c00; }
+.tool-icon { font-size: 17px; width: 28px; text-align: center; flex-shrink: 0; }
+.toolbar-divider { width: 44px; height: 1px; background: #f0f0f6; margin: 4px 0; flex-shrink: 0; }
+
+/* ── CANVAS (fond uni, pas de grille) ── */
+.canvas-wrapper {
+  flex: 1; position: relative; overflow: hidden;
+  background: #f8f8fb;
+  touch-action: none !important; /* Désactive scroll/zoom natif du navigateur, laisse JS gérer le pinch */
+  cursor: default;
+}
+/* touch-action:none sur tout le contenu pour que le pinch fonctionne même doigt sur un élément */
+#canvas, .board-element, .board-element * {
+  touch-action: none !important;
+}
+#canvas {
+  position: absolute; width: 8000px; height: 8000px;
+  top: 0; left: 0; transform-origin: 0 0;
+}
+
+/* ── ZOOM TOAST (vignette orange temporaire) ── */
+#zoom-toast {
+  position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+  background: #ff3c00; color: #fff; padding: 10px 22px; border-radius: 6px;
+  font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px; font-weight: 700; opacity: 0; transition: opacity 0.25s;
+  z-index: 9000; pointer-events: none; white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(255,60,0,0.3);
+}
+#zoom-toast.show { opacity: 1; }
+/* ── PREVIEW TOAST (séparé de zoom-toast, non masqué en preview-mode) ── */
+#preview-toast {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+  background: #ff3c00; color: #fff; padding: 10px 22px; border-radius: 6px;
+  font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px; font-weight: 700; opacity: 0; transition: opacity 0.25s;
+  z-index: 99999; pointer-events: none; white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(255,60,0,0.3);
+}
+#preview-toast.show { opacity: 1; }
+
+/* ===== PANNEAU ÉDITION TEXTE (swap avec toolbar) ===== */
+#text-edit-panel {
+  width: 80px; min-width: 80px; background: #fff;
+  border-right: 1px solid #eaeaf0;
+  display: none; flex-direction: column; align-items: center;
+  z-index: 101; box-shadow: 2px 0 8px rgba(0,0,0,0.04);
+  padding: 12px 0; gap: 6px;
+  flex-shrink: 0;
+}
+#text-edit-panel.active { display: flex; }
+.text-font-btn {
+  width: 68px; padding: 5px 4px; border: 1px solid #eaeaf0; border-radius: 6px;
+  font-size: 11px; cursor: pointer; background: none; text-align: center;
+  font-family: 'HelveticaRoman','Helvetica Neue',Helvetica,Arial,sans-serif;
+}
+.text-font-btn:hover { background: #f5f5fb; }
+.text-font-btn.active { background: rgba(255,60,0,0.08); border-color: #ff3c00; color: #ff3c00; }
+.text-size-row {
+  display: flex; align-items: center; gap: 4px; width: 68px; justify-content: center;
+}
+.text-size-btn {
+  width: 24px; height: 24px; border: 1px solid #eaeaf0; border-radius: 6px;
+  background: none; cursor: pointer; font-size: 15px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.text-size-btn:hover { background: #f5f5fb; }
+.text-size-val {
+  font-size: 12px; font-weight: 700; min-width: 20px; text-align: center; color: #444;
+}
+.text-align-btns { display: flex; flex-wrap: wrap; gap: 3px; width: 68px; justify-content: center; }
+.text-align-btn {
+  width: 30px; height: 28px; border: 1px solid #eaeaf0; border-radius: 6px;
+  background: none; cursor: pointer; font-size: 13px; transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.text-align-btn:hover { background: #f5f5fb; }
+.text-align-btn.active { background: rgba(255,60,0,0.08); border-color: #ff3c00; color: #ff3c00; }
+.text-panel-label {
+  font-size: 9px; color: #bbb; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; text-align: center;
+}
+
+/* ===== PANNEAU BIBLIOTHÈQUE DROITE ===== */
+#lib-panel {
+  position: relative;
+  width: 48px; /* fermé */
+  min-width: 48px;
+  background: #fff;
+  border-left: 1px solid #eaeaf0;
+  box-shadow: -2px 0 14px rgba(0,0,0,0.06);
+  display: flex; flex-direction: column;
+  z-index: 100;
+  transition: width 0.32s cubic-bezier(0.4,0,0.2,1);
+  overflow: hidden;
+}
+#lib-panel.open { width: 300px; min-width: 300px; }
+
+/* Bouton flèche toggle */
+#lib-toggle-btn {
+  position: absolute; top: 16px; left: 0; width: 48px; height: 48px;
+  background: none; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10; flex-shrink: 0;
+  transition: background 0.15s; border-radius: 6px;
+}
+#lib-toggle-btn:hover { background: #f0f0f6; }
+#lib-toggle-btn svg {
+  width: 20px; height: 20px; stroke: #888; fill: none;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform 0.32s cubic-bezier(0.4,0,0.2,1);
+  flex-shrink: 0;
+}
+#lib-panel.open #lib-toggle-btn svg { transform: rotate(180deg); }
+
+/* Contenu du panneau (visible seulement quand ouvert) */
+#lib-panel-content {
+  width: 300px; min-width: 300px;
+  display: flex; flex-direction: column;
+  height: 100%; padding-top: 64px; /* espace pour le bouton toggle */
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s;
+}
+#lib-panel.open #lib-panel-content {
+  opacity: 1; pointer-events: all;
+  transition: opacity 0.25s 0.1s;
+}
+
+/* Header panneau */
+.lib-panel-header {
+  padding: 0 14px 12px; flex-shrink: 0;
+}
+.lib-add-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 11px 16px;
+  background: #ff3c00; color: #fff; border: none; border-radius: 6px;
+  cursor: pointer; font-size: 13px; font-weight: 700;
+  transition: background 0.15s; white-space: nowrap;
+}
+.lib-add-btn:hover { background: #e03500; }
+
+/* Dossiers */
+.lib-folders {
+  padding: 10px 14px 6px; flex-shrink: 0;
+  border-top: 1px solid #f0f0f6; border-bottom: 1px solid #f0f0f6;
+  display: flex; flex-wrap: wrap; gap: 5px;
+}
+.lib-folder-chip {
+  padding: 5px 10px; border-radius: 6px; border: 1px solid #eaeaf0;
+  background: none; cursor: pointer; font-size: 11px; color: #666; font-weight: 600;
+  transition: all 0.15s; white-space: nowrap;
+}
+.lib-folder-chip:hover { background: #f5f5fb; border-color: #d0d0e0; }
+.lib-folder-chip.active { background: rgba(255,60,0,0.08); border-color: #ff3c00; color: #ff3c00; }
+
+/* Recherche */
+.lib-search-wrap { padding: 10px 14px; flex-shrink: 0; }
+.lib-search-input {
+  width: 100%; padding: 8px 12px 8px 34px; border: 1px solid #eaeaf0; border-radius: 6px;
+  font-size: 13px; outline: none; background: #fafafa; transition: border-color 0.15s;
+  background-image: url('loupe.png'); background-size: 16px; background-repeat: no-repeat;
+  background-position: 10px center;
+  font-family: inherit;
+}
+.lib-search-input:focus { border-color: #ff3c00; background: #fff; }
+
+/* Grille d'images */
+.lib-panel-grid {
+  flex: 1; overflow-y: auto; padding: 8px 14px 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 120px;
+  gap: 8px;
+  align-items: start;
+}
+.lib-panel-item {
+  border-radius: 0; overflow: hidden; border: 2px solid transparent;
+  cursor: grab; transition: border-color 0.18s, box-shadow 0.18s; position: relative;
+  background: #f0f0f5;
+  width: 100%; height: 120px;
+  display: flex; align-items: center; justify-content: center;
+}
+.lib-panel-item:hover { border-color: #ff3c00; box-shadow: 0 4px 16px rgba(255,60,0,0.18); }
+.lib-panel-item:active { cursor: grabbing; }
+.lib-panel-item img {
+  max-width: 100%; max-height: 100%;
+  width: auto; height: auto;
+  object-fit: contain; display: block;
+}
+.lib-panel-item .lib-item-delete {
+  position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.55);
+  border: none; color: #fff; font-size: 11px; border-radius: 4px;
+  cursor: pointer; padding: 2px 6px; display: none; transition: background 0.1s;
+}
+.lib-panel-item:hover .lib-item-delete { display: block; }
+.lib-panel-item .lib-item-delete:hover { background: #ef4444; }
+.lib-panel-item .lib-item-name {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.55));
+  color: #fff; font-size: 10px; padding: 12px 6px 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; transition: opacity 0.15s;
+}
+.lib-panel-item:hover .lib-item-name { opacity: 1; }
+.lib-select-indicator {
+  position: absolute; top: 4px; left: 4px;
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid #fff; background: transparent;
+  display: none; pointer-events: none; z-index: 2;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
+}
+.lib-panel-item.selected-lib-item .lib-select-indicator { display: block; background: #ff3c00; }
+.lib-panel-item.selected-lib-item { border-color: #ff3c00; box-shadow: 0 4px 16px rgba(255,60,0,0.28); }
+.lib-folder-chip.drag-over { background: #ff3c00; color: #fff; }
+
+/* Drop overlay panneau */
+.lib-panel-drop-overlay {
+  position: absolute; inset: 0; background: rgba(255,60,0,0.08);
+  border: 3px dashed #ff3c00; border-radius: 0; margin: 8px;
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column; color: #ff3c00; font-size: 13px; font-weight: 600;
+  z-index: 10; pointer-events: none;
+}
+.lib-panel-drop-overlay.show { display: flex; }
+
+/* État vide */
+.lib-panel-empty {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; color: #ccc; padding: 20px; text-align: center;
+}
+.lib-panel-empty .empty-icon { font-size: 36px; margin-bottom: 10px; }
+.lib-panel-empty p { font-size: 13px; font-weight: 500; }
+.lib-panel-empty small { font-size: 11px; color: #ddd; margin-top: 5px; display: block; }
+
+/* ===== ÉLÉMENTS DU BOARD ===== */
+.board-element {
+  position: absolute;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Cpath d='M11 2v3M11 17v3M2 11h3M17 11h3' stroke='%23fff' stroke-width='2.5' stroke-linecap='round'/%3E%3Cpath d='M11 2v3M11 17v3M2 11h3M17 11h3' stroke='%23ff3c00' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='11' cy='11' r='3.5' fill='%23ff3c00' stroke='%23fff' stroke-width='1.2'/%3E%3Cpath d='M11 5l2 3h-4zM11 17l-2-3h4zM5 11l3-2v4zM17 11l-3 2v-4z' fill='%23ff3c00' stroke='%23fff' stroke-width='0.5'/%3E%3C/svg%3E") 11 11, move;
+}
+.board-element.selected {
+  outline: 1px solid #00FF0A; outline-offset: 0px;
+  z-index: 1000 !important;
+}
+.board-element.multi-selected {
+  outline: 1px solid #00FF0A; outline-offset: 0px;
+}
+
+/* Toolbar flottante */
+.element-toolbar {
+  position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
+  background: #fff; border-radius: 6px; padding: 4px 6px;
+  display: none; gap: 2px; white-space: nowrap; z-index: 20;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+}
+.board-element.selected .element-toolbar { display: flex; }
+.el-tool-btn {
+  background: none; border: none; cursor: pointer;
+  padding: 4px 6px; border-radius: 4px; transition: background 0.1s;
+  display: flex; align-items: center; justify-content: center;
+}
+.el-tool-btn img { width: 16px; height: 16px; object-fit: contain; display: block; }
+.el-tool-btn:hover { background: rgba(0,0,0,0.06); }
+.el-tool-btn.danger:hover { background: #fee2e2; }
+
+/* Resize handle — carré visible 13×13, hitbox 26×26 via ::before */
+.resize-handle {
+  position: absolute; bottom: -7px; right: -7px;
+  width: 14px; height: 14px; background: #00FF0A;
+  border-radius: 0; cursor: se-resize; display: none; z-index: 20;
+  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,255,10,0.5);
+  transform-origin: center center;
+}
+.resize-handle::before {
+  content: ''; position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 48px; height: 48px;
+}
+.board-element.selected .resize-handle { display: block; }
+
+/* Handle de resize pour la multi-sélection — même logique */
+#multi-resize-handle {
+  position: absolute; width: 18px; height: 18px; background: #00FF0A;
+  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,255,10,0.5);
+  cursor: se-resize; z-index: 9100; display: none;
+  transform: translate(-50%, -50%);
+}
+#multi-resize-handle::before {
+  content: ''; position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 48px; height: 48px;
+}
+
+/* IMAGE — pas de conteneur intermédiaire, l'img est directe dans .board-element */
+.board-element[data-type="image"] {
+  box-shadow: 0 3px 16px rgba(0,0,0,0.12);
+  overflow: hidden;
+}
+.board-element[data-type="image"] > img {
+  display: block; pointer-events: none;
+  width: 100%; height: 100%;
+  object-fit: contain;
+}
+
+/* NOTE — déformable */
+.el-note {
+  background: #fff; border-radius: 0;
+  box-shadow: 0 3px 16px rgba(0,0,0,0.1); padding: 14px;
+  border: 1px solid #eaeaf0;
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+  min-width: 300px; min-height: 139.5px;
+}
+.el-note div[contenteditable] {
+  width: 100%; flex: 1; border: none; outline: none;
+  font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px; color: #2d2d2d;
+  background: transparent; line-height: 1.6;
+  cursor: move; word-break: break-word; min-height: 20px;
+}
+.el-note div[contenteditable][contenteditable="true"] { cursor: text; }
+.el-note div[contenteditable] ul,
+.el-note div[contenteditable] ol { padding-left: 20px; }
+/* Masque de fondu quand note manuellement réduite via la poignée */
+.board-element.note-clipped .el-note {
+  -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+  overflow: hidden;
+}
+
+/* COULEUR — déformable */
+.el-color {
+  border-radius: 0; box-shadow: 0 3px 16px rgba(0,0,0,0.1);
+  overflow: hidden; display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+  min-width: 240px; min-height: 270px;
+}
+.el-color .color-swatch { flex: 1; min-height: 40px; }
+.el-color .color-info { background: #fff; padding: 6px 10px; border-top: 1px solid rgba(0,0,0,0.06); flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
+.el-color .color-hex-input {
+  font-size: 13px; font-weight: 700; color: #2d2d2d;
+  font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  letter-spacing: 0.5px;
+  border: none; outline: none; background: transparent; width: 0; flex: 1; min-width: 0;
+  cursor: text; padding: 0;
+}
+.el-color .color-hex-input:focus { color: #ff3c00; }
+.el-color .color-eyedropper {
+  flex-shrink: 0; width: 22px; height: 22px; background: none; border: none;
+  cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center;
+  opacity: 0.45; transition: opacity 0.15s;
+}
+.el-color .color-eyedropper:hover { opacity: 1; }
+.el-color .color-name { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+/* LIEN — déformable */
+.el-link {
+  background: #fff; border-radius: 0; overflow: hidden;
+  box-shadow: 0 3px 16px rgba(0,0,0,0.1); border: 1px solid #eaeaf0;
+  width: 100%; height: 100%; cursor: pointer;
+  display: flex; flex-direction: column;
+}
+.el-link .link-image { width: 100%; flex: 1; object-fit: cover; display: block; min-height: 60px; }
+.el-link .link-image-placeholder {
+  width: 100%; flex: 1; min-height: 60px;
+  background: linear-gradient(135deg, #ffe8e0, #ffd0c0);
+  display: flex; align-items: center; justify-content: center; font-size: 32px;
+}
+.el-link .link-body { padding: 10px 14px; flex-shrink: 0; }
+.el-link .link-title { font-size: 13px; font-weight: 600; color: #2d2d2d; margin-bottom: 5px; line-height: 1.4; }
+.el-link .link-url { font-size: 11px; color: #ff3c00; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* VIDÉO */
+.el-video { background: #000; border-radius: 0; overflow: hidden; box-shadow: 0 3px 16px rgba(0,0,0,0.18); width: 100%; height: 100%; }
+.el-video video { width: 100%; height: 100%; display: block; }
+.el-video iframe { width: 100%; height: 100%; border: none; display: block; }
+
+/* FICHIER — déformable */
+.el-file {
+  background: #fff; border-radius: 0; padding: 16px 20px;
+  box-shadow: 0 3px 16px rgba(0,0,0,0.1); border: 1px solid #eaeaf0;
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; height: 100%; overflow: hidden;
+}
+.el-file .file-icon { font-size: 30px; flex-shrink: 0; }
+.el-file .file-icon img { width: 30px; height: 30px; object-fit: contain; display: block; }
+.el-file .file-info { flex: 1; overflow: hidden; }
+.el-file .file-name { font-size: 13px; font-weight: 600; color: #2d2d2d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.el-file .file-size { font-size: 11px; color: #bbb; margin-top: 3px; }
+
+/* FICHIER VIDÉO — aperçu pur sans texte */
+.el-file-video {
+  background: #000; border-radius: 0;
+  box-shadow: 0 3px 16px rgba(0,0,0,0.18); border: 1px solid #111;
+  width: 100%; height: 100%; overflow: hidden; position: relative;
+  cursor: pointer;
+}
+.el-file-video video {
+  width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none;
+}
+.el-file-video .video-play-hint {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  width: 44px; height: 44px; background: rgba(255,255,255,0.18);
+  border-radius: 50%; pointer-events: none; backdrop-filter: blur(2px);
+}
+/* Triangle CSS pur — optiquement centré dans le cercle */
+.el-file-video .video-play-hint::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  /* décalage +2px à droite pour compenser l'asymétrie visuelle du triangle */
+  transform: translate(-42%, -50%);
+  width: 0; height: 0;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 15px solid rgba(255,255,255,0.9);
+}
+
+/* LIGHTBOX VIDÉO */
+#video-lightbox-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.88);
+  z-index: 10001; display: none;
+  align-items: center; justify-content: center; flex-direction: column;
+}
+#video-lightbox-overlay.show { display: flex; }
+#video-lightbox-overlay video {
+  max-width: 92vw; max-height: 82vh;
+  background: #000; display: block; border-radius: 0;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+}
+.vlb-close {
+  position: fixed; top: 18px; right: 22px;
+  background: none; border: none; color: #fff; font-size: 28px;
+  cursor: pointer; line-height: 1; opacity: 0.7; z-index: 10002;
+  transition: opacity 0.15s;
+}
+.vlb-close:hover { opacity: 1; }
+
+/* ===== RECTANGLE DE SÉLECTION ===== */
+#selection-rect {
+  position: absolute; border: 1.5px solid #00FF0A;
+  background: rgba(0,255,10,0.07); pointer-events: none;
+  display: none; z-index: 9000; border-radius: 0;
+}
+
+/* ===== GUIDES DE SNAP ===== */
+.snap-guide {
+  position: absolute; pointer-events: none; z-index: 9999;
+  background: #ff3c00;
+}
+.snap-guide.h { height: 1px; left: 0; width: 8000px; }
+.snap-guide.v { width: 1px;  top:  0; height: 8000px; }
+
+/* ===== MODALES ===== */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.38);
+  z-index: 2000; display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay.hidden { display: none; }
+.modal {
+  background: #fff; border-radius: 0;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.22); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.modal-header {
+  padding: 22px 26px 16px; border-bottom: 1px solid #f0f0f6;
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.modal-header h2 { font-size: 18px; font-weight: 700; color: #1a1a2e; }
+.modal-close {
+  background: none; border: none; cursor: pointer; font-size: 20px;
+  color: #bbb; padding: 4px; border-radius: 6px; transition: all 0.15s; line-height: 1;
+}
+.modal-close:hover { background: #f5f5fb; color: #2d2d2d; }
+
+/* COULEUR */
+.color-picker-wrap { padding: 22px 26px; }
+.color-picker-wrap input[type="color"] {
+  width: 100%; height: 130px; border: none; border-radius: 0; cursor: pointer; padding: 0; display: block;
+}
+.hex-input-wrap { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.hex-input-wrap label { font-size: 13px; font-weight: 700; color: #666; }
+.hex-input {
+  flex: 1; padding: 9px 14px; border: 1px solid #eaeaf0; border-radius: 6px;
+  font-size: 15px; font-weight: 700; font-family: 'Courier New', monospace;
+  letter-spacing: 2px; outline: none; text-transform: uppercase; color: #2d2d2d;
+}
+.hex-input:focus { border-color: #ff3c00; }
+#hex-preview { width: 36px; height: 36px; border-radius: 0; flex-shrink: 0; border: 1px solid #eaeaf0; }
+.add-color-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 13px; margin-top: 18px;
+  background: #ff3c00; color: #fff; border: none; border-radius: 6px;
+  cursor: pointer; font-size: 14px; font-weight: 700; transition: background 0.15s;
+}
+.add-color-btn:hover { background: #e03500; }
+
+/* FORMULAIRES */
+.form-wrap { padding: 22px 26px; display: flex; flex-direction: column; gap: 16px; }
+.form-group label { display: block; font-size: 11px; font-weight: 700; color: #999; margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.6px; }
+.form-input {
+  width: 100%; padding: 11px 14px; border: 1px solid #eaeaf0; border-radius: 6px;
+  font-size: 14px; outline: none; transition: border-color 0.15s; color: #2d2d2d; font-family: inherit;
+}
+.form-input:focus { border-color: #ff3c00; }
+.form-submit {
+  padding: 12px; background: #ff3c00; color: #fff; border: none;
+  border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700;
+  transition: background 0.15s; font-family: inherit;
+}
+.form-submit:hover { background: #e03500; }
+
+/* VIDÉO TABS */
+.video-type-tabs { display: flex; gap: 8px; }
+.video-tab {
+  flex: 1; padding: 10px; border: 1px solid #eaeaf0; border-radius: 6px;
+  background: none; cursor: pointer; font-size: 13px; color: #666; font-weight: 500;
+  transition: all 0.15s; font-family: inherit;
+}
+.video-tab.active { background: rgba(255,60,0,0.08); border-color: #ff3c00; color: #ff3c00; }
+
+/* CONTEXT MENU */
+#context-menu {
+  position: fixed; background: #fff; border-radius: 0;
+  box-shadow: 0 10px 32px rgba(0,0,0,0.16); border: 1px solid #eaeaf0;
+  padding: 6px; z-index: 5000; min-width: 168px; display: none;
+}
+.ctx-item {
+  padding: 9px 14px; border-radius: 6px; cursor: pointer;
+  font-size: 13px; color: #444; display: flex; align-items: center; gap: 9px;
+  transition: background 0.1s; font-weight: 500;
+}
+.ctx-item:hover { background: #f5f5fb; }
+.ctx-item.danger { color: #ef4444; }
+.ctx-item.danger:hover { background: #fee2e2; }
+.ctx-divider { height: 1px; background: #f0f0f6; margin: 4px 0; }
+
+/* TOAST */
+#toast {
+  position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%);
+  background: #ff3c00; color: #fff; padding: 11px 22px; border-radius: 6px;
+  font-size: 13px; font-weight: 600; opacity: 0; transition: opacity 0.3s;
+  z-index: 9999; pointer-events: none; white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(255,60,0,0.3);
+}
+#toast.show { opacity: 1; }
+
+/* SCROLLBARS */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4d4e0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b4b4c8; }
+
+.hidden { display: none !important; }
+
+/* ===== CAPTIONS ===== */
+.el-caption {
+  position: absolute;
+  background: #fff;
+  padding: 6px 8px;
+  font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 12px; color: #555; line-height: 1.5;
+  border: none;
+  word-wrap: break-word; overflow-wrap: break-word;
+  cursor: text; z-index: 5;
+  box-sizing: border-box;
+}
+.el-caption[contenteditable]:empty::before {
+  content: attr(data-placeholder);
+  color: #bbb;
+}
+
+/* ===== CONNEXIONS SVG ===== */
+.el-connection {
+  position: absolute; top: 0; left: 0;
+  width: 8000px; height: 8000px;
+  pointer-events: none; z-index: 1;
+  overflow: visible;
+}
+.el-connection line {
+  stroke: #1a1a2e; stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+/* ===== LIGHTBOX ===== */
+#lightbox-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+  z-index: 10000; display: none;
+  align-items: center; justify-content: center;
+  cursor: zoom-out;
+}
+#lightbox-overlay.show { display: flex; }
+#lightbox-overlay img {
+  max-width: 90vw; max-height: 90vh;
+  object-fit: contain; display: block;
+  border-radius: 0;
+}
+
+
+  /* Styles globaux pour les fonds et les sélections */
+        body, #home-screen, .canvas-wrapper {
+            background-color: #ebedee !important;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        /* Curseur personnalisé (flèche orange) */
+        body {
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="%23ff3c00"><path d="M12 2L12 22M2 12H22" stroke="%23ff3c00" stroke-width="3" stroke-linecap="round"/></svg>'), auto;
+        }
+
+        /* Curseurs pour le mode Pan (grab/grabbing) */
+        .canvas-wrapper.grab-cursor {
+            cursor: grab;
+        }
+        .canvas-wrapper.grabbing-cursor {
+            cursor: grabbing;
+        }
+
+        /* Styles pour les éléments sélectionnés */
+        .selected, .multi-selected {
+                        border: 1px solid #797F88 !important;
+        }
+
+        /* Rectangle de sélection */
+        #selection-rect {
+            background: rgba(211, 213, 214, 0.5) !important;
+            border: 1px solid #797F88 !important;
+        }
+
+        /* Poignée de redimensionnement (orange) */
+        .resize-handle, #multi-resize-handle {
+            background-color: #ff3c00 !important;
+            width: 12px !important;
+            height: 12px !important;
+        }
+
+        /* Fondu pour les notes recadrées */
+        .note-clipped {
+            mask-image: linear-gradient(to bottom, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0)) !important;
+        }
+
+        /* Bouton Focus */
+        #focus-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #ff3c00;
+            color: white;
+            border: none;
+            cursor: pointer;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        /* Modale de suppression */
+        #delete-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1001;
+            text-align: center;
+        }
+        #delete-modal button {
+            margin: 0 10px;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #yes-button {
+            background-color: #ff3c00;
+            color: white;
+            border: none;
+        }
+        #no-button {
+            background-color: white;
+            color: #ff3c00;
+            border: 1px solid #ff3c00;
+        }
+
+        /* Barre d'outils de groupe */
+        #group-toolbar {
+            display: none;
+            position: absolute;
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            top: -40px;
+            left: 0;
+        }
+        #group-toolbar button {
+            margin: 0 4px;
+            padding: 4px 8px;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+
+</style>
+</head>
+<body>
+
+<!-- ===== ÉCRAN D'ACCUEIL ===== -->
+<div id="home-screen">
+  <h1 class="home-main-title">MOODBOARDS</h1>
+  <div class="boards-container" id="boards-container">
+    <div class="boards-canvas" id="boards-canvas"></div>
+  </div>
+  <button id="new-board-btn" title="Nouveau Moodboard">+</button>
+</div>
+
+
+<!-- ===== INTERFACE BOARD ===== -->
+<div id="board-screen">
+
+  <!-- HEADER BOARD (barre pleine largeur) -->
+  <header id="board-header">
+    <button class="back-btn" id="back-btn" title="Retour à l'accueil">&#8592;</button>
+    <div class="board-title-display" id="board-title-display">Moodboard</div>
+  </header>
+  <!-- Boutons orange centrés sous le header -->
+  <div class="fit-btn-group">
+    <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">⊡</button>
+    <button id="preview-btn" class="preview-btn" title="Aperçu plein écran (Échap pour quitter)">⛶</button>
+  </div>
+
+  <!-- CORPS : toolbar + canvas + panneau -->
+  <div class="board-body">
+
+  <!-- TOOLBAR GAUCHE (icônes PNG + labels) -->
+  <div class="toolbar" id="toolbar">
+    <button id="tool-note" class="tool-btn" draggable="true" title="Note — glisser pour poser">
+      <img src="note.png" alt="Note">
+      <span class="tool-label">Note</span>
+    </button>
+    <button id="tool-color" class="tool-btn" draggable="true" title="Couleur — glisser pour poser">
+      <img src="couleur.png" alt="Couleur">
+      <span class="tool-label">Couleur</span>
+    </button>
+    <button id="tool-link" class="tool-btn" draggable="true" title="Lien — glisser pour poser">
+      <img src="lien.png" alt="Lien">
+      <span class="tool-label">Lien</span>
+    </button>
+    <button id="tool-file" class="tool-btn" draggable="true" title="Fichier — glisser pour poser">
+      <img src="fichier.png" alt="Fichier">
+      <span class="tool-label">Fichier</span>
+    </button>
+    <div class="toolbar-divider"></div>
+    <button id="tool-export" class="tool-btn" title="Exporter">
+      <img src="exportation.png" alt="Exporter">
+      <span class="tool-label">Exporter</span>
+    </button>
+  </div>
+
+  <!-- PANNEAU ÉDITION TEXTE (swap animé avec toolbar) -->
+  <div id="text-edit-panel">
+    <span class="text-panel-label">Police</span>
+    <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Roman</button>
+    <button class="text-font-btn" id="tp-bold"  title="Helvetica Bold"><b>Bold</b></button>
+    <span class="text-panel-label">Taille</span>
+    <div class="text-size-row">
+      <button id="text-size-minus" class="text-size-btn">−</button>
+      <span class="text-size-val" id="text-size-val">14</span>
+      <button id="text-size-plus" class="text-size-btn">+</button>
+    </div>
+    <span class="text-panel-label">Alignement</span>
+    <div class="text-align-btns">
+      <button class="text-align-btn" id="ta-left"   title="Gauche">⬅</button>
+      <button class="text-align-btn" id="ta-center" title="Centre">☰</button>
+      <button class="text-align-btn" id="ta-right"  title="Droite">➡</button>
+    </div>
+    <span class="text-panel-label">Liste</span>
+    <div class="text-align-btns">
+      <button class="text-align-btn" id="tp-list-ul" title="Liste à puces">•</button>
+      <button class="text-align-btn" id="tp-list-ol" title="Liste numérotée">1.</button>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-wrapper" id="canvas-wrapper">
+    <div id="canvas"></div>
+    <!-- Rectangle de sélection -->
+    <div id="selection-rect"></div>
+    <!-- Handle de resize multi-sélection -->
+    <div id="multi-resize-handle"></div>
+    <!-- Toast zoom (vignette orange temporaire) -->
+    <div id="zoom-toast"></div>
+  </div>
+
+  <!-- PANNEAU BIBLIOTHÈQUE DROITE -->
+  <div id="lib-panel">
+    <!-- Bouton toggle flèche -->
+    <button id="lib-toggle-btn" title="Bibliothèque d'images">
+      <!-- Chevron gauche (indique "ouvrir vers la gauche") -->
+      <svg viewBox="0 0 24 24">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    </button>
+
+    <!-- Contenu (visible quand ouvert) -->
+    <div id="lib-panel-content">
+      <div class="lib-panel-header">
+        <button id="lib-add-btn" class="lib-add-btn">
+          &#43; Ajouter plus d'images
+        </button>
+      </div>
+
+      <!-- Chips dossiers -->
+      <div class="lib-folders">
+        <button class="lib-folder-chip active" data-folder="all">Tout</button>
+        <button class="lib-folder-chip" data-folder="typographie">Typo</button>
+        <button class="lib-folder-chip" data-folder="couleur">Couleur</button>
+        <button class="lib-folder-chip" data-folder="logo">Logo</button>
+        <button class="lib-folder-chip" data-folder="image">Image</button>
+      </div>
+
+      <!-- Recherche -->
+      <div class="lib-search-wrap">
+        <input class="lib-search-input" type="text" placeholder="Rechercher..."
+          id="lib-panel-search">
+      </div>
+
+      <!-- Grille images -->
+      <div id="lib-panel-grid" class="lib-panel-grid"></div>
+
+      <!-- État vide -->
+      <div id="lib-panel-empty" class="lib-panel-empty hidden">
+        <div class="empty-icon">📁</div>
+        <p>Aucune image ici</p>
+        <small>Importez des images ou glissez-les dans ce panneau</small>
+      </div>
+
+      <!-- Drop overlay -->
+      <div class="lib-panel-drop-overlay" id="lib-panel-drop-overlay">
+        <div style="font-size:36px;margin-bottom:10px">📥</div>
+        Déposez ici
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /board-body -->
+</div><!-- /board-screen -->
+
+<!-- Bouton Focus ajouté -->
+<button id="focus-button">F</button>
+
+<!-- Modale de suppression ajoutée -->
+<div id="delete-modal">
+    <p>Supprimer définitivement ?</p>
+    <button id="yes-button">Oui</button>
+    <button id="no-button">Non</button>
+</div>
+
+<!-- Barre d'outils de groupe ajoutée -->
+<div id="group-toolbar">
+    <button id="duplicate-button">Dupliquer</button>
+    <button id="delete-button">Supprimer</button>
+</div>
+
+
+<!-- INPUTS FICHIERS CACHÉS -->
+<input type="file" id="file-input-images" multiple accept="image/*" style="display:none">
+<input type="file" id="file-input-file" multiple style="display:none">
+<input type="file" id="file-input-video" accept="video/*" style="display:none">
+<input type="file" id="file-input-replace" accept="image/*" style="display:none">
+
+<!-- MODALE COULEUR -->
+<div class="modal-overlay hidden" id="color-modal">
+  <div class="modal" style="width:370px">
+    <div class="modal-header">
+      <h2>🎨 Ajouter une couleur</h2>
+      <button id="close-color-modal" class="modal-close">&#x2715;</button>
+    </div>
+    <div class="color-picker-wrap">
+      <input type="color" id="color-picker-input" value="#ff3c00">
+      <div class="hex-input-wrap">
+        <label>#</label>
+        <input class="hex-input" type="text" id="hex-input" value="6C63FF" maxlength="6">
+        <div id="hex-preview" style="background:#ff3c00"></div>
+      </div>
+      <button id="add-color-btn" class="add-color-btn">＋ Ajouter au board</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE LIEN -->
+<div class="modal-overlay hidden" id="link-modal">
+  <div class="modal" style="width:460px">
+    <div class="modal-header">
+      <h2>🔗 Ajouter un lien</h2>
+      <button id="close-link-modal" class="modal-close">&#x2715;</button>
+    </div>
+    <div class="form-wrap">
+      <div class="form-group">
+        <label>URL *</label>
+        <input class="form-input" type="url" id="link-url-input" placeholder="https://exemple.com">
+      </div>
+      <div class="form-group">
+        <label>Titre (optionnel)</label>
+        <input class="form-input" type="text" id="link-title-input" placeholder="Titre affiché">
+      </div>
+      <div class="form-group">
+        <label>Image d'aperçu (URL optionnel)</label>
+        <input class="form-input" type="url" id="link-img-input" placeholder="https://exemple.com/image.jpg">
+      </div>
+      <button id="submit-link" class="form-submit">Ajouter le lien</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE VIDÉO -->
+<div class="modal-overlay hidden" id="video-modal">
+  <div class="modal" style="width:480px">
+    <div class="modal-header">
+      <h2>▶️ Ajouter une vidéo</h2>
+      <button id="close-video-modal" class="modal-close">&#x2715;</button>
+    </div>
+    <div class="form-wrap">
+      <div class="video-type-tabs">
+        <button class="video-tab active" id="vt-url">🌐 URL</button>
+        <button class="video-tab" id="vt-local">📁 Fichier local</button>
+      </div>
+      <div id="video-url-section">
+        <div class="form-group">
+          <label>URL de la vidéo</label>
+          <input class="form-input" type="url" id="video-url-input" placeholder="https://youtube.com/watch?v=...">
+        </div>
+        <button id="submit-video-url" class="form-submit">Ajouter</button>
+      </div>
+      <div id="video-local-section" class="hidden">
+        <button id="submit-video-local" class="form-submit">
+          📁 Choisir un fichier vidéo
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE RENAME -->
+<div class="modal-overlay hidden" id="rename-modal">
+  <div class="modal" style="width:380px">
+    <div class="modal-header">
+      <h2>✏️ Renommer</h2>
+      <button id="close-rename-modal" class="modal-close">&#x2715;</button>
+    </div>
+    <div class="form-wrap">
+      <div class="form-group">
+        <label>Nouveau nom</label>
+        <input class="form-input" type="text" id="rename-input" placeholder="Nom du moodboard" maxlength="45">
+      </div>
+      <button id="submit-rename" class="form-submit">Renommer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE CRÉATION MOODBOARD -->
+<div class="modal-overlay hidden" id="create-board-modal">
+  <div class="modal" style="width:380px">
+    <div class="modal-header">
+      <h2>Nouveau moodboard</h2>
+      <button id="close-create-board-modal" class="modal-close">&#x2715;</button>
+    </div>
+    <div class="form-wrap">
+      <div class="form-group">
+        <label>Nom du moodboard</label>
+        <input class="form-input" type="text" id="create-board-input" placeholder="Mon moodboard" maxlength="45">
+      </div>
+      <button id="submit-create-board" class="form-submit">Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE EXPORT -->
+<div class="modal-overlay hidden" id="export-modal">
+  <div class="modal" style="width:320px">
+    <div class="modal-header">
+      <h2>Exporter</h2>
+      <button id="close-export-modal" class="modal-close">&#x2715;</button>
+    </div>
+    <div style="padding:24px 26px;display:flex;flex-direction:column;gap:10px;">
+      <button id="export-png-btn" class="form-submit">Exporter en PNG</button>
+      <div style="border-top:1px solid #eaeaf0;margin:2px 0;"></div>
+      <button id="export-pdf-hr-btn" class="form-submit" style="background:#1a1a2e;">PDF — Haute résolution</button>
+      <button id="export-pdf-lr-btn" class="form-submit" style="background:#3a3a5e;">PDF — Basse résolution</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTEXT MENU -->
+<div id="context-menu">
+  <div id="ctx-duplicate" class="ctx-item"><img src="dupliquer.png" style="width:16px;height:16px;object-fit:contain;flex-shrink:0;"> Dupliquer</div>
+  <!-- Options spécifiques aux images -->
+  <div class="ctx-divider" id="ctx-img-divider" style="display:none"></div>
+  <div class="ctx-item" id="ctx-img-download" style="display:none">⬇️ Télécharger</div>
+  <div class="ctx-item" id="ctx-img-replace" style="display:none">🔄 Remplacer</div>
+  <div class="ctx-item" id="ctx-img-caption" style="display:none">💬 Commentaire</div>
+  <!-- Connexion multi-sélection -->
+  <div class="ctx-divider" id="ctx-connect-divider" style="display:none"></div>
+  <div class="ctx-item" id="ctx-connect" style="display:none">— Connecter</div>
+  <div class="ctx-divider"></div>
+  <div id="ctx-delete" class="ctx-item danger"><img src="supprimer.png" style="width:16px;height:16px;object-fit:contain;flex-shrink:0;"> Supprimer</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- LIGHTBOX IMAGE -->
+<div id="lightbox-overlay">
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<!-- LIGHTBOX VIDÉO -->
+<div id="video-lightbox-overlay">
+  <button id="vlb-close-btn" class="vlb-close">✕</button>
+  <video id="vlb-video" controls preload="metadata"></video>
+</div>
+
+<script src="app.js"></script>
+<script>
+    // Logique pour le bouton Focus (plein écran)
+    document.getElementById('focus-button').addEventListener('click', function() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.error('Erreur plein écran :', err);
+            });
+        }
+    });
+
+    // Logique pour la modale de suppression
+    function showDeleteModal() {
+        document.getElementById('delete-modal').style.display = 'block';
+    }
+
+    document.getElementById('yes-button').addEventListener('click', function() {
+        document.getElementById('delete-modal').style.display = 'none';
+        // Logique pour supprimer l'élément
+    });
+
+    document.getElementById('no-button').addEventListener('click', function() {
+        document.getElementById('delete-modal').style.display = 'none';
+    });
+
+    // Logique pour la barre d'outils de groupe
+    function updateGroupToolbar() {
+        const groupToolbar = document.getElementById('group-toolbar');
+        if (selectedElements && selectedElements.length > 0) {
+            const isSingleImage = selectedElements.length === 1 && selectedElements[0].tagName === 'IMG';
+            groupToolbar.style.display = isSingleImage ? 'none' : 'block';
+            const rect = getGroupBoundingRect();
+            groupToolbar.style.left = `${rect.left}px`;
+            groupToolbar.style.top = `${rect.top - 40}px`;
+        } else {
+            groupToolbar.style.display = 'none';
+        }
+    }
+
+    // Fonction pour obtenir le rectangle englobant du groupe
+    function getGroupBoundingRect() {
+        const rects = selectedElements.map(el => el.getBoundingClientRect());
+        const left = Math.min(...rects.map(r => r.left));
+        const top = Math.min(...rects.map(r => r.top));
+        const right = Math.max(...rects.map(r => r.right));
+        const bottom = Math.max(...rects.map(r => r.bottom));
+        return { left, top, right, bottom };
+    }
+
+    // Logique pour le mode Pan (déplacement avec Espace)
+    document.addEventListener('keydown', function(e) {
+        if (e.key === ' ') {
+            document.querySelector('.canvas-wrapper').classList.add('grab-cursor');
+        }
+    });
+
+    document.addEventListener('keyup', function(e) {
+        if (e.key === ' ') {
+            document.querySelector('.canvas-wrapper').classList.remove('grab-cursor');
+        }
+    });
+
+    // Logique pour le recadrage des notes
+    function handleResizeMouse(e) {
+        if (isResizing && selectedElements && selectedElements.length > 0) {
+            const element = selectedElements[0];
+            if (element.dataset && element.dataset.type === 'note') {
+                const minWidth = 100;
+                const minHeight = 50;
+                const newWidth = Math.max(minWidth, parseInt(element.style.width) + e.movementX);
+                const newHeight = Math.max(minHeight, parseInt(element.style.height) + e.movementY);
+                element.style.width = `${newWidth}px`;
+                element.style.height = `${newHeight}px`;
+                if (element.scrollHeight > element.clientHeight) {
+                    element.classList.add('note-clipped');
+                } else {
+                    element.classList.remove('note-clipped');
+                }
+            }
+        }
+    }
+
+    // Logique pour la mise à jour de la poignée de groupe
+    function updateMultiResizeHandle() {
+        if (selectedElements && selectedElements.length > 0) {
+            const rect = getGroupBoundingRect();
+            const multiResizeHandle = document.getElementById('multi-resize-handle');
+            if (multiResizeHandle) {
+                multiResizeHandle.style.left = `${rect.right}px`;
+                multiResizeHandle.style.top = `${rect.bottom}px`;
+                multiResizeHandle.style.display = 'block';
+            }
+        } else {
+            const multiResizeHandle = document.getElementById('multi-resize-handle');
+            if (multiResizeHandle) {
+                multiResizeHandle.style.display = 'none';
+            }
+        }
+    }
+
+    // Logique pour le raccourci Ctrl+Tab
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'Tab') {
+            e.preventDefault();
+            // Logique pour sauvegarder et retourner à l'accueil
+        }
+    });
+
+    // Logique pour le clic sur le titre
+    document.querySelector('#home-screen h1').addEventListener('click', function() {
+        // Logique pour centrer la vue sur les cartes
+    });
+</script>
+
+<div id="preview-toast"></div>
+</body>
+</html>
+
+
+
+
+

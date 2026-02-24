@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Moodboard Injector",
+  "version": "1.0",
+  "description": "Clic droit sur n'importe quelle image pour l'ajouter directement à un board Moodboard.",
+
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "unlimitedStorage",
+    "activeTab",
+    "tabs"
+  ],
+
+  "host_permissions": ["<all_urls>"],
+
+  "action": {
+    "default_title": "Ouvrir mon Moodboard"
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  }
+}

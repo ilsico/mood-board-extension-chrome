@@ -6,6 +6,7 @@
 <title>MoodBoard App</title>
 <script src="html2canvas.min.js"></script>
 <script src="jspdf.umd.min.js"></script>
+<script src="app.js"></script>
 <style>
 /* ===== FONTS ===== */
 @font-face {
@@ -1245,123 +1246,11 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 </div>
 
 <script src="app.js"></script>
-<script>
-    // Logique pour le bouton Focus (plein écran)
-    document.getElementById('focus-button').addEventListener('click', function() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.error('Erreur plein écran :', err);
-            });
-        }
-    });
 
-    // Logique pour la modale de suppression
-    function showDeleteModal() {
-        document.getElementById('delete-modal').style.display = 'block';
-    }
-
-    document.getElementById('yes-button').addEventListener('click', function() {
-        document.getElementById('delete-modal').style.display = 'none';
-        // Logique pour supprimer l'élément
-    });
-
-    document.getElementById('no-button').addEventListener('click', function() {
-        document.getElementById('delete-modal').style.display = 'none';
-    });
-
-    // Logique pour la barre d'outils de groupe
-    function updateGroupToolbar() {
-        const groupToolbar = document.getElementById('group-toolbar');
-        if (selectedElements && selectedElements.length > 0) {
-            const isSingleImage = selectedElements.length === 1 && selectedElements[0].tagName === 'IMG';
-            groupToolbar.style.display = isSingleImage ? 'none' : 'block';
-            const rect = getGroupBoundingRect();
-            groupToolbar.style.left = `${rect.left}px`;
-            groupToolbar.style.top = `${rect.top - 40}px`;
-        } else {
-            groupToolbar.style.display = 'none';
-        }
-    }
-
-    // Fonction pour obtenir le rectangle englobant du groupe
-    function getGroupBoundingRect() {
-        const rects = selectedElements.map(el => el.getBoundingClientRect());
-        const left = Math.min(...rects.map(r => r.left));
-        const top = Math.min(...rects.map(r => r.top));
-        const right = Math.max(...rects.map(r => r.right));
-        const bottom = Math.max(...rects.map(r => r.bottom));
-        return { left, top, right, bottom };
-    }
-
-    // Logique pour le mode Pan (déplacement avec Espace)
-    document.addEventListener('keydown', function(e) {
-        if (e.key === ' ') {
-            document.querySelector('.canvas-wrapper').classList.add('grab-cursor');
-        }
-    });
-
-    document.addEventListener('keyup', function(e) {
-        if (e.key === ' ') {
-            document.querySelector('.canvas-wrapper').classList.remove('grab-cursor');
-        }
-    });
-
-    // Logique pour le recadrage des notes
-    function handleResizeMouse(e) {
-        if (isResizing && selectedElements && selectedElements.length > 0) {
-            const element = selectedElements[0];
-            if (element.dataset && element.dataset.type === 'note') {
-                const minWidth = 100;
-                const minHeight = 50;
-                const newWidth = Math.max(minWidth, parseInt(element.style.width) + e.movementX);
-                const newHeight = Math.max(minHeight, parseInt(element.style.height) + e.movementY);
-                element.style.width = `${newWidth}px`;
-                element.style.height = `${newHeight}px`;
-                if (element.scrollHeight > element.clientHeight) {
-                    element.classList.add('note-clipped');
-                } else {
-                    element.classList.remove('note-clipped');
-                }
-            }
-        }
-    }
-
-    // Logique pour la mise à jour de la poignée de groupe
-    function updateMultiResizeHandle() {
-        if (selectedElements && selectedElements.length > 0) {
-            const rect = getGroupBoundingRect();
-            const multiResizeHandle = document.getElementById('multi-resize-handle');
-            if (multiResizeHandle) {
-                multiResizeHandle.style.left = `${rect.right}px`;
-                multiResizeHandle.style.top = `${rect.bottom}px`;
-                multiResizeHandle.style.display = 'block';
-            }
-        } else {
-            const multiResizeHandle = document.getElementById('multi-resize-handle');
-            if (multiResizeHandle) {
-                multiResizeHandle.style.display = 'none';
-            }
-        }
-    }
-
-    // Logique pour le raccourci Ctrl+Tab
-    document.addEventListener('keydown', function(e) {
-        if (e.ctrlKey && e.key === 'Tab') {
-            e.preventDefault();
-            // Logique pour sauvegarder et retourner à l'accueil
-        }
-    });
-
-    // Logique pour le clic sur le titre
-    document.querySelector('#home-screen h1').addEventListener('click', function() {
-        // Logique pour centrer la vue sur les cartes
-    });
-</script>
 
 <div id="preview-toast"></div>
 </body>
 </html>
-
 
 
 

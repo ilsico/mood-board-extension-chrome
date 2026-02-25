@@ -34,27 +34,10 @@ const App = (() => {
   let isSelecting     = false;
   let selRectStart    = { x:0, y:0 };
   let isDraggingFromPanel = false; // true quand un drag vient du panneau bibliothèque
-  let _justGroupDragged  = false;  // true brièvement après un group drag pour bloquer le click post-mouseup
-  let libSelectedIds = new Set();  // IDs des items sélectionnés dans le panneau lib
   let fileReplaceTarget = null;    // élément .board-element à remplacer lors du prochain handleFileUpload
 
-  let multiResizeHandle = document.getElementById('multi-resize-handle') || document.createElement('div');
-  multiResizeHandle.id = 'multi-resize-handle';
-  document.querySelector('.canvas-wrapper').appendChild(multiResizeHandle);
-
-
-  // Curseur "main ouverte" orange pour le mode pan (clic molette / espace)
-  const HAND_CURSOR = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ff3c00" width="24" height="24"><path d="M19 10h-1V7c0-1.1-.9-2-2-2s-2 .9-2 2v1h-1V5c0-1.1-.9-2-2-2s-2 .9-2 2v3H8V6.5c0-1.1-.9-2-2-2s-2 .9-2 2V15c0 3.86 3.14 7 7 7h3c4.97 0 9-4.03 9-9v-1c0-1.1-.9-2-2-2z"/></svg>') 12 12, grabbing`;
-
   // ── PERSISTANCE ──────────────────────────────────────────────────────────
-  function saveBoards() {
-    // localStorage — synchrone, accessible à app.js même hors extension
-    try { localStorage.setItem('mb_boards', JSON.stringify(boards)); } catch(e) { /* quota dépassé — ignoré silencieusement */ }
-    // chrome.storage.local — accessible depuis background.js (menu contextuel, injection)
-    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-      chrome.storage.local.set({ mb_boards: boards }).catch(e => console.warn('chrome.storage.local:', e));
-    }
-  }
+  function saveBoards()  { try { localStorage.setItem('mb_boards',  JSON.stringify(boards));  } catch(e) { console.warn('Sauvegarde boards impossible (quota?):', e); } }
   // saveLibrary : sauvegarde la bibliothèque dans le board courant (pas de clé globale)
   function saveLibrary() {
     if (!currentBoardId) return;
@@ -70,9 +53,9 @@ const App = (() => {
   }
   function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveCurrentBoard, 800); }
 
-  // Miniatures — générées 3s après chaque saveCurrentBoard
+  // Miniatures désactivées (cartes accueil sans aperçu)
   let thumbTimer = null;
-  function scheduleThumbnail() {
+   function scheduleThumbnail() {
     clearTimeout(thumbTimer);
     thumbTimer = setTimeout(() => {
       if (typeof html2canvas === 'undefined') return;
@@ -102,6 +85,7 @@ const App = (() => {
         .catch(() => {});
     }, 3000);
   }
+
 
   function saveCurrentBoard() {
     if (!currentBoardId) return;
@@ -158,6 +142,7 @@ const App = (() => {
   // ── INIT ─────────────────────────────────────────────────────────────────
   async function init() {
     await loadBoardsFromStorage();
+
     if (!boards.length) addBoard('Mon premier moodboard', false);
     // Migration : si une bibliothèque globale (mb_library) existe, la copier dans le premier board
     const legacyLib = localStorage.getItem('mb_library');
@@ -187,8 +172,8 @@ const App = (() => {
       if (!panel || !panel.classList.contains('active')) return;
       if (panel.contains(e.target)) return; // clic dans le panneau → garder ouvert
       if (e.target.closest('.board-element[data-editing="1"]')) return; // clic sur la note en cours
-      // Clic ailleurs → fermer en blurrant le div contenteditable actif
-      const ta = document.querySelector('.board-element[data-editing="1"] div[contenteditable]');
+      // Clic ailleurs → fermer en blurrant le textarea actif
+      const ta = document.querySelector('.board-element[data-editing="1"] textarea');
       if (ta) { ta.blur(); }
       else { hideTextEditPanel(); }
     }, true); // capture pour intercepter avant les autres handlers
@@ -203,6 +188,7 @@ const App = (() => {
       if (e.key === 'Escape') { closeLightbox(); closeVideoLightbox(); }
     });
     setupUIEvents();
+
 
     // Auto-save toutes les 2 minutes
     setInterval(() => {
@@ -381,6 +367,7 @@ const App = (() => {
     document.getElementById('vlb-close-btn').addEventListener('click', () => closeVideoLightbox());
   }
 
+
   // ── BOARDS ───────────────────────────────────────────────────────────────
   function createBoard() {
     const input = document.getElementById('create-board-input');
@@ -394,7 +381,8 @@ const App = (() => {
   function confirmCreateBoard() {
     const input = document.getElementById('create-board-input');
     const name = (input ? input.value : '').trim();
-    if (!name || name.length > 45) return;
+        if (!name || name.length > 45) return;
+
     closeCreateBoardModal();
     addBoard(name);
   }
@@ -418,9 +406,11 @@ const App = (() => {
   }
 
   function formatSavedAt(ts) {
-    if (!ts) return { date: '', time: '' };
+        if (!ts) return { date: '', time: '' };
+
     const d = new Date(ts);
-    const date = d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
+        const date = d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
+
     const time = d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
     return { date, time };
   }
@@ -439,16 +429,22 @@ const App = (() => {
       const saved = formatSavedAt(b.savedAt);
       card.innerHTML = `
         ${b.thumbnail ? `<img class="board-thumb" src="${b.thumbnail}" alt="">` : ''}
+
         <div class="board-info">
           <div class="board-name">${escHtml(b.name)}</div>
-          ${saved.date ? `<div class="board-save-date"><span>${saved.date}</span><span>${saved.time}</span></div>` : ''}
+                    ${saved.date ? `<div class="board-save-date"><span>${saved.date}</span><span>${saved.time}</span></div>` : ''}
+
         </div>
         <div class="board-actions">
-          <button class="board-action-btn btn-rename"><img src="renommer.png" style="width:14px;height:14px;pointer-events:none;"></button>
+                   <button class="board-action-btn btn-rename"><img src="renommer.png" style="width:14px;height:14px;pointer-events:none;"></button>
           <button class="board-action-btn delete btn-delete"><img src="supprimer.png" style="width:14px;height:14px;pointer-events:none;"></button>
-        </div>`;
+        </div>
+      </div>
+      `;
+
       card.querySelector('.btn-rename').addEventListener('click', (e) => { e.stopPropagation(); App.renameBoardPrompt(b.id); });
       card.querySelector('.btn-delete').addEventListener('click', (e) => { e.stopPropagation(); App.deleteBoard(b.id); });
+
 
       // Drag pour déplacer la carte — simple clic+drag, double-clic pour ouvrir
       card.addEventListener('mousedown', e => {
@@ -464,8 +460,8 @@ const App = (() => {
 
         function lerp(a, z, t) { return a + (z - a) * t; }
         function rafLoop() {
-          curX = lerp(curX, targetX, 0.12);
-          curY = lerp(curY, targetY, 0.12);
+          curX = lerp(curX, targetX, 0.22);
+          curY = lerp(curY, targetY, 0.22);
           card.style.left = curX + 'px';
           card.style.top  = curY + 'px';
           if (Math.abs(targetX - curX) > 0.1 || Math.abs(targetY - curY) > 0.1) {
@@ -486,10 +482,13 @@ const App = (() => {
           targetY = ny;
           if (!rafId) rafId = requestAnimationFrame(rafLoop);
         }
-        function onUp(_ev) {
+        function onUp(ev) {
           if (moved) {
             b.x = Math.round(curX); b.y = Math.round(curY);
             saveBoards();
+          } else {
+            // Pas de déplacement = clic simple → ouvrir le board
+            if (!ev.target.closest('.board-action-btn')) openBoard(b.id);
           }
           if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
           window.removeEventListener('mousemove', onMove);
@@ -498,19 +497,6 @@ const App = (() => {
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
       });
-
-      // Clic simple → sélectionner la carte (affiche les actions)
-      card.addEventListener('click', e => {
-        if (e.target.closest('.board-action-btn')) return;
-        document.querySelectorAll('.board-card').forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-      });
-      // Double-clic → ouvrir le board
-      card.addEventListener('dblclick', e => {
-        if (e.target.closest('.board-action-btn')) return;
-        openBoard(b.id);
-      });
-
       canvas.appendChild(card);
     });
 
@@ -553,16 +539,6 @@ const App = (() => {
 
   function initHomePan(canvas) {
     const container = document.getElementById('boards-container');
-
-    // Clic dans le vide → désélectionner toutes les cartes
-    if (!container._clickDeselectHome) {
-      container._clickDeselectHome = true;
-      container.addEventListener('click', e => {
-        if (!e.target.closest('.board-card')) {
-          document.querySelectorAll('.board-card.selected').forEach(c => c.classList.remove('selected'));
-        }
-      });
-    }
 
     // ── Souris : pan (clic gauche ou bouton molette sur fond) ─────────────
     container.onmousedown = e => {
@@ -751,7 +727,7 @@ const App = (() => {
   }
   function confirmRename() {
     const val = document.getElementById('rename-input').value.trim();
-    if (!val || val.length > 45) return;
+    if (!val) return;
     const b = boards.find(b => b.id === renamingBoardId);
     if (b) { b.name = val; saveBoards(); renderHome(); }
     if (currentBoardId === renamingBoardId)
@@ -793,6 +769,7 @@ const App = (() => {
     document.querySelectorAll('#canvas .resize-handle').forEach(h => {
       h.style.transform = `scale(${invScale})`;
     });
+    updateMultiResizeHandle();
   }
   let zoomToastTimer;
   function updateZoomDisplay() {
@@ -899,7 +876,6 @@ const App = (() => {
     // Alt+molette = zoom, molette seule = pan
     wrapper.addEventListener('wheel', e => {
       e.preventDefault();
-      if (isPanning) return;
       if (e.altKey) {
         // Zoom centré sur la position du curseur
         const delta = e.deltaY > 0 ? -0.08 : 0.08;
@@ -1003,7 +979,7 @@ const App = (() => {
         e.preventDefault();
         isPanning = true;
         panStart = { x: e.clientX-panX, y: e.clientY-panY };
-        wrapper.style.cursor = HAND_CURSOR;
+        wrapper.style.cursor = 'grabbing';
         return;
       }
 
@@ -1015,7 +991,7 @@ const App = (() => {
         // Mode pan (espace enfoncé)
         isPanning = true;
         panStart = { x: e.clientX-panX, y: e.clientY-panY };
-        wrapper.style.cursor = HAND_CURSOR;
+        wrapper.style.cursor = 'grabbing';
         return;
       }
 
@@ -1108,7 +1084,7 @@ const App = (() => {
         const x = (e.clientX - rect.left - panX) / zoomLevel;
         const y = (e.clientY - rect.top  - panY) / zoomLevel;
         if (type === 'note') {
-          createNoteElement('', x - 150, y - 70, 300);
+          createNoteElement('', x - 115, y - 80, 230, 160);
           pushHistory(); scheduleSave();
         } else if (type === 'color') {
           createColorElement('#000000', x - 65, y - 70, 130, 140);
@@ -1123,50 +1099,15 @@ const App = (() => {
         }
         return;
       }
-      // Plusieurs images depuis le panneau (drag multi-sélection)
-      if (src && src.startsWith('[')) {
-        try {
-          const srcs = JSON.parse(src);
-          const rect = wrapper.getBoundingClientRect();
-          const dropX = (e.clientX-rect.left-panX)/zoomLevel;
-          const dropY = (e.clientY-rect.top -panY)/zoomLevel;
-          srcs.forEach((imgSrc, i) => {
-            const tmpImg = new Image();
-            tmpImg.onload = () => {
-              const nw = tmpImg.naturalWidth  || 220;
-              const nh = tmpImg.naturalHeight || 170;
-              const viewW = wrapper.clientWidth  / zoomLevel;
-              const viewH = wrapper.clientHeight / zoomLevel;
-              let fw, fh;
-              if (nh > nw) { fh = viewH * 0.25; fw = (nw/nh) * fh; }
-              else         { fw = viewW * 0.25; fh = (nh/nw) * fw; }
-              createImageElement(imgSrc, dropX - fw/2 + i*30, dropY - fh/2 + i*30, Math.round(fw), Math.round(fh));
-              pushHistory(); scheduleSave();
-            };
-            tmpImg.onerror = () => {
-              createImageElement(imgSrc, dropX - 110 + i*30, dropY - 85 + i*30, 220, 170);
-              pushHistory(); scheduleSave();
-            };
-            tmpImg.src = imgSrc;
-          });
-          return;
-        } catch(_) { /* JSON invalide, continuer */ }
-      }
-
       if (src && src.startsWith('data:')) {
         const rect = wrapper.getBoundingClientRect();
         const tmpImg = new Image();
         tmpImg.onload = () => {
-          const nw = tmpImg.naturalWidth  || 220;
-          const nh = tmpImg.naturalHeight || 170;
-          const viewW = wrapper.clientWidth  / zoomLevel;
-          const viewH = wrapper.clientHeight / zoomLevel;
-          let fw, fh;
-          if (nh > nw) { fh = viewH * 0.25; fw = (nw/nh) * fh; }
-          else         { fw = viewW * 0.25; fh = (nh/nw) * fw; }
-          const x = (e.clientX-rect.left-panX)/zoomLevel - fw/2;
-          const y = (e.clientY-rect.top -panY)/zoomLevel - fh/2;
-          createImageElement(src, x, y, Math.round(fw), Math.round(fh));
+          const w = tmpImg.naturalWidth || 220;
+          const h = tmpImg.naturalHeight || 170;
+          const x = (e.clientX-rect.left-panX)/zoomLevel - w/2;
+          const y = (e.clientY-rect.top -panY)/zoomLevel - h/2;
+          createImageElement(src, x, y, w, h);
           pushHistory(); scheduleSave();
         };
         tmpImg.onerror = () => {
@@ -1181,27 +1122,22 @@ const App = (() => {
       // Fichiers images droppés directement
       if (e.dataTransfer.files.length) {
         const rect = wrapper.getBoundingClientRect();
-        Array.from(e.dataTransfer.files).filter(isImageFile).forEach((file,i)=>{
+        Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/')).forEach((file,i)=>{
           const reader = new FileReader();
           reader.onload = ev => {
             const src = ev.target.result;
             const tmpImg = new Image();
             tmpImg.onload = () => {
-              const nw = tmpImg.naturalWidth  || 220;
-              const nh = tmpImg.naturalHeight || 170;
-              const viewW = wrapper.clientWidth  / zoomLevel;
-              const viewH = wrapper.clientHeight / zoomLevel;
-              let fw, fh;
-              if (nh > nw) { fh = viewH * 0.25; fw = (nw/nh) * fh; }
-              else         { fw = viewW * 0.25; fh = (nh/nw) * fw; }
-              const x = (e.clientX-rect.left-panX)/zoomLevel - fw/2 + i*30;
-              const y = (e.clientY-rect.top -panY)/zoomLevel - fh/2 + i*30;
-              createImageElement(src, x, y, Math.round(fw), Math.round(fh));
+              const w = tmpImg.naturalWidth || 220;
+              const h = tmpImg.naturalHeight || 170;
+              const x = (e.clientX-rect.left-panX)/zoomLevel - w/2 + i*24;
+              const y = (e.clientY-rect.top -panY)/zoomLevel - h/2 + i*24;
+              createImageElement(src, x, y, w, h);
               pushHistory(); scheduleSave();
             };
             tmpImg.onerror = () => {
-              const x = (e.clientX-rect.left-panX)/zoomLevel-110+i*30;
-              const y = (e.clientY-rect.top -panY)/zoomLevel-85 +i*30;
+              const x = (e.clientX-rect.left-panX)/zoomLevel-110+i*24;
+              const y = (e.clientY-rect.top -panY)/zoomLevel-85 +i*24;
               createImageElement(src, x, y, 220, 170);
               pushHistory(); scheduleSave();
             };
@@ -1222,7 +1158,7 @@ const App = (() => {
         e.preventDefault();
         isPanning = true;
         panStart = { x: e.clientX-panX, y: e.clientY-panY };
-        wrapper.style.cursor = HAND_CURSOR;
+        wrapper.style.cursor = 'grabbing';
       }
     }, true);
   }
@@ -1314,7 +1250,7 @@ const App = (() => {
   function isTyping(e) {
     const active = document.activeElement;
     const inInput = el => el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable);
-    // data-editing : flag posé par les notes (div contenteditable en mode édition)
+    // data-editing : flag posé par les notes (textarea avec pointerEvents:none)
     const editingNote = !!document.querySelector('.board-element[data-editing="1"]');
     return inInput(active) || editingNote;
   }
@@ -1325,10 +1261,12 @@ const App = (() => {
     document.querySelectorAll('#canvas .board-element[data-type="color"] .color-hex-input').forEach(inp => {
       if (inp.value) inp.setAttribute('value', inp.value);
     });
-    // Synchroniser dataset.savedata des notes contenteditable (innerHTML est dans le DOM)
-    document.querySelectorAll('#canvas .board-element[data-type="note"] div[contenteditable]').forEach(ta => {
+    // Synchroniser le texte des notes (textarea.value non capturé par innerHTML)
+    document.querySelectorAll('#canvas .board-element[data-type="note"] textarea').forEach(ta => {
+      ta.setAttribute('data-snap-value', ta.value);
+      // Mettre aussi à jour dataset.savedata sur l'élément parent
       const el = ta.closest('.board-element');
-      if (el) el.dataset.savedata = ta.innerHTML;
+      if (el) el.dataset.savedata = ta.value;
     });
     const snap = document.getElementById('canvas').innerHTML;
     if (historyIndex < history.length-1) history = history.slice(0, historyIndex+1);
@@ -1366,64 +1304,42 @@ const App = (() => {
     if (el._noteEventsAttached) return;
     el._noteEventsAttached = true;
     const wrap = el.querySelector('.el-note');
-    const ta   = el.querySelector('div[contenteditable]');
+    const ta   = el.querySelector('textarea');
     if (!wrap || !ta) return;
-    // Restaurer le contenu HTML depuis dataset.savedata si nécessaire
-    if (el.dataset.savedata && ta.innerHTML !== el.dataset.savedata) {
-      ta.innerHTML = el.dataset.savedata;
-    }
-    // Assurer que l'élément est en mode auto-height
-    if (!el.classList.contains('note-clipped')) {
-      el.style.height = 'auto';
-    }
+    // Restaurer la valeur depuis data-snap-value (persisté dans innerHTML) ou dataset.savedata
+    const snapVal = ta.getAttribute('data-snap-value');
+    if (snapVal !== null && ta.value !== snapVal) ta.value = snapVal;
+    else if (el.dataset.savedata && ta.value !== el.dataset.savedata) ta.value = el.dataset.savedata;
     let _noteValueOnFocus = '';
     function activateNoteEdit(e) {
       e.stopPropagation(); e.preventDefault();
-      ta.contentEditable = 'true';
+      ta.style.pointerEvents = 'auto';
+      ta.style.cursor = 'text';
       el.dataset.editing = '1';
-      _noteValueOnFocus = ta.innerHTML;
+      _noteValueOnFocus = ta.value;
       ta.focus();
-      const range = document.createRange();
-      range.selectNodeContents(ta);
-      range.collapse(false);
-      const sel = window.getSelection();
-      if (sel) { sel.removeAllRanges(); sel.addRange(range); }
       showTextEditPanel(el);
     }
-    let _wasSelectedOnNoteMousedown = false;
-    el.addEventListener('mousedown', () => {
-      _wasSelectedOnNoteMousedown = el.classList.contains('selected');
-    }, true);
-    wrap.addEventListener('click', e => {
-      if (_wasSelectedOnNoteMousedown && ta.contentEditable !== 'true' && !e.target.closest('.element-toolbar')) {
-        activateNoteEdit(e);
-      }
-      _wasSelectedOnNoteMousedown = false;
-    });
+    wrap.addEventListener('dblclick', activateNoteEdit);
+    ta.addEventListener('dblclick', activateNoteEdit);
     ta.addEventListener('mousedown', e => {
-      if (ta.contentEditable === 'true') e.stopPropagation();
+      if (ta.style.pointerEvents === 'auto') e.stopPropagation();
     });
-    ta.addEventListener('input', () => {
-      el.dataset.savedata = ta.innerHTML;
-      if (!el.classList.contains('note-clipped')) {
-        el.style.height = 'auto';
-      }
-      scheduleSave();
-    });
+    ta.addEventListener('input', () => { el.dataset.savedata = ta.value; scheduleSave(); });
     ta.addEventListener('blur', e => {
       const panel = document.getElementById('text-edit-panel');
       const goingToPanel = (panel && e.relatedTarget && panel.contains(e.relatedTarget));
       if (goingToPanel || window._textPanelKeepOpen) return;
-      ta.contentEditable = 'false';
+      ta.style.pointerEvents = 'none';
+      ta.style.cursor = 'move';
       delete el.dataset.editing;
       hideTextEditPanel();
-      const plainText = ta.innerHTML.replace(/<[^>]*>/g, '').trim();
-      if (!plainText) {
+      if (!ta.value.trim()) {
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
         pushHistory(); scheduleSave();
-      } else if (ta.innerHTML !== _noteValueOnFocus) {
+      } else if (ta.value !== _noteValueOnFocus) {
         pushHistory(); scheduleSave();
       }
     });
@@ -1633,6 +1549,7 @@ const App = (() => {
           Math.abs(v - Math.round(dragRect.t + finalDy)) < 2 ||
           Math.abs(v - Math.round(dragRect.b + finalDy)) < 2)
       : [];
+      
     return { dx: finalDx, dy: finalDy, guidesH: finalGuidesH, guidesV: finalGuidesV };
   }
 
@@ -1651,24 +1568,45 @@ const App = (() => {
   // ── MULTI-RESIZE HANDLE ───────────────────────────────────────────────────
   function updateMultiResizeHandle() {
     const handle = document.getElementById('multi-resize-handle');
+    const bbox = document.getElementById('group-bounding-box');
     const group = [...multiSelected];
-    if (group.length < 2) { handle.style.display = 'none'; return; }
+    
+    if (group.length < 2) { 
+      handle.style.display = 'none'; 
+      if (bbox) bbox.style.display = 'none';
+      return; 
+    }
 
     // Calculer le bounding box global de tous les éléments sélectionnés
     const wrapperRect = document.getElementById('canvas-wrapper').getBoundingClientRect();
-    let maxR = -Infinity, maxB = -Infinity;
+    let minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+    
     group.forEach(el => {
       const r = el.getBoundingClientRect();
+      const left   = r.left   - wrapperRect.left;
+      const top    = r.top    - wrapperRect.top;
       const right  = r.right  - wrapperRect.left;
       const bottom = r.bottom - wrapperRect.top;
+      
+      if (left   < minL) minL = left;
+      if (top    < minT) minT = top;
       if (right  > maxR) maxR = right;
       if (bottom > maxB) maxB = bottom;
     });
 
-    // Handle au coin bas-droite du bounding box global
+    // Placer la poignée en bas à droite
     handle.style.display = 'block';
     handle.style.left = maxR + 'px';
     handle.style.top  = maxB + 'px';
+
+    // Dessiner le cadre de sélection englobant tout le groupe
+    if (bbox) {
+      bbox.style.display = 'block';
+      bbox.style.left = minL + 'px';
+      bbox.style.top  = minT + 'px';
+      bbox.style.width = (maxR - minL) + 'px';
+      bbox.style.height = (maxB - minT) + 'px';
+    }
   }
 
   function setupMultiResizeHandle() {
@@ -1740,6 +1678,7 @@ const App = (() => {
           }
         });
         updateMultiResizeHandle();
+        group.forEach(el => updateConnectionsForEl(el));
       };
       const onUp = () => {
         window.removeEventListener('mousemove', onMove);
@@ -1791,12 +1730,11 @@ const App = (() => {
       if (['BUTTON','INPUT','SELECT','TEXTAREA','IFRAME'].includes(e.target.tagName)) return;
       if (e.target.isContentEditable) return;
       if (e.button !== 0) return;
+      if (el.dataset.justDragged) return;
       e.stopPropagation(); e.preventDefault();
 
-      // Shift+clic = multi-sélection
       if (e.shiftKey) { selectEl(el, true); return; }
 
-      // Si l'élément fait partie de la multi-sélection, déplacer tout le groupe
       if (multiSelected.has(el) && multiSelected.size > 1) {
         startGroupDrag(e, multiSelected);
         return;
@@ -1807,29 +1745,23 @@ const App = (() => {
       const startMX = (e.clientX-canvasRect.left)/zoomLevel;
       const startMY = (e.clientY-canvasRect.top) /zoomLevel;
 
-      // Position initiale de l'élément au moment du mousedown
       const origLeft = parseFloat(el.style.left)||0;
       const origTop  = parseFloat(el.style.top) ||0;
 
-      // dragEl = l'élément qu'on déplace (original ou copie si Alt)
       let dragEl = el;
       let duplicated = false;
       const excludeSet = new Set([el]);
       let startLeft = parseFloat(dragEl.style.left)||0;
       let startTop  = parseFloat(dragEl.style.top) ||0;
 
-      // Crée une copie et place l'original à sa position initiale
       function doDuplicate() {
         if (duplicated) return;
         duplicated = true;
-        // Cloner depuis l'original (el), pas depuis dragEl qui a bougé
         const copy = el.cloneNode(true);
         copy.dataset.id = 'el_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
         copy.style.zIndex = ++nextZ;
-        // La copie part de la position COURANTE de l'élément (où la souris l'a amené)
         copy.style.left = dragEl.style.left;
         copy.style.top  = dragEl.style.top;
-        // L'original revient à sa position initiale (avant le drag)
         el.style.left = origLeft + 'px';
         el.style.top  = origTop  + 'px';
         document.getElementById('canvas').appendChild(copy);
@@ -1840,42 +1772,34 @@ const App = (() => {
         dragEl = copy;
         selectEl(dragEl);
         excludeSet.add(dragEl);
-        // Recaler startLeft/startTop sur la position courante de la copie
         startLeft = parseFloat(copy.style.left)||0;
         startTop  = parseFloat(copy.style.top) ||0;
-        // Recaler startMX/startMY sur la position souris actuelle (sera géré via startMX/startMY globaux)
       }
 
-      // Si Alt déjà enfoncé au mousedown, dupliquer immédiatement (copie = original, original reste)
       if (isAltDown) doDuplicate();
       let currentStartMX = startMX;
       let currentStartMY = startMY;
       let moved = false;
 
-      // Lag/Tilt : positions cibles (souris) et positions courantes (interpolées)
       let targetX = startLeft, targetY = startTop;
       let curX = startLeft, curY = startTop;
-      let prevX = startLeft; // pour calculer la vélocité horizontale
       let rafId = null;
       let dragActive = true;
-      let shiftAxisX = null; // null = pas encore verrouillé, 'h' ou 'v'
+      let shiftAxisX = null;
 
       const lerp = (a, b, t) => a + (b - a) * t;
 
       function dragRAF() {
         if (!dragActive) return;
-        const lf = Math.min(1, 0.12 / Math.sqrt(zoomLevel));
-        curX = lerp(curX, targetX, lf);
-        curY = lerp(curY, targetY, lf);
+        curX = lerp(curX, targetX, 0.22);
+        curY = lerp(curY, targetY, 0.22);
 
         dragEl.style.left = curX + 'px';
         dragEl.style.top  = curY + 'px';
 
-        // Snap uniquement si Ctrl enfoncé
         if (ctrlSnap) { applySnap(dragEl, excludeSet); } else { clearSnapGuides(); }
         updateConnectionsForEl(dragEl);
 
-        // Déplacer les captions attachées en temps réel
         const _elId = dragEl.dataset.id;
         if (_elId) {
           document.querySelectorAll(`.el-caption[data-parent-id="${_elId}"]`).forEach(cap => {
@@ -1888,7 +1812,6 @@ const App = (() => {
       }
 
       const onMove = ev => {
-        // Alt pressé → créer une copie et déplacer la copie
         if (isAltDown && !duplicated) {
           const prevAxis = shiftAxisX;
           doDuplicate();
@@ -1935,8 +1858,11 @@ const App = (() => {
         targetX = startLeft + dx;
         targetY = startTop  + dy;
       };
+      
       const onUp = () => {
         dragActive = false;
+        document.body.classList.remove('is-dragging-el'); // <-- RETRAIT ICI
+        
         cancelAnimationFrame(rafId);
         // Appliquer la position finale exacte et enlever le tilt
         dragEl.style.left = targetX + 'px';
@@ -1957,8 +1883,15 @@ const App = (() => {
         }
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
-        if (moved || duplicated) { pushHistory(); scheduleSave(); }
+        if (moved || duplicated) { 
+          pushHistory(); scheduleSave(); 
+          
+          dragEl.dataset.justDragged = "1";
+          setTimeout(() => delete dragEl.dataset.justDragged, 150);
+        }
       };
+      
+      document.body.classList.add('is-dragging-el'); // <-- AJOUT ICI
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
       // Démarrer la boucle RAF
@@ -1967,7 +1900,7 @@ const App = (() => {
 
     el.addEventListener('click', e => {
       e.stopPropagation();
-      if (_justGroupDragged) return; // conserver la multi-sélection après un group drag
+      if (el.dataset.justDragged) return;
       if (!e.shiftKey) selectEl(el);
     });
 
@@ -2063,9 +1996,10 @@ const App = (() => {
     let curDX = 0, curDY = 0;
     let groupDragActive = true;
     let groupRafId = null;
+    const lerpFactor = 0.12;
+
     function groupDragRAF() {
       if (!groupDragActive) return;
-      const lerpFactor = Math.min(1, 0.12 / Math.sqrt(zoomLevel));
       curDX += (targetDX - curDX) * lerpFactor;
       curDY += (targetDY - curDY) * lerpFactor;
       activeGroup.forEach(el => {
@@ -2121,8 +2055,11 @@ const App = (() => {
         clearSnapGuides();
       }
     };
+    
     const onUp = () => {
       groupDragActive = false;
+      document.body.classList.remove('is-dragging-el'); // <-- RETRAIT ICI
+      
       if (groupRafId) { cancelAnimationFrame(groupRafId); groupRafId = null; }
       // Appliquer la position finale exacte
       activeGroup.forEach(el => {
@@ -2217,26 +2154,6 @@ const App = (() => {
       clearSnapGuides();
     }
 
-    // Pour les notes : comparer hauteur drag vs hauteur du contenu
-    if (resizeEl.dataset.type === 'note') {
-      const ta = resizeEl.querySelector('div[contenteditable]');
-      if (ta) {
-        const contentH = ta.scrollHeight + 28; // 28 = padding vertical .el-note
-        if (fh < contentH) {
-          // L'utilisateur réduit en dessous du contenu → mode clippé + masque de fondu
-          resizeEl.style.height = fh + 'px';
-          resizeEl.classList.add('note-clipped');
-        } else {
-          // L'utilisateur agrandit au-dessus du contenu → retour auto-height
-          resizeEl.style.height = 'auto';
-          resizeEl.classList.remove('note-clipped');
-        }
-      }
-    }
-
-    // Mettre à jour les connexions pendant le resize
-    updateConnectionsForEl(resizeEl);
-
     // Synchroniser les captions attachées lors du resize
     const _rElId = resizeEl.dataset.id;
     if (_rElId) {
@@ -2246,6 +2163,8 @@ const App = (() => {
         cap.style.top   = (parseFloat(resizeEl.style.top) + resizeEl.offsetHeight) + 'px';
       });
     }
+    // Mettre à jour les connecteurs en temps réel
+    updateConnectionsForEl(resizeEl);
   }
 
   // ── RESTORE ──────────────────────────────────────────────────────────────
@@ -2337,78 +2256,58 @@ const App = (() => {
   // ── NOTE ──────────────────────────────────────────────────────────────────
   function addNote() {
     const c = getCenter();
-    createNoteElement('', c.x-150, c.y-70, 300);
+    createNoteElement('', c.x-110, c.y-75, 230, 160);
     pushHistory(); scheduleSave();
   }
   function createNoteElement(content, x, y, w, h) {
-    w = w || 300;
-    // L'élément note utilise la hauteur automatique (min-height CSS), pas une hauteur fixe
-    const el = makeElement('note', x||100, y||100, w, null);
-    el.style.height = 'auto';
-    el.style.minHeight = '139.5px';
-    el.dataset.savedata = content || '';
+    w=w||230; h=h||160;
+    const el = makeElement('note', x||100, y||100, w, h);
+    el.dataset.savedata = content;
     const wrap = document.createElement('div');
     wrap.className = 'el-note';
-    // Div contenteditable (remplace textarea)
-    const ta = document.createElement('div');
-    ta.className = 'note-content';
-    ta.contentEditable = 'false'; // non-interactif par défaut (1 clic = déplacer)
-    ta.innerHTML = content || '';
-    ta.addEventListener('input', () => {
-      el.dataset.savedata = ta.innerHTML;
-      // Auto-height si pas en mode clippé
-      if (!el.classList.contains('note-clipped')) {
-        el.style.height = 'auto';
-      }
-      scheduleSave();
-    });
-    // Valeur HTML au moment de l'entrée en édition — pour détecter un changement au blur
+    const ta = document.createElement('textarea');
+    ta.placeholder = 'Écrire une note...'; ta.value = content;
+    // Par défaut : non-interactif (1 clic = déplacer)
+    ta.style.pointerEvents = 'none';
+    ta.style.cursor = 'move';
+    ta.addEventListener('input', () => { el.dataset.savedata=ta.value; scheduleSave(); });
+    // Valeur au moment de l'entrée en édition — pour détecter un changement au blur
     let _noteValueOnFocus = '';
+    // Double-clic sur le wrapper ou le textarea : activer l'édition + panneau texte
     function activateNoteEdit(e) {
       e.stopPropagation();
       e.preventDefault();
-      ta.contentEditable = 'true';
+      ta.style.pointerEvents = 'auto';
+      ta.style.cursor = 'text';
       el.dataset.editing = '1'; // signal pour isTyping() — bloque Ctrl+Z
-      _noteValueOnFocus = ta.innerHTML;
+      _noteValueOnFocus = ta.value; // mémoriser pour comparer au blur
       ta.focus();
-      // Placer le curseur à la fin
-      const range = document.createRange();
-      range.selectNodeContents(ta);
-      range.collapse(false);
-      const sel = window.getSelection();
-      if (sel) { sel.removeAllRanges(); sel.addRange(range); }
       showTextEditPanel(el);
     }
-    // Clic unique quand déjà sélectionné → activer l'édition
-    let _wasSelectedOnNoteMousedown = false;
-    el.addEventListener('mousedown', () => {
-      _wasSelectedOnNoteMousedown = el.classList.contains('selected');
-    }, true);
-    wrap.addEventListener('click', e => {
-      if (_wasSelectedOnNoteMousedown && ta.contentEditable !== 'true' && !e.target.closest('.element-toolbar')) {
-        activateNoteEdit(e);
-      }
-      _wasSelectedOnNoteMousedown = false;
-    });
-    // Clic dans le div si déjà en édition → garder le focus (stop propagation)
+    wrap.addEventListener('dblclick', activateNoteEdit);
+    ta.addEventListener('dblclick', activateNoteEdit);
+    // Un seul clic sur la textarea si déjà en mode édition → garder le focus
     ta.addEventListener('mousedown', e => {
-      if (ta.contentEditable === 'true') e.stopPropagation();
+      if (ta.style.pointerEvents === 'auto') e.stopPropagation();
     });
-    // Quand le div perd le focus : revenir en mode déplacement
+    // Quand le textarea perd le focus : revenir en mode déplacement
+    // Si la note est vide, la supprimer. Si le texte a changé, sauvegarder un état historique.
     ta.addEventListener('blur', e => {
+      // Ne pas fermer si l'utilisateur clique dans le panneau texte
       const panel = document.getElementById('text-edit-panel');
       const goingToPanel = (panel && e.relatedTarget && panel.contains(e.relatedTarget));
       if (goingToPanel || window._textPanelKeepOpen) return;
-      ta.contentEditable = 'false';
+      ta.style.pointerEvents = 'none';
+      ta.style.cursor = 'move';
       delete el.dataset.editing;
       hideTextEditPanel();
-      const plainText = ta.innerHTML.replace(/<[^>]*>/g, '').trim();
-      if (!plainText) {
+      if (!ta.value.trim()) {
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
         pushHistory(); scheduleSave();
-      } else if (ta.innerHTML !== _noteValueOnFocus) {
+      } else if (ta.value !== _noteValueOnFocus) {
+        // Le texte a changé pendant l'édition → créer un état historique
         pushHistory(); scheduleSave();
       }
     });
@@ -3046,8 +2945,8 @@ const App = (() => {
     document.getElementById('toolbar').style.display = 'none';
     const panel = document.getElementById('text-edit-panel');
     panel.classList.add('active');
-    // Afficher la taille courante de la zone de texte
-    const ta = el.querySelector('div[contenteditable], .el-caption');
+    // Afficher la taille courante de la textarea
+    const ta = el.querySelector('textarea');
     if (ta) {
       const sz = parseInt(ta.style.fontSize) || 14;
       const sizeVal = document.getElementById('text-size-val');
@@ -3073,7 +2972,7 @@ const App = (() => {
   }
   function applyTextFont(val) {
     if (!textEditTarget) return;
-    const ta = textEditTarget.querySelector('div[contenteditable], .el-caption');
+    const ta = textEditTarget.querySelector('textarea, .el-caption');
     if (!ta) return;
     const fontMap = {
       'helvetica-roman': "'HelveticaRoman','Helvetica Neue',Helvetica,Arial,sans-serif",
@@ -3091,7 +2990,7 @@ const App = (() => {
   }
   function applyTextSizeDelta(delta) {
     if (!textEditTarget) return;
-    const ta = textEditTarget.querySelector('div[contenteditable], .el-caption') || textEditTarget;
+    const ta = textEditTarget.querySelector('textarea') || textEditTarget;
     if (!ta) return;
     const current = parseInt(ta.style.fontSize) || 14;
     const next = Math.min(Math.max(current + delta, 8), 72);
@@ -3102,7 +3001,7 @@ const App = (() => {
   }
   function applyTextAlign(align) {
     if (!textEditTarget) return;
-    const ta = textEditTarget.querySelector('div[contenteditable], .el-caption') || textEditTarget;
+    const ta = textEditTarget.querySelector('textarea') || textEditTarget;
     if (ta) ta.style.textAlign = align;
     document.querySelectorAll('.text-align-btn').forEach(b => b.classList.remove('active'));
     const id = { left:'ta-left', center:'ta-center', right:'ta-right' }[align];
@@ -3111,6 +3010,8 @@ const App = (() => {
     scheduleSave();
   }
 
+  function ctxBringFront() { if (ctxTargetEl) { ctxTargetEl.style.zIndex=++nextZ; scheduleSave(); } hideContextMenu(); }
+  function ctxSendBack()   { if (ctxTargetEl) { ctxTargetEl.style.zIndex=1; scheduleSave(); } hideContextMenu(); }
   function ctxDuplicate() {
     if (!ctxTargetEl) { hideContextMenu(); return; }
     if (multiSelected.has(ctxTargetEl) && multiSelected.size > 1) {
@@ -3140,18 +3041,7 @@ const App = (() => {
     hideContextMenu();
   }
   function ctxDelete() {
-    if (!ctxTargetEl) { hideContextMenu(); return; }
-    if (multiSelected.has(ctxTargetEl) && multiSelected.size > 0) {
-      // Supprimer toute la sélection multiple
-      const toDelete = [...multiSelected];
-      if (selectedEl && !multiSelected.has(selectedEl)) toDelete.push(selectedEl);
-      toDelete.forEach(el => { removeConnectionsForEl(el); el.remove(); });
-      multiSelected.clear(); selectedEl = null;
-      toast(toDelete.length + ' éléments supprimés');
-    } else {
-      removeConnectionsForEl(ctxTargetEl); ctxTargetEl.remove(); selectedEl = null;
-    }
-    pushHistory(); scheduleSave();
+    if (ctxTargetEl) { removeConnectionsForEl(ctxTargetEl); ctxTargetEl.remove(); selectedEl=null; pushHistory(); scheduleSave(); }
     hideContextMenu();
   }
 
@@ -3216,48 +3106,14 @@ const App = (() => {
         deletePanelLibItem(item.id, item.folder);
       });
 
-      div.appendChild(indicator);
       div.appendChild(img);
       div.appendChild(name);
       div.appendChild(delBtn);
 
-      // Clic = sélection ; Shift+clic = ajout/retrait de la sélection
-      // (ignoré si le clic est en fait la fin d'un drag)
-      let _libItemDragging = false;
-      div.addEventListener('click', e => {
-        e.stopPropagation();
-        if (_libItemDragging) { _libItemDragging = false; return; }
-        if (e.shiftKey) {
-          if (libSelectedIds.has(item.id)) {
-            libSelectedIds.delete(item.id);
-            div.classList.remove('selected-lib-item');
-          } else {
-            libSelectedIds.add(item.id);
-            div.classList.add('selected-lib-item');
-          }
-        } else {
-          libSelectedIds.clear();
-          document.querySelectorAll('.lib-panel-item.selected-lib-item').forEach(d => d.classList.remove('selected-lib-item'));
-          libSelectedIds.add(item.id);
-          div.classList.add('selected-lib-item');
-        }
-      });
-
       div.addEventListener('dragstart', e => {
-        _libItemDragging = true;
-        // Si l'item fait partie d'une sélection multiple, embarquer tous les sélectionnés
-        let srcs;
-        if (libSelectedIds.has(item.id) && libSelectedIds.size > 1) {
-          srcs = [];
-          Object.keys(library).forEach(f => {
-            library[f].forEach(i => { if (libSelectedIds.has(i.id)) srcs.push(i.src); });
-          });
-          e.dataTransfer.setData('text/plain', JSON.stringify(srcs));
-        } else {
-          e.dataTransfer.setData('text/plain', item.src);
-          srcs = null;
-        }
+        e.dataTransfer.setData('text/plain', item.src);
         isDraggingFromPanel = true;
+        // Ghost = image seule sous le curseur (pas le conteneur)
         const ghost = new Image();
         ghost.src = item.src;
         ghost.style.cssText = 'position:fixed;top:-200px;left:-200px;max-width:80px;max-height:80px;pointer-events:none;';
@@ -3265,7 +3121,8 @@ const App = (() => {
         e.dataTransfer.setDragImage(ghost, 40, 40);
         setTimeout(() => { if (ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 0);
       });
-      div.addEventListener('dragend', () => { isDraggingFromPanel = false; _libItemDragging = false; });
+      div.addEventListener('dragend', () => { isDraggingFromPanel = false; });
+      // Pas de clic : uniquement drag & drop pour ajouter au board
       grid.appendChild(div);
     });
   }
@@ -3276,13 +3133,6 @@ const App = (() => {
   }
 
   function searchPanelLib() { renderPanelLib(); }
-
-  // Accepte les images même quand f.type est vide (ex. SVG sur certains systèmes)
-  function isImageFile(f) {
-    if (f.type.startsWith('image/')) return true;
-    const ext = f.name.split('.').pop().toLowerCase();
-    return ['jpg','jpeg','png','gif','webp','svg','bmp','ico','tiff','avif'].includes(ext);
-  }
 
   function uploadImages() { document.getElementById('file-input-images').click(); }
 
@@ -3395,7 +3245,7 @@ const App = (() => {
         `background:${wrapperBg}`,
         'overflow:hidden',
         'pointer-events:none',
-        'z-index:99999'
+        'z-index:99999'           // visible pour html2canvas, hors viewport (au-dessus)
       ].join(';');
 
       // Cloner chaque board-element et le repositionner dans le conteneur temp
@@ -3538,135 +3388,6 @@ const App = (() => {
   function toggleToolbar() {
     document.getElementById('toolbar').classList.toggle('collapsed');
   }
-// Fonction pour supprimer les éléments sélectionnés
-function deleteSelectedElements() {
-    Array.from(multiSelected).forEach(el => el.remove());
-    multiSelected.clear();
-    selectedEl = null;
-    updateMultiResizeHandle();
-    updateGroupToolbar();
-}
-
-// Logique pour la barre d'outils de groupe
-function updateGroupToolbar() {
-    const groupToolbar = document.getElementById('group-toolbar');
-    if (multiSelected.size > 0) {
-        const isSingleImage = multiSelected.size === 1 && Array.from(multiSelected)[0].tagName === 'IMG';
-        groupToolbar.style.display = isSingleImage ? 'none' : 'block';
-        const rect = getGroupBoundingRect();
-        groupToolbar.style.left = `${rect.left}px`;
-        groupToolbar.style.top = `${rect.top - 40}px`;
-    } else {
-        groupToolbar.style.display = 'none';
-    }
-}
-
-// Fonction pour obtenir le rectangle englobant du groupe
-function getGroupBoundingRect() {
-    if (multiSelected.size === 0) return { left: 0, top: 0, right: 0, bottom: 0 };
-    const rects = Array.from(multiSelected).map(el => el.getBoundingClientRect());
-    const left = Math.min(...rects.map(r => r.left));
-    const top = Math.min(...rects.map(r => r.top));
-    const right = Math.max(...rects.map(r => r.right));
-    const bottom = Math.max(...rects.map(r => r.bottom));
-    return { left, top, right, bottom };
-}
-
-// Logique pour le mode Pan (déplacement avec Espace)
-document.addEventListener('keydown', function(e) {
-    if (e.key === ' ') {
-        document.querySelector('.canvas-wrapper').classList.add('grab-cursor');
-        isPanningMode = true;
-    }
-});
-
-document.addEventListener('keyup', function(e) {
-    if (e.key === ' ') {
-        document.querySelector('.canvas-wrapper').classList.remove('grab-cursor');
-        isPanningMode = false;
-    }
-});
-
-// Logique pour le recadrage des notes
-function handleResizeMouse(e) {
-    if (isResizing && resizeEl && resizeEl.dataset.type === 'note') {
-        const minWidth = 100;
-        const minHeight = 50;
-        const newWidth = Math.max(minWidth, resizeStartW + e.movementX);
-        const newHeight = Math.max(minHeight, resizeStartH + e.movementY);
-
-        resizeEl.style.width = `${newWidth}px`;
-        resizeEl.style.height = `${newHeight}px`;
-
-        if (resizeEl.scrollHeight > resizeEl.clientHeight) {
-            resizeEl.classList.add('note-clipped');
-        } else {
-            resizeEl.classList.remove('note-clipped');
-        }
-    }
-}
-
-// Logique pour la mise à jour de la poignée de groupe
-function updateMultiResizeHandle() {
-    if (multiSelected.size > 0) {
-        const rect = getGroupBoundingRect();
-        multiResizeHandle.style.left = `${rect.right}px`;
-        multiResizeHandle.style.top = `${rect.bottom}px`;
-        multiResizeHandle.style.display = 'block';
-    } else {
-        multiResizeHandle.style.display = 'none';
-    }
-}
-
-// Logique pour le raccourci Ctrl+Tab
-document.addEventListener('keydown', function(e) {
-    if (e.ctrlKey && e.key === 'Tab') {
-        e.preventDefault();
-        saveBoardState();
-        window.location.href = 'index.html';
-    }
-});
-
-// Fonction pour sauvegarder l'état du board
-function saveBoardState() {
-    console.log('État du board sauvegardé');
-    // Ajoutez ici la logique pour sauvegarder l'état du board
-}
-
-// Logique pour le clic sur le titre
-document.querySelector('#home-screen h1').addEventListener('click', function() {
-    centerViewOnElements();
-});
-
-// Fonction pour centrer la vue sur les éléments
-function centerViewOnElements() {
-    if (boards.length > 0 && currentBoardId) {
-        const currentBoard = boards.find(board => board.id === currentBoardId);
-        if (currentBoard && currentBoard.elements && currentBoard.elements.length > 0) {
-            const elements = currentBoard.elements;
-            const rects = elements.map(el => {
-                const element = document.getElementById(el.id);
-                return element ? element.getBoundingClientRect() : { left: 0, top: 0, right: 0, bottom: 0 };
-            }).filter(rect => rect.left !== 0 || rect.top !== 0 || rect.right !== 0 || rect.bottom !== 0);
-
-            if (rects.length > 0) {
-                const left = Math.min(...rects.map(r => r.left));
-                const top = Math.min(...rects.map(r => r.top));
-                const right = Math.max(...rects.map(r => r.right));
-                const bottom = Math.max(...rects.map(r => r.bottom));
-
-                const centerX = (left + right) / 2;
-                const centerY = (top + bottom) / 2;
-
-                window.scrollTo({
-                    left: centerX - window.innerWidth / 2,
-                    top: centerY - window.innerHeight / 2,
-                    behavior: 'smooth'
-                });
-            }
-        }
-    }
-}
 
   // ── API PUBLIQUE ──────────────────────────────────────────────────────────
   return {
@@ -3685,29 +3406,11 @@ function centerViewOnElements() {
     ctxConnect, ctxAddCaption,
     exportPNG, exportPDF, openExportModal, closeExportModal,
     openVideoLightbox, closeVideoLightbox,
-    toggleToolbar, fitElementsToScreen, togglePreviewMode,
+    fitElementsToScreen, togglePreviewMode,
     applyTextFont, applyTextSize: applyTextSizeDelta, applyTextSizeDelta, applyTextAlign,
     createBoard, closeCreateBoardModal, confirmCreateBoard,
     toolDragStart,
-    toast,
-    // ── Extension Moodboard : resynchronise library + panel depuis le stockage ──
-    async syncLibraryFromStorage() {
-      // chrome.storage.local en priorité (source de vérité partagée avec background.js)
-      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-        try {
-          const result = await chrome.storage.local.get('mb_boards');
-          if (Array.isArray(result.mb_boards)) {
-            boards = result.mb_boards;
-            try { localStorage.setItem('mb_boards', JSON.stringify(boards)); } catch {}
-            if (currentBoardId) { loadLibraryForBoard(currentBoardId); renderPanelLib(); }
-            return;
-          }
-        } catch {}
-      }
-      // Fallback localStorage
-      boards = JSON.parse(localStorage.getItem('mb_boards') || '[]');
-      if (currentBoardId) { loadLibraryForBoard(currentBoardId); renderPanelLib(); }
-    }
+    toast
   };
 })();
 

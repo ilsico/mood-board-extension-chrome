@@ -1,3 +1,6 @@
+index avant l'extension sans script
+
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,6 +10,7 @@
 <script src="html2canvas.min.js"></script>
 <script src="jspdf.umd.min.js"></script>
 <script src="app.js"></script>
+
 <style>
 /* ===== FONTS ===== */
 @font-face {
@@ -221,7 +225,8 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   flex: 1; position: relative; overflow: hidden;
   background: #f8f8fb;
   touch-action: none !important; /* Désactive scroll/zoom natif du navigateur, laisse JS gérer le pinch */
-  cursor: default;
+  /* Curseur flèche orange custom */
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='22' viewBox='0 0 18 22'%3E%3Cpath d='M2 2 L2 17 L6 13 L9 20 L11 19 L8 12 L14 12 Z' fill='%23ff3c00'/%3E%3C/svg%3E") 2 2, default;
 }
 /* touch-action:none sur tout le contenu pour que le pinch fonctionne même doigt sur un élément */
 #canvas, .board-element, .board-element * {
@@ -449,14 +454,14 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 /* ===== ÉLÉMENTS DU BOARD ===== */
 .board-element {
   position: absolute;
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Cpath d='M11 2v3M11 17v3M2 11h3M17 11h3' stroke='%23fff' stroke-width='2.5' stroke-linecap='round'/%3E%3Cpath d='M11 2v3M11 17v3M2 11h3M17 11h3' stroke='%23ff3c00' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='11' cy='11' r='3.5' fill='%23ff3c00' stroke='%23fff' stroke-width='1.2'/%3E%3Cpath d='M11 5l2 3h-4zM11 17l-2-3h4zM5 11l3-2v4zM17 11l-3 2v-4z' fill='%23ff3c00' stroke='%23fff' stroke-width='0.5'/%3E%3C/svg%3E") 11 11, move;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='22' viewBox='0 0 18 22'%3E%3Cpath d='M2 2 L2 17 L6 13 L9 20 L11 19 L8 12 L14 12 Z' fill='%23ff3c00'/%3E%3C/svg%3E") 2 2, default;
 }
 .board-element.selected {
-  outline: 1px solid #00FF0A; outline-offset: 0px;
+  outline: 1px solid #FF3C00; outline-offset: 0px;
   z-index: 1000 !important;
 }
 .board-element.multi-selected {
-  outline: 1px solid #00FF0A; outline-offset: 0px;
+  outline: 1px solid #FF3C00; outline-offset: 0px;
 }
 
 /* Toolbar flottante */
@@ -479,9 +484,9 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 /* Resize handle — carré visible 13×13, hitbox 26×26 via ::before */
 .resize-handle {
   position: absolute; bottom: -7px; right: -7px;
-  width: 14px; height: 14px; background: #00FF0A;
+  width: 14px; height: 14px; background: #FF3C00;
   border-radius: 0; cursor: se-resize; display: none; z-index: 20;
-  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,255,10,0.5);
+  border: 2px solid #fff; 
   transform-origin: center center;
 }
 .resize-handle::before {
@@ -491,10 +496,19 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 }
 .board-element.selected .resize-handle { display: block; }
 
+/* Rectangle de sélection du groupe */
+#group-bounding-box {
+  position: absolute;
+  border: 1px solid #FF3C00;
+  pointer-events: none;
+  display: none;
+  z-index: 9000;
+}
+
 /* Handle de resize pour la multi-sélection — même logique */
 #multi-resize-handle {
-  position: absolute; width: 18px; height: 18px; background: #00FF0A;
-  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,255,10,0.5);
+  position: absolute; width: 12px; height: 12px; background: #FF3C00;
+  border: 2px solid #FFF;
   cursor: se-resize; z-index: 9100; display: none;
   transform: translate(-50%, -50%);
 }
@@ -516,37 +530,36 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 }
 
 /* NOTE — déformable */
+.board-element[data-type="note"] {
+  min-width: 160px;
+  min-height: 54px;
+}
 .el-note {
   background: #fff; border-radius: 0;
   box-shadow: 0 3px 16px rgba(0,0,0,0.1); padding: 14px;
   border: 1px solid #eaeaf0;
   display: flex; flex-direction: column;
-  width: 100%; height: 100%;
-  min-width: 300px; min-height: 139.5px;
+  width: 100%; height: 100%;  
 }
-.el-note div[contenteditable] {
-  width: 100%; flex: 1; border: none; outline: none;
+.el-note textarea {
+  width: 100%; flex: 1; border: none; outline: none; resize: none;
   font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 14px; color: #2d2d2d;
   background: transparent; line-height: 1.6;
-  cursor: move; word-break: break-word; min-height: 20px;
-}
-.el-note div[contenteditable][contenteditable="true"] { cursor: text; }
-.el-note div[contenteditable] ul,
-.el-note div[contenteditable] ol { padding-left: 20px; }
-/* Masque de fondu quand note manuellement réduite via la poignée */
-.board-element.note-clipped .el-note {
-  -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
-  mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x:hidden ;
 }
 
 /* COULEUR — déformable */
+
+.board-element[data-type="color"] {
+  min-width: 153px; 
+  min-height: 127px;
+}
 .el-color {
   border-radius: 0; box-shadow: 0 3px 16px rgba(0,0,0,0.1);
   overflow: hidden; display: flex; flex-direction: column;
   width: 100%; height: 100%;
-  min-width: 240px; min-height: 270px;
 }
 .el-color .color-swatch { flex: 1; min-height: 40px; }
 .el-color .color-info { background: #fff; padding: 6px 10px; border-top: 1px solid rgba(0,0,0,0.06); flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
@@ -651,15 +664,16 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 
 /* ===== RECTANGLE DE SÉLECTION ===== */
 #selection-rect {
-  position: absolute; border: 1.5px solid #00FF0A;
-  background: rgba(0,255,10,0.07); pointer-events: none;
+  position: absolute; border: 1px solid #687079;
+  background: rgba(223, 225, 225, 0.2); pointer-events: none;
   display: none; z-index: 9000; border-radius: 0;
 }
 
 /* ===== GUIDES DE SNAP ===== */
 .snap-guide {
-  position: absolute; pointer-events: none; z-index: 9999;
+  position: absolute; pointer-events: none; z-index: 0;
   background: #ff3c00;
+  opacity: 0.5; /* Opacité réduite pour ressembler aux repères Illustrator */
 }
 .snap-guide.h { height: 1px; left: 0; width: 8000px; }
 .snap-guide.v { width: 1px;  top:  0; height: 8000px; }
@@ -810,98 +824,47 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   border-radius: 0;
 }
 
-
-  /* Styles globaux pour les fonds et les sélections */
-        body, #home-screen, .canvas-wrapper {
-            background-color: #ebedee !important;
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-        }
-
-        /* Curseur personnalisé (flèche orange) */
-        body {
-            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="%23ff3c00"><path d="M12 2L12 22M2 12H22" stroke="%23ff3c00" stroke-width="3" stroke-linecap="round"/></svg>'), auto;
-        }
-
-        /* Curseurs pour le mode Pan (grab/grabbing) */
-        .canvas-wrapper.grab-cursor {
-            cursor: grab;
-        }
-        .canvas-wrapper.grabbing-cursor {
-            cursor: grabbing;
-        }
-
-        /* Styles pour les éléments sélectionnés */
-        .selected, .multi-selected {
-                        border: 1px solid #797F88 !important;
-        }
-
-        /* Rectangle de sélection */
-        #selection-rect {
-            background: rgba(211, 213, 214, 0.5) !important;
-            border: 1px solid #797F88 !important;
-        }
-
-        /* Poignée de redimensionnement (orange) */
-        .resize-handle, #multi-resize-handle {
-            background-color: #ff3c00 !important;
-            width: 12px !important;
-            height: 12px !important;
-        }
-
-        /* Modale de suppression */
-        #delete-modal {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            z-index: 1001;
-            text-align: center;
-        }
-        #delete-modal button {
-            margin: 0 10px;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        #yes-button {
-            background-color: #ff3c00;
-            color: white;
-            border: none;
-        }
-        #no-button {
-            background-color: white;
-            color: #ff3c00;
-            border: 1px solid #ff3c00;
-        }
-
+/* FORCER LE CURSEUR PENDANT LE DRAG */
+body.is-dragging-el, body.is-dragging-el * {
+  cursor: grabbing !important;
+}
         /* Barre d'outils de groupe */
+
         #group-toolbar {
+
             display: none;
+
             position: absolute;
+
             background: white;
+
             padding: 8px;
+
             border-radius: 4px;
+
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
             z-index: 1000;
+
             top: -40px;
+
             left: 0;
+
         }
+
         #group-toolbar button {
+
             margin: 0 4px;
+
             padding: 4px 8px;
+
             background: none;
+
             border: none;
+
             cursor: pointer;
+
         }
-
-
 </style>
 </head>
 <body>
@@ -912,22 +875,21 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <div class="boards-container" id="boards-container">
     <div class="boards-canvas" id="boards-canvas"></div>
   </div>
-  <button id="new-board-btn" title="Nouveau Moodboard">+</button>
+  <button id="new-board-btn" onclick="App.createBoard()" title="Nouveau Moodboard">+</button>
 </div>
-
 
 <!-- ===== INTERFACE BOARD ===== -->
 <div id="board-screen">
 
   <!-- HEADER BOARD (barre pleine largeur) -->
   <header id="board-header">
-    <button class="back-btn" id="back-btn" title="Retour à l'accueil">&#8592;</button>
+    <button class="back-btn" id="back-btn" title="Retour à l'accueil" onclick="App.goHome()">&#8592;</button>
     <div class="board-title-display" id="board-title-display">Moodboard</div>
   </header>
   <!-- Boutons orange centrés sous le header -->
   <div class="fit-btn-group">
-    <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">⊡</button>
-    <button id="preview-btn" class="preview-btn" title="Aperçu plein écran (Échap pour quitter)">⛶</button>
+    <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue" onclick="App.fitElementsToScreen()">⊡</button>
+    <button id="preview-btn" class="preview-btn" title="Aperçu plein écran (Échap pour quitter)" onclick="App.togglePreviewMode()">⛶</button>
   </div>
 
   <!-- CORPS : toolbar + canvas + panneau -->
@@ -935,24 +897,24 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 
   <!-- TOOLBAR GAUCHE (icônes PNG + labels) -->
   <div class="toolbar" id="toolbar">
-    <button id="tool-note" class="tool-btn" draggable="true" title="Note — glisser pour poser">
+    <button class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'note')" onclick="App.addNote()" title="Note — glisser pour poser">
       <img src="note.png" alt="Note">
       <span class="tool-label">Note</span>
     </button>
-    <button id="tool-color" class="tool-btn" draggable="true" title="Couleur — glisser pour poser">
+    <button class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'color')" onclick="App.addColorDirect()" title="Couleur — glisser pour poser">
       <img src="couleur.png" alt="Couleur">
       <span class="tool-label">Couleur</span>
     </button>
-    <button id="tool-link" class="tool-btn" draggable="true" title="Lien — glisser pour poser">
+    <button class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'link')" onclick="App.openLinkModal()" title="Lien — glisser pour poser">
       <img src="lien.png" alt="Lien">
       <span class="tool-label">Lien</span>
     </button>
-    <button id="tool-file" class="tool-btn" draggable="true" title="Fichier — glisser pour poser">
+    <button class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'file')" onclick="App.addFile()" title="Fichier — glisser pour poser">
       <img src="fichier.png" alt="Fichier">
       <span class="tool-label">Fichier</span>
     </button>
     <div class="toolbar-divider"></div>
-    <button id="tool-export" class="tool-btn" title="Exporter">
+    <button class="tool-btn" onclick="App.openExportModal()" title="Exporter">
       <img src="exportation.png" alt="Exporter">
       <span class="tool-label">Exporter</span>
     </button>
@@ -961,24 +923,19 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <!-- PANNEAU ÉDITION TEXTE (swap animé avec toolbar) -->
   <div id="text-edit-panel">
     <span class="text-panel-label">Police</span>
-    <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Roman</button>
-    <button class="text-font-btn" id="tp-bold"  title="Helvetica Bold"><b>Bold</b></button>
+    <button class="text-font-btn" id="tp-roman" onclick="App.applyTextFont('helvetica-roman')" title="Helvetica Roman">Roman</button>
+    <button class="text-font-btn" id="tp-bold"  onclick="App.applyTextFont('helvetica-bold')"  title="Helvetica Bold"><b>Bold</b></button>
     <span class="text-panel-label">Taille</span>
     <div class="text-size-row">
-      <button id="text-size-minus" class="text-size-btn">−</button>
+      <button class="text-size-btn" onclick="App.applyTextSizeDelta(-1)">−</button>
       <span class="text-size-val" id="text-size-val">14</span>
-      <button id="text-size-plus" class="text-size-btn">+</button>
+      <button class="text-size-btn" onclick="App.applyTextSizeDelta(1)">+</button>
     </div>
     <span class="text-panel-label">Alignement</span>
     <div class="text-align-btns">
-      <button class="text-align-btn" id="ta-left"   title="Gauche">⬅</button>
-      <button class="text-align-btn" id="ta-center" title="Centre">☰</button>
-      <button class="text-align-btn" id="ta-right"  title="Droite">➡</button>
-    </div>
-    <span class="text-panel-label">Liste</span>
-    <div class="text-align-btns">
-      <button class="text-align-btn" id="tp-list-ul" title="Liste à puces">•</button>
-      <button class="text-align-btn" id="tp-list-ol" title="Liste numérotée">1.</button>
+      <button class="text-align-btn" id="ta-left"   onclick="App.applyTextAlign('left')"   title="Gauche">⬅</button>
+      <button class="text-align-btn" id="ta-center" onclick="App.applyTextAlign('center')" title="Centre">☰</button>
+      <button class="text-align-btn" id="ta-right"  onclick="App.applyTextAlign('right')"  title="Droite">➡</button>
     </div>
   </div>
 
@@ -989,6 +946,8 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
     <div id="selection-rect"></div>
     <!-- Handle de resize multi-sélection -->
     <div id="multi-resize-handle"></div>
+    <!-- Rectangle de sélection du groupe -->
+    <div id="group-bounding-box"></div>
     <!-- Toast zoom (vignette orange temporaire) -->
     <div id="zoom-toast"></div>
   </div>
@@ -996,7 +955,7 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <!-- PANNEAU BIBLIOTHÈQUE DROITE -->
   <div id="lib-panel">
     <!-- Bouton toggle flèche -->
-    <button id="lib-toggle-btn" title="Bibliothèque d'images">
+    <button id="lib-toggle-btn" onclick="App.toggleLibPanel()" title="Bibliothèque d'images">
       <!-- Chevron gauche (indique "ouvrir vers la gauche") -->
       <svg viewBox="0 0 24 24">
         <polyline points="15 18 9 12 15 6"></polyline>
@@ -1006,24 +965,24 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
     <!-- Contenu (visible quand ouvert) -->
     <div id="lib-panel-content">
       <div class="lib-panel-header">
-        <button id="lib-add-btn" class="lib-add-btn">
+        <button class="lib-add-btn" onclick="App.uploadImages()">
           &#43; Ajouter plus d'images
         </button>
       </div>
 
       <!-- Chips dossiers -->
       <div class="lib-folders">
-        <button class="lib-folder-chip active" data-folder="all">Tout</button>
-        <button class="lib-folder-chip" data-folder="typographie">Typo</button>
-        <button class="lib-folder-chip" data-folder="couleur">Couleur</button>
-        <button class="lib-folder-chip" data-folder="logo">Logo</button>
-        <button class="lib-folder-chip" data-folder="image">Image</button>
+        <button class="lib-folder-chip active" data-folder="all" onclick="App.setPanelFolder('all',this)">Tout</button>
+        <button class="lib-folder-chip" data-folder="typographie" onclick="App.setPanelFolder('typographie',this)">Typo</button>
+        <button class="lib-folder-chip" data-folder="couleur" onclick="App.setPanelFolder('couleur',this)">Couleur</button>
+        <button class="lib-folder-chip" data-folder="logo" onclick="App.setPanelFolder('logo',this)">Logo</button>
+        <button class="lib-folder-chip" data-folder="image" onclick="App.setPanelFolder('image',this)">Image</button>
       </div>
 
       <!-- Recherche -->
       <div class="lib-search-wrap">
-        <input class="lib-search-input" type="text" placeholder="Rechercher..."
-          id="lib-panel-search">
+        <input class="lib-search-input" type="text" placeholder=" Rechercher..."
+          oninput="App.searchPanelLib(this.value)" id="lib-panel-search">
       </div>
 
       <!-- Grille images -->
@@ -1047,24 +1006,22 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   </div><!-- /board-body -->
 </div><!-- /board-screen -->
 
-<!-- Modale de suppression ajoutée -->
-<div id="delete-modal">
-    <p>Supprimer définitivement ?</p>
-    <button id="yes-button">Oui</button>
-    <button id="no-button">Non</button>
-</div>
 
 <!-- Barre d'outils de groupe ajoutée -->
+
 <div id="group-toolbar">
+
     <button id="duplicate-button">Dupliquer</button>
+
     <button id="delete-button">Supprimer</button>
+
 </div>
 
 
 <!-- INPUTS FICHIERS CACHÉS -->
-<input type="file" id="file-input-images" multiple accept="image/*" style="display:none">
-<input type="file" id="file-input-file" multiple style="display:none">
-<input type="file" id="file-input-video" accept="video/*" style="display:none">
+<input type="file" id="file-input-images" multiple accept="image/*" style="display:none" onchange="App.handleImageUpload(event)">
+<input type="file" id="file-input-file" multiple style="display:none" onchange="App.handleFileUpload(event)">
+<input type="file" id="file-input-video" accept="video/*" style="display:none" onchange="App.handleVideoUpload(event)">
 <input type="file" id="file-input-replace" accept="image/*" style="display:none">
 
 <!-- MODALE COULEUR -->
@@ -1072,16 +1029,16 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <div class="modal" style="width:370px">
     <div class="modal-header">
       <h2>🎨 Ajouter une couleur</h2>
-      <button id="close-color-modal" class="modal-close">&#x2715;</button>
+      <button class="modal-close" onclick="App.closeColorModal()">&#x2715;</button>
     </div>
     <div class="color-picker-wrap">
-      <input type="color" id="color-picker-input" value="#ff3c00">
+      <input type="color" id="color-picker-input" value="#ff3c00" oninput="App.syncHex(this.value)">
       <div class="hex-input-wrap">
         <label>#</label>
-        <input class="hex-input" type="text" id="hex-input" value="6C63FF" maxlength="6">
+        <input class="hex-input" type="text" id="hex-input" value="6C63FF" maxlength="6" oninput="App.syncColor(this.value)">
         <div id="hex-preview" style="background:#ff3c00"></div>
       </div>
-      <button id="add-color-btn" class="add-color-btn">＋ Ajouter au board</button>
+      <button class="add-color-btn" onclick="App.addColorElement()">＋ Ajouter au board</button>
     </div>
   </div>
 </div>
@@ -1091,7 +1048,7 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <div class="modal" style="width:460px">
     <div class="modal-header">
       <h2>🔗 Ajouter un lien</h2>
-      <button id="close-link-modal" class="modal-close">&#x2715;</button>
+      <button class="modal-close" onclick="App.closeLinkModal()">&#x2715;</button>
     </div>
     <div class="form-wrap">
       <div class="form-group">
@@ -1106,7 +1063,7 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
         <label>Image d'aperçu (URL optionnel)</label>
         <input class="form-input" type="url" id="link-img-input" placeholder="https://exemple.com/image.jpg">
       </div>
-      <button id="submit-link" class="form-submit">Ajouter le lien</button>
+      <button class="form-submit" onclick="App.addLinkElement()">Ajouter le lien</button>
     </div>
   </div>
 </div>
@@ -1116,22 +1073,22 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <div class="modal" style="width:480px">
     <div class="modal-header">
       <h2>▶️ Ajouter une vidéo</h2>
-      <button id="close-video-modal" class="modal-close">&#x2715;</button>
+      <button class="modal-close" onclick="App.closeVideoModal()">&#x2715;</button>
     </div>
     <div class="form-wrap">
       <div class="video-type-tabs">
-        <button class="video-tab active" id="vt-url">🌐 URL</button>
-        <button class="video-tab" id="vt-local">📁 Fichier local</button>
+        <button class="video-tab active" id="vt-url" onclick="App.switchVideoTab('url')">🌐 URL</button>
+        <button class="video-tab" id="vt-local" onclick="App.switchVideoTab('local')">📁 Fichier local</button>
       </div>
       <div id="video-url-section">
         <div class="form-group">
           <label>URL de la vidéo</label>
           <input class="form-input" type="url" id="video-url-input" placeholder="https://youtube.com/watch?v=...">
         </div>
-        <button id="submit-video-url" class="form-submit">Ajouter</button>
+        <button class="form-submit" onclick="App.addVideoURL()">Ajouter</button>
       </div>
       <div id="video-local-section" class="hidden">
-        <button id="submit-video-local" class="form-submit">
+        <button class="form-submit" onclick="document.getElementById('file-input-video').click()">
           📁 Choisir un fichier vidéo
         </button>
       </div>
@@ -1144,14 +1101,14 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <div class="modal" style="width:380px">
     <div class="modal-header">
       <h2>✏️ Renommer</h2>
-      <button id="close-rename-modal" class="modal-close">&#x2715;</button>
+      <button class="modal-close" onclick="App.closeRenameModal()">&#x2715;</button>
     </div>
     <div class="form-wrap">
       <div class="form-group">
         <label>Nouveau nom</label>
         <input class="form-input" type="text" id="rename-input" placeholder="Nom du moodboard" maxlength="45">
-      </div>
-      <button id="submit-rename" class="form-submit">Renommer</button>
+       </div>
+       <button class="form-submit" onclick="App.confirmRename()">Renommer</button>
     </div>
   </div>
 </div>
@@ -1161,14 +1118,15 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <div class="modal" style="width:380px">
     <div class="modal-header">
       <h2>Nouveau moodboard</h2>
-      <button id="close-create-board-modal" class="modal-close">&#x2715;</button>
+      <button class="modal-close" onclick="App.closeCreateBoardModal()">&#x2715;</button>
     </div>
     <div class="form-wrap">
       <div class="form-group">
         <label>Nom du moodboard</label>
-        <input class="form-input" type="text" id="create-board-input" placeholder="Mon moodboard" maxlength="45">
+        <input class="form-input" type="text" id="create-board-input" placeholder="Mon moodboard" max lenght="45"
+          onkeydown="if(event.key==='Enter') App.confirmCreateBoard(); if(event.key==='Escape') App.closeCreateBoardModal()">
       </div>
-      <button id="submit-create-board" class="form-submit">Créer</button>
+      <button class="form-submit" onclick="App.confirmCreateBoard()">Créer</button>
     </div>
   </div>
 </div>
@@ -1178,31 +1136,48 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   <div class="modal" style="width:320px">
     <div class="modal-header">
       <h2>Exporter</h2>
-      <button id="close-export-modal" class="modal-close">&#x2715;</button>
+      <button class="modal-close" onclick="App.closeExportModal()">&#x2715;</button>
     </div>
     <div style="padding:24px 26px;display:flex;flex-direction:column;gap:10px;">
-      <button id="export-png-btn" class="form-submit">Exporter en PNG</button>
+      <button class="form-submit" onclick="App.exportPNG();App.closeExportModal()">Exporter en PNG</button>
       <div style="border-top:1px solid #eaeaf0;margin:2px 0;"></div>
-      <button id="export-pdf-hr-btn" class="form-submit" style="background:#1a1a2e;">PDF — Haute résolution</button>
-      <button id="export-pdf-lr-btn" class="form-submit" style="background:#3a3a5e;">PDF — Basse résolution</button>
+      <button class="form-submit" style="background:#1a1a2e;" onclick="App.exportPDF(2);App.closeExportModal()">PDF — Haute résolution</button>
+      <button class="form-submit" style="background:#3a3a5e;" onclick="App.exportPDF(1);App.closeExportModal()">PDF — Basse résolution</button>
     </div>
   </div>
 </div>
 
 <!-- CONTEXT MENU -->
 <div id="context-menu">
-  <div id="ctx-duplicate" class="ctx-item"><img src="dupliquer.png" style="width:16px;height:16px;object-fit:contain;flex-shrink:0;"> Dupliquer</div>
+  <div class="ctx-item" onclick="App.ctxBringFront()">⬆️ Premier plan</div>
+  <div class="ctx-item" onclick="App.ctxBringFront()">
+  ⬆️ Premier plan
+</div>
+
+<div class="ctx-item" onclick="App.ctxSendBack()">
+  ⬇️ Arrière-plan
+</div>
+
+<div class="ctx-divider"></div>
+
+<div class="ctx-item" onclick="App.ctxDuplicate()">
+  <img src="dupliquer.png" style="width:16px;height:16px;object-fit:contain;flex-shrink:0; margin-right:6px;">
+  Dupliquer
+</div>
   <!-- Options spécifiques aux images -->
   <div class="ctx-divider" id="ctx-img-divider" style="display:none"></div>
-  <div class="ctx-item" id="ctx-img-download" style="display:none">⬇️ Télécharger</div>
-  <div class="ctx-item" id="ctx-img-replace" style="display:none">🔄 Remplacer</div>
-  <div class="ctx-item" id="ctx-img-caption" style="display:none">💬 Commentaire</div>
+  <div class="ctx-item" id="ctx-img-download" style="display:none" onclick="App.ctxDownloadImage()">⬇️ Télécharger</div>
+  <div class="ctx-item" id="ctx-img-replace" style="display:none" onclick="App.ctxReplaceImage()">🔄 Remplacer</div>
+  <div class="ctx-item" id="ctx-img-caption" style="display:none" onclick="App.ctxAddCaption()">💬 Commentaire</div>
   <!-- Connexion multi-sélection -->
   <div class="ctx-divider" id="ctx-connect-divider" style="display:none"></div>
-  <div class="ctx-item" id="ctx-connect" style="display:none">— Connecter</div>
+  <div class="ctx-item" id="ctx-connect" style="display:none" onclick="App.ctxConnect()">— Connecter</div>
   <div class="ctx-divider"></div>
-  <div id="ctx-delete" class="ctx-item danger"><img src="supprimer.png" style="width:16px;height:16px;object-fit:contain;flex-shrink:0;"> Supprimer</div>
+  <div class="ctx-item danger" onclick="App.ctxDelete()">
+  <img src="supprimer.png" style="width:16px;height:16px;object-fit:contain;flex-shrink:0; margin-right:6px;">
+  Supprimer
 </div>
+</div> <div id="toast"></div>
 
 <!-- TOAST -->
 <div id="toast"></div>
@@ -1214,13 +1189,12 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 
 <!-- LIGHTBOX VIDÉO -->
 <div id="video-lightbox-overlay">
-  <button id="vlb-close-btn" class="vlb-close">✕</button>
+  <button class="vlb-close" onclick="App.closeVideoLightbox()">✕</button>
   <video id="vlb-video" controls preload="metadata"></video>
 </div>
+
+
+<!-- Toast mode aperçu (position:fixed, non masqué par la règle preview-mode) -->
 <div id="preview-toast"></div>
 </body>
 </html>
-
-
-
-

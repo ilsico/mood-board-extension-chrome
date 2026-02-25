@@ -868,7 +868,34 @@ body.is-dragging-el, body.is-dragging-el * {
 </style>
 </head>
 <body>
+<div class="toolbar" id="toolbar">
+    <button id="tool-note" class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'note')" onclick="App.addNote()" title="Note — glisser pour poser">
+      <img src="note.png" alt="Note" draggable="false" style="pointer-events: none;">
+      <span class="tool-label">Note</span>
+    </button>
 
+    <button id="tool-color" class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'color')" onclick="App.addColorDirect()" title="Couleur — glisser pour poser">
+      <img src="couleur.png" alt="Couleur" draggable="false" style="pointer-events: none;">
+      <span class="tool-label">Couleur</span>
+    </button>
+
+    <button id="tool-link" class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'link')" onclick="App.openLinkModal()" title="Lien — glisser pour poser">
+      <img src="lien.png" alt="Lien" draggable="false" style="pointer-events: none;">
+      <span class="tool-label">Lien</span>
+    </button>
+
+    <button id="tool-file" class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'file')" onclick="App.addFile()" title="Fichier — glisser pour poser">
+      <img src="fichier.png" alt="Fichier" draggable="false" style="pointer-events: none;">
+      <span class="tool-label">Fichier</span>
+    </button>
+
+    <div class="toolbar-divider"></div>
+
+    <button id="tool-export" class="tool-btn" onclick="App.openExportModal()" title="Exporter">
+      <img src="exportation.png" alt="Exporter" draggable="false" style="pointer-events: none;">
+      <span class="tool-label">Exporter</span>
+    </button>
+  </div>
 <!-- ===== ÉCRAN D'ACCUEIL ===== -->
 <div id="home-screen">
   <h1 class="home-main-title">MOODBOARDS</h1>

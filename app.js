@@ -188,7 +188,163 @@ const App = (() => {
       if (e.key === 'Escape') { closeLightbox(); closeVideoLightbox(); }
     });
     setupUIEvents();
+// Dans app.js, remplacez entièrement la fonction setupUIEvents() par celle-ci pour corriger les crashs liés aux ID manquants :
 
+function setupUIEvents() {
+  // Utilitaire pour éviter de crasher si un élément n'existe pas dans le HTML
+  const addEvt = (id, event, handler) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, handler);
+  };
+
+  // Écran d'accueil
+  addEvt('new-board-btn', 'click', () => createBoard());
+
+  // Header board
+  addEvt('back-btn', 'click', () => goHome());
+  addEvt('fit-screen-btn', 'click', () => fitElementsToScreen());
+  addEvt('preview-btn', 'click', () => togglePreviewMode());
+
+  // Toolbar — outils (clic + drag)
+  document.getElementById('tool-note')?.addEventListener('click', () => addNote());
+  document.getElementById('tool-note')?.addEventListener('dragstart', e => toolDragStart(e, 'note'));
+  
+  document.getElementById('tool-color')?.addEventListener('click', () => addColorDirect());
+  document.getElementById('tool-color')?.addEventListener('dragstart', e => toolDragStart(e, 'color'));
+  
+  document.getElementById('tool-link')?.addEventListener('click', () => openLinkModal());
+  document.getElementById('tool-link')?.addEventListener('dragstart', e => toolDragStart(e, 'link'));
+  
+  document.getElementById('tool-file')?.addEventListener('click', () => addFile());
+  document.getElementById('tool-file')?.addEventListener('dragstart', e => toolDragStart(e, 'file'));
+
+  addEvt('tool-export', 'click', () => openExportModal());
+
+  // Panneau texte
+  addEvt('tp-roman', 'click', () => applyTextFont('helvetica-roman'));
+  addEvt('tp-bold', 'click', () => applyTextFont('helvetica-bold'));
+  addEvt('text-size-minus', 'click', () => applyTextSizeDelta(-1));
+  addEvt('text-size-plus', 'click', () => applyTextSizeDelta(1));
+  addEvt('ta-left', 'click', () => applyTextAlign('left'));
+  addEvt('ta-center', 'click', () => applyTextAlign('center'));
+  addEvt('ta-right', 'click', () => applyTextAlign('right'));
+  
+  addEvt('tp-list-ul', 'click', () => {
+    if (!textEditTarget || textEditTarget.dataset.type !== 'note') return;
+    const cd = textEditTarget.querySelector('div[contenteditable]');
+    if (cd) { cd.focus(); }
+    document.execCommand('insertUnorderedList');
+    const isActive = !!textEditTarget.querySelector('ul');
+    document.getElementById('tp-list-ul')?.classList.toggle('active', isActive);
+    document.getElementById('tp-list-ol')?.classList.remove('active');
+    scheduleSave();
+  });
+  
+  addEvt('tp-list-ol', 'click', () => {
+    if (!textEditTarget || textEditTarget.dataset.type !== 'note') return;
+    const cd = textEditTarget.querySelector('div[contenteditable]');
+    if (cd) { cd.focus(); }
+    document.execCommand('insertOrderedList');
+    const isActive = !!textEditTarget.querySelector('ol');
+    document.getElementById('tp-list-ol')?.classList.toggle('active', isActive);
+    document.getElementById('tp-list-ul')?.classList.remove('active');
+    scheduleSave();
+  });
+
+  // Panneau bibliothèque
+  addEvt('lib-toggle-btn', 'click', () => toggleLibPanel());
+  addEvt('lib-add-btn', 'click', () => uploadImages());
+  
+  document.querySelectorAll('.lib-folder-chip').forEach(btn => {
+    btn.addEventListener('click', () => setPanelFolder(btn.dataset.folder, btn));
+    btn.addEventListener('dragover', e => {
+      if (isDraggingFromPanel) { e.preventDefault(); btn.classList.add('drag-over'); }
+    });
+    btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'));
+    btn.addEventListener('drop', e => {
+      btn.classList.remove('drag-over');
+      if (!isDraggingFromPanel) return;
+      e.preventDefault(); e.stopPropagation();
+      const targetFolder = btn.dataset.folder;
+      if (targetFolder === 'all' || !libSelectedIds.size) return;
+      libSelectedIds.forEach(id => {
+        for (const folder of Object.keys(library)) {
+          if (folder === targetFolder) continue;
+          const idx = library[folder].findIndex(i => i.id === id);
+          if (idx !== -1) {
+            const [moved] = library[folder].splice(idx, 1);
+            if (!library[targetFolder]) library[targetFolder] = [];
+            library[targetFolder].push(moved);
+            break;
+          }
+        }
+      });
+      libSelectedIds.clear();
+      saveLibrary(); renderPanelLib();
+    });
+  });
+  
+  addEvt('lib-panel-search', 'input', e => searchPanelLib(e.target.value));
+
+  document.getElementById('lib-panel-grid')?.addEventListener('click', e => {
+    if (!e.target.closest('.lib-panel-item')) {
+      libSelectedIds?.clear();
+      document.querySelectorAll('.lib-panel-item.selected-lib-item').forEach(d => d.classList.remove('selected-lib-item'));
+    }
+  });
+
+  // Inputs fichiers cachés
+  addEvt('file-input-images', 'change', e => handleImageUpload(e));
+  addEvt('file-input-file', 'change', e => handleFileUpload(e));
+  addEvt('file-input-video', 'change', e => handleVideoUpload(e));
+
+  // Modale couleur
+  addEvt('close-color-modal', 'click', () => closeColorModal());
+  addEvt('color-picker-input', 'input', e => syncHex(e.target.value));
+  addEvt('hex-input', 'input', e => syncColor(e.target.value));
+  addEvt('add-color-btn', 'click', () => addColorElement());
+
+  // Modale lien
+  addEvt('close-link-modal', 'click', () => closeLinkModal());
+  addEvt('submit-link', 'click', () => addLinkElement());
+
+  // Modale vidéo
+  addEvt('close-video-modal', 'click', () => closeVideoModal());
+  addEvt('vt-url', 'click', () => switchVideoTab('url'));
+  addEvt('vt-local', 'click', () => switchVideoTab('local'));
+  addEvt('submit-video-url', 'click', () => addVideoURL());
+  addEvt('submit-video-local', 'click', () => document.getElementById('file-input-video')?.click());
+
+  // Modale rename
+  addEvt('close-rename-modal', 'click', () => closeRenameModal());
+  addEvt('rename-input', 'keydown', e => { if (e.key === 'Enter') confirmRename(); });
+  addEvt('submit-rename', 'click', () => confirmRename());
+
+  // Modale création board
+  addEvt('close-create-board-modal', 'click', () => closeCreateBoardModal());
+  addEvt('create-board-input', 'keydown', e => {
+    if (e.key === 'Enter')  confirmCreateBoard();
+    if (e.key === 'Escape') closeCreateBoardModal();
+  });
+  addEvt('submit-create-board', 'click', () => confirmCreateBoard());
+
+  // Modale export
+  addEvt('close-export-modal', 'click', () => closeExportModal());
+  addEvt('export-png-btn', 'click', () => { exportPNG(); closeExportModal(); });
+  addEvt('export-pdf-hr-btn', 'click', () => { exportPDF(2); closeExportModal(); });
+  addEvt('export-pdf-lr-btn', 'click', () => { exportPDF(1); closeExportModal(); });
+
+  // Menu contextuel
+  addEvt('ctx-duplicate', 'click', () => ctxDuplicate());
+  addEvt('ctx-img-download', 'click', () => ctxDownloadImage());
+  addEvt('ctx-img-replace', 'click', () => ctxReplaceImage());
+  addEvt('ctx-img-caption', 'click', () => ctxAddCaption());
+  addEvt('ctx-connect', 'click', () => ctxConnect());
+  addEvt('ctx-delete', 'click', () => ctxDelete());
+
+  // Lightbox vidéo
+  addEvt('vlb-close-btn', 'click', () => closeVideoLightbox());
+}
 
     // Auto-save toutes les 2 minutes
     setInterval(() => {

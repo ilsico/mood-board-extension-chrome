@@ -1431,12 +1431,22 @@ const App = (function() {
     });
   }
 
+  // Supprime toutes les captions liées à un élément
+  function removeCaptionsForEl(el) {
+    const id = el.dataset.id;
+    if (!id) return;
+    const canvas = document.getElementById('canvas');
+    canvas.querySelectorAll('.el-caption').forEach(cap => {
+      if (cap.dataset.parentId === id) cap.remove();
+    });
+  }
+
   function deleteSelected() {
     let count = 0;
     // Supprimer la multi-sélection
-    multiSelected.forEach(el => { removeConnectionsForEl(el); el.remove(); count++; });
+    multiSelected.forEach(el => { removeConnectionsForEl(el); removeCaptionsForEl(el); el.remove(); count++; });
     multiSelected.clear();
-    if (selectedEl) { removeConnectionsForEl(selectedEl); selectedEl.remove(); selectedEl=null; count++; }
+    if (selectedEl) { removeConnectionsForEl(selectedEl); removeCaptionsForEl(selectedEl); selectedEl.remove(); selectedEl=null; count++; }
     if (count > 0) { pushHistory(); scheduleSave(); toast(count > 1 ? count+' éléments supprimés' : 'Supprimé'); }
     else toast('Aucun élément sélectionné');
   }
@@ -2206,7 +2216,18 @@ const App = (function() {
       return cap;
     }
     if (el && s.z) el.style.zIndex = s.z;
-    if (el && s.id) el.dataset.id = s.id;
+    if (el && s.id) {
+      // Remap _imgStore: createImageElement a stocké sous un ID temporaire,
+      // il faut le déplacer vers l'ID original sauvegardé avant de l'écraser.
+      if (el.dataset.type === 'image') {
+        const tempId = el.dataset.id;
+        if (_imgStore.has(tempId)) {
+          _imgStore.set(s.id, _imgStore.get(tempId));
+          _imgStore.delete(tempId);
+        }
+      }
+      el.dataset.id = s.id;
+    }
     return el;
   }
 
@@ -2841,11 +2862,11 @@ const App = (function() {
       // Supprimer toute la sélection
       const toDelete = [...multiSelected];
       if (selectedEl && !multiSelected.has(selectedEl)) toDelete.push(selectedEl);
-      toDelete.forEach(e => { removeConnectionsForEl(e); e.remove(); });
+      toDelete.forEach(e => { removeConnectionsForEl(e); removeCaptionsForEl(e); e.remove(); });
       multiSelected.clear(); selectedEl = null;
       toast(toDelete.length + ' éléments supprimés');
     } else {
-      removeConnectionsForEl(el); el.remove(); selectedEl = null;
+      removeConnectionsForEl(el); removeCaptionsForEl(el); el.remove(); selectedEl = null;
     }
     pushHistory(); scheduleSave();
   }
@@ -3167,7 +3188,7 @@ const App = (function() {
     hideContextMenu();
   }
   function ctxDelete() {
-    if (ctxTargetEl) { removeConnectionsForEl(ctxTargetEl); ctxTargetEl.remove(); selectedEl=null; pushHistory(); scheduleSave(); }
+    if (ctxTargetEl) { removeConnectionsForEl(ctxTargetEl); removeCaptionsForEl(ctxTargetEl); ctxTargetEl.remove(); selectedEl=null; pushHistory(); scheduleSave(); }
     hideContextMenu();
   }
 

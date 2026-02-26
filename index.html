@@ -67,7 +67,7 @@ body {
   cursor: pointer; transition: box-shadow 0.2s; position: absolute;
   box-shadow: 0 2px 14px rgba(0,0,0,0.10); overflow: visible; user-select: none;
 }
-.board-card:hover { box-shadow: 0 8px 28px rgba(255,60,0,0.28); }
+
 .board-card .board-thumb {
   width: 180px; height: 135px; object-fit: cover; display: block;
   flex-shrink: 0; background: #cc3000;
@@ -328,11 +328,11 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 .lib-panel-item:hover .lib-item-name { opacity: 1; }
 .lib-select-indicator {
   position: absolute; top: 4px; left: 4px; width: 14px; height: 14px;
-  border: 2px solid #fff; background: transparent; display: none; pointer-events: none; z-index: 2;
+  border: 3px solid #fff; background: transparent; display: none; pointer-events: none; z-index: 2;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
 }
 .lib-panel-item.selected-lib-item .lib-select-indicator { display: block; background: #ff3c00; }
-.lib-panel-item.selected-lib-item { border-color: #ff3c00; box-shadow: 0 4px 16px rgba(255,60,0,0.28); }
+.lib-panel-item.selected-lib-item { border: 1px solid #ff3c00; }
 .lib-folder-chip.drag-over { background: #ff3c00; color: #fff; }
 .lib-panel-drop-overlay {
   position: absolute; inset: 0; background: rgba(255,60,0,0.08);

@@ -241,12 +241,11 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 .text-panel-label { font-size: 9px; color: #bbb; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
 
 #lib-panel {
-  position: relative; width: 48px; min-width: 48px; background: #fff;
-  border-left: 1px solid #eaeaf0; box-shadow: -2px 0 14px rgba(0,0,0,0.06);
+  position: relative; width: 0; min-width: 0; background: #fff;
   display: flex; flex-direction: column; z-index: 100;
   transition: width 0.32s cubic-bezier(0.4,0,0.2,1); overflow: visible;
 }
-#lib-panel.open { width: 300px; min-width: 300px; }
+#lib-panel.open { width: 300px; min-width: 300px; border-left: 1px solid #eaeaf0; box-shadow: -2px 0 14px rgba(0,0,0,0.06); }
 /* Wrapper interne : remplace overflow:hidden du panneau pour permettre à l'onglet de déborder */
 #lib-panel-inner {
   position: absolute; inset: 0; overflow: hidden;

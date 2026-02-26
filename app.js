@@ -734,32 +734,9 @@ const App = (function() {
 
   // ── CANVAS / ZOOM / PAN ──────────────────────────────────────────────────
   function applyTransform() {
-    // Bloquer le pan uniquement au zoom minimum (tout est visible, rien à déplacer)
-    if (zoomLevel <= 0.15) {
-      const els = document.querySelectorAll('#canvas .board-element');
-      if (els.length) {
-        const cw = document.querySelector('.canvas-wrapper') || document.getElementById('canvas-wrapper');
-        const vw = cw ? cw.offsetWidth  : window.innerWidth;
-        const vh = cw ? cw.offsetHeight : window.innerHeight;
-        let minL=Infinity, minT=Infinity, maxR=-Infinity, maxB=-Infinity;
-        els.forEach(el => {
-          const l = parseFloat(el.style.left)||0;
-          const t = parseFloat(el.style.top) ||0;
-          minL=Math.min(minL,l); minT=Math.min(minT,t);
-          maxR=Math.max(maxR,l+el.offsetWidth);
-          maxB=Math.max(maxB,t+el.offsetHeight);
-        });
-        const marginX = (maxR - minL) * 0.1;
-        const marginY = (maxB - minT) * 0.1;
-        const panXMax = -(minL - marginX) * zoomLevel;
-        const panXMin = vw - (maxR + marginX) * zoomLevel;
-        const panYMax = -(minT - marginY) * zoomLevel;
-        const panYMin = vh - (maxB + marginY) * zoomLevel;
-        panX = (panXMin > panXMax) ? (panXMin + panXMax) / 2 : Math.max(panXMin, Math.min(panXMax, panX));
-        panY = (panYMin > panYMax) ? (panYMin + panYMax) / 2 : Math.max(panYMin, Math.min(panYMax, panY));
-      }
-    }
+    // Le bloc de restriction à 0.15 a été retiré pour supprimer le glitch
     document.getElementById('canvas').style.transform = `translate(${panX}px,${panY}px) scale(${zoomLevel})`;
+    
     // Compenser le zoom sur les poignées de resize pour qu'elles restent constantes à l'écran
     const invScale = 1 / zoomLevel;
     document.querySelectorAll('#canvas .resize-handle').forEach(h => {
@@ -875,53 +852,88 @@ const App = (function() {
 
   // Alt+molette = zoom, molette seule = pan
   // Alt+molette OU Pavé tactile (pinch) = zoom, molette seule = pan
-  wrapper.addEventListener('wheel', e => {
+ wrapper.addEventListener('wheel', e => {
     e.preventDefault();
     
-    // Détecte soit Alt + Molette, soit le Pinch du pavé tactile (qui envoie souvent ctrlKey)
+    // Détecte soit Alt + Molette, soit le Pinch du pavé tactile
     if (e.altKey || e.ctrlKey) {
-      // Ajustement de la sensibilité pour le pavé tactile
-      const factor = e.ctrlKey ? 0.02 : 0.08; 
-      const delta = e.deltaY > 0 ? -factor : factor;
+      // Utilisation du delta réel pour gérer le trackpad en douceur
+      let zoomDelta = -(e.deltaY * 0.002);
       
-      const newZ  = Math.min(Math.max(zoomLevel + delta, 0.15), 4);
-      const rect  = wrapper.getBoundingClientRect();
-      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      // Plafond de vitesse pour les souris classiques
+      zoomDelta = Math.max(-0.15, Math.min(0.15, zoomDelta));
       
-      panX = mx - (mx - panX) * (newZ / zoomLevel);
-      panY = my - (my - panY) * (newZ / zoomLevel);
-      zoomLevel = newZ;
+      const newZ = Math.min(Math.max(zoomLevel + zoomDelta, 0.15), 4);
       
-      applyTransform();
-      updateZoomDisplay(); // Affiche le toast de zoom
-      
-      if (wheelRaf) { cancelAnimationFrame(wheelRaf); wheelRaf = null; }
+      if (Math.abs(newZ - zoomLevel) > 0.001) {
+        const rect = wrapper.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        
+        panX = mx - (mx - panX) * (newZ / zoomLevel);
+        panY = my - (my - panY) * (newZ / zoomLevel);
+        zoomLevel = newZ;
+        
+        applyTransform();
+        updateZoomDisplay();
+      }
     } else {
-      // Navigation (pan) classique
-      if (!wheelRaf) {
-        wheelTargetX = panX;
-        wheelTargetY = panY;
-      }
-      wheelTargetX -= e.deltaX;
-      wheelTargetY -= e.deltaY;
+      // Navigation (pan) classique à 2 doigts sans lissage
+      panX -= e.deltaX;
+      panY -= e.deltaY;
+      applyTransform();
+    }
+  }, { passive: false });
+
+// ── DÉPLACEMENT TACTILE À DEUX DOIGTS (LIBRE EN X/Y) ──
+  let isTouchPanning = false;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let initialPanX = 0;
+  let initialPanY = 0;
+
+  wrapper.addEventListener('touchstart', e => {
+    // Ne pas bloquer l'interaction si l'utilisateur touche un champ texte
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    
+    // S'activer uniquement si exactement 2 doigts touchent l'écran
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      isTouchPanning = true;
+
+      // Calcul du point central exact entre les deux doigts
+      touchStartX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      touchStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       
-      if (!wheelRaf) {
-        const loop = () => {
-          panX += (wheelTargetX - panX) * 0.95;
-          panY += (wheelTargetY - panY) * 0.95;
-          
-          if (Math.abs(wheelTargetX - panX) < 0.2 && Math.abs(wheelTargetY - panY) < 0.2) {
-            panX = wheelTargetX;
-            panY = wheelTargetY;
-            applyTransform();
-            wheelRaf = null;
-          } else {
-            applyTransform();
-            wheelRaf = requestAnimationFrame(loop);
-          }
-        };
-        wheelRaf = requestAnimationFrame(loop);
-      }
+      initialPanX = panX;
+      initialPanY = panY;
+
+      // Stopper l'inertie de la molette si elle était en cours
+      if (wheelRaf) { cancelAnimationFrame(wheelRaf); wheelRaf = null; }
+    }
+  }, { passive: false });
+
+  wrapper.addEventListener('touchmove', e => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    
+    if (isTouchPanning && e.touches.length === 2) {
+      e.preventDefault();
+
+      // Nouveau point central
+      const currentX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+      // Déplacement totalement libre en diagonale (aucun verrouillage d'axe)
+      panX = initialPanX + (currentX - touchStartX);
+      panY = initialPanY + (currentY - touchStartY);
+
+      applyTransform();
+    }
+  }, { passive: false });
+
+  wrapper.addEventListener('touchend', e => {
+    // Désactiver le mode pan dès qu'on relâche un doigt
+    if (e.touches.length < 2) {
+      isTouchPanning = false;
     }
   }, { passive: false });
 

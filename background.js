@@ -1,25 +1,43 @@
-// ── EXTENSION MOODBOARD INJECTOR — background.js (MV3 Service Worker) ────────
-//
-// chrome.storage.local est la source unique de vérité pour mb_boards.
-//
-//   app.js      → saveBoards() écrit dans chrome.storage.local
-//   background  → lit chrome.storage.local pour construire le menu
-//   background  → écrit dans chrome.storage.local lors d'une injection d'image
-//   app.js      → chrome.storage.onChanged déclenche syncLibraryFromStorage()
-//
-// Aucun message bidirectionnel, aucun content script.
-// ─────────────────────────────────────────────────────────────────────────────
-
 const ROOT_ID = 'mb-root';
 let rebuilding = false;
 
-// ── LECTURE DES BOARDS DEPUIS chrome.storage.local ───────────────────────────
-async function getBoardsFromStorage() {
+// ── UTILITAIRES INDEXEDDB ────────────────────────────────────────────────────
+const DB_NAME = 'MoodboardDB';
+const STORE_NAME = 'boards_store';
+
+function getDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
+async function getBoardsFromDB() {
   try {
-    const result = await chrome.storage.local.get('mb_boards');
-    return Array.isArray(result.mb_boards) ? result.mb_boards : [];
+    const db = await getDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).get('mb_boards');
+    return await new Promise(resolve => {
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
   } catch {
     return [];
+  }
+}
+
+async function saveBoardsToDB(boards) {
+  try {
+    const db = await getDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(boards, 'mb_boards');
+  } catch (err) {
+    console.error('[MB-EXT] Erreur sauvegarde DB:', err);
   }
 }
 
@@ -48,21 +66,19 @@ async function rebuildMenus(boards) {
 
 // ── DÉCLENCHEURS ─────────────────────────────────────────────────────────────
 
-// Reconstruction automatique dès que mb_boards change dans le stockage
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.mb_boards) {
-    rebuildMenus(changes.mb_boards.newValue || []);
+// Reconstruire les menus quand l'app nous informe d'une modification
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'MB_BOARDS_MODIFIED') {
+    getBoardsFromDB().then(rebuildMenus);
   }
 });
 
-// Installation / mise à jour de l'extension
 chrome.runtime.onInstalled.addListener(async () => {
-  rebuildMenus(await getBoardsFromStorage());
+  rebuildMenus(await getBoardsFromDB());
 });
 
-// Redémarrage de Chrome (service worker réveillé)
 chrome.runtime.onStartup.addListener(async () => {
-  rebuildMenus(await getBoardsFromStorage());
+  rebuildMenus(await getBoardsFromDB());
 });
 
 // ── CLIC SUR L'ICÔNE → OUVRIR / FOCUSER LE MOODBOARD ────────────────────────
@@ -85,21 +101,14 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
   const imageUrl = info.srcUrl;
   if (!imageUrl) return;
 
-  // ── Filtre par schéma d'URL ───────────────────────────────────────────────
-
-  // URLs non téléchargeables (chrome://, file://, edge://)
   if (imageUrl.startsWith('chrome://') || imageUrl.startsWith('file://') || imageUrl.startsWith('edge://')) {
     console.warn('[MB-EXT] URL non téléchargeable (schéma interdit) :', imageUrl);
     return;
   }
 
   let base64Src;
-
-  // Data URI : déjà en base64, pas de fetch nécessaire
   if (imageUrl.startsWith('data:')) {
     base64Src = imageUrl;
-
-  // URL classique (http:// ou https://) : fetch + conversion base64
   } else {
     try {
       const response = await fetch(imageUrl);
@@ -123,21 +132,14 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
   }
 
   const fileName = decodeURIComponent(
-    imageUrl.startsWith('data:')
-      ? 'image.jpg'
-      : (imageUrl.split('/').pop().split('?')[0] || 'image.jpg')
+    imageUrl.startsWith('data:') ? 'image.jpg' : (imageUrl.split('/').pop().split('?')[0] || 'image.jpg')
   );
 
-  // ── Lecture, modification et écriture dans chrome.storage.local ──────────
-  // L'écriture déclenche chrome.storage.onChanged dans app.js →
-  //   syncLibraryFromStorage() recharge les boards en mémoire et re-rend le panneau.
-  const boards = await getBoardsFromStorage();
+  // Écriture directe dans IndexedDB
+  const boards = await getBoardsFromDB();
   const board  = boards.find(b => b.id === boardId);
 
-  if (!board) {
-    console.warn('[MB-EXT] Board introuvable :', boardId);
-    return;
-  }
+  if (!board) return;
 
   if (!board.library)       board.library       = {};
   if (!board.library.image) board.library.image = [];
@@ -148,10 +150,8 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
     src:  base64Src
   });
 
-  try {
-    await chrome.storage.local.set({ mb_boards: boards });
-    // onChanged déclenche rebuildMenus() et syncLibraryFromStorage() automatiquement
-  } catch (err) {
-    console.error('[MB-EXT] Erreur chrome.storage.local.set :', err);
-  }
+  await saveBoardsToDB(boards);
+  
+  // Avertir app.js que la bibliothèque a changé
+  chrome.runtime.sendMessage({ type: 'MB_IMAGE_INJECTED' }).catch(() => {});
 });

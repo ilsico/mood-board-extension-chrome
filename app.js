@@ -1,5 +1,4 @@
-const App = (() => {
-
+const App = (function() {
   // ── ÉTAT ─────────────────────────────────────────────────────────────────
   let boards          = []; // chargé de façon asynchrone dans init() via loadBoardsFromStorage()
   let library         = {}; // bibliothèque du board courant — chargée dans openBoard()
@@ -18,6 +17,7 @@ const App = (() => {
   let historyIndex    = -1;
   let selectedEl      = null;           // élément unique sélectionné
   let multiSelected   = new Set();      // sélection multiple
+  let libSelectedIds  = new Set();      // <--- LIGNE À AJOUTER POUR CORRIGER L'ERREUR
   let isResizing      = false;
   let resizeEl        = null;
   let resizeStartW=0, resizeStartH=0, resizeStartX=0, resizeStartY=0;
@@ -30,27 +30,58 @@ const App = (() => {
   let videoTabMode    = 'url';
   let nextZ           = 100;
   let saveTimer       = null;
+  // Stockage hors-DOM des données base64 des images (évite des attributs HTML massifs)
+  const _imgStore     = new Map(); // id -> base64 src
   // Rectangle de sélection
   let isSelecting     = false;
   let selRectStart    = { x:0, y:0 };
   let isDraggingFromPanel = false; // true quand un drag vient du panneau bibliothèque
+  let draggedLibItemId   = null;  // ID de l'item lib en cours de drag (pour drop sur catégorie)
+  let draggedLibItems    = [];    // items sélectionnés pour drag multiple vers le board
   let fileReplaceTarget = null;    // élément .board-element à remplacer lors du prochain handleFileUpload
 
-  // ── PERSISTANCE ──────────────────────────────────────────────────────────
-  function saveBoards()  { try { localStorage.setItem('mb_boards',  JSON.stringify(boards));  } catch(e) { console.warn('Sauvegarde boards impossible (quota?):', e); } }
-  // saveLibrary : sauvegarde la bibliothèque dans le board courant (pas de clé globale)
+  //// ── PERSISTANCE (IndexedDB - Stockage illimité sur disque dur) ───────────
+  const DB_NAME = 'MoodboardDB';
+  const STORE_NAME = 'boards_store';
+
+  function getDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+      };
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+
+ async function saveBoards() {
+    try {
+      const db = await getDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(boards, 'mb_boards');
+      
+      // Force le menu clic droit à se mettre à jour
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        chrome.runtime.sendMessage({ type: 'MB_BOARDS_MODIFIED' }).catch(() => {});
+      }
+    } catch(e) { console.warn('Erreur sauvegarde IndexedDB:', e); }
+  }
+
   function saveLibrary() {
     if (!currentBoardId) return;
     const b = boards.find(x => x.id === currentBoardId);
     if (b) { b.library = library; saveBoards(); }
   }
-  // Charger la bibliothèque du board courant (appelé dans openBoard)
+
   function loadLibraryForBoard(boardId) {
     const b = boards.find(x => x.id === boardId);
     const raw = (b && b.library) ? b.library : {};
     library = raw;
     ['typographie','couleur','logo','image'].forEach(f => { if (!library[f]) library[f] = []; });
   }
+
   function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveCurrentBoard, 800); }
 
   // Miniatures désactivées (cartes accueil sans aperçu)
@@ -97,7 +128,10 @@ const App = (() => {
         id: el.dataset.id, type: el.dataset.type,
         x: parseFloat(el.style.left)||0, y: parseFloat(el.style.top)||0,
         w: parseFloat(el.style.width)||null, h: parseFloat(el.style.height)||null,
-        z: parseInt(el.style.zIndex)||100, data: el.dataset.savedata||''
+        z: parseInt(el.style.zIndex)||100,
+        data: el.dataset.type === 'image'
+          ? (_imgStore.get(el.dataset.id) || el.dataset.savedata || '')
+          : (el.dataset.savedata || '')
       });
     });
     // Sauvegarder les connexions
@@ -123,20 +157,32 @@ const App = (() => {
     scheduleThumbnail(); // mise à jour miniature en temps réel
   }
 
-  // ── CHARGEMENT INITIAL DES BOARDS ────────────────────────────────────────
-  // Priorité : chrome.storage.local (source de vérité extension) → localStorage
+  /// ── CHARGEMENT INITIAL DES BOARDS ────────────────────────────────────────
   async function loadBoardsFromStorage() {
-    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-      try {
-        const result = await chrome.storage.local.get('mb_boards');
-        if (Array.isArray(result.mb_boards) && result.mb_boards.length > 0) {
-          boards = result.mb_boards;
-          return;
-        }
-      } catch(e) { /* hors contexte extension */ }
-    }
+    // 1. Tenter de charger depuis IndexedDB (nouveau stockage illimité)
+    try {
+      const db = await getDB();
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get('mb_boards');
+      const data = await new Promise(resolve => {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+
+      if (data && Array.isArray(data) && data.length > 0) {
+        boards = data;
+        return;
+      }
+    } catch(e) { console.warn('Erreur chargement IndexedDB:', e); }
+
+    // 2. Migration automatique de vos anciennes données limitées
     const raw = localStorage.getItem('mb_boards');
-    if (raw) { try { boards = JSON.parse(raw); } catch { boards = []; } }
+    if (raw) {
+      try { 
+        boards = JSON.parse(raw); 
+        saveBoards(); // Transfère vos anciens boards vers le stockage illimité
+      } catch { boards = []; }
+    }
   }
 
   // ── INIT ─────────────────────────────────────────────────────────────────
@@ -171,14 +217,13 @@ const App = (() => {
       const panel = document.getElementById('text-edit-panel');
       if (!panel || !panel.classList.contains('active')) return;
       if (panel.contains(e.target)) return; // clic dans le panneau → garder ouvert
-      if (e.target.closest('.board-element[data-editing="1"]')) return; // clic sur la note en cours
-      // Clic ailleurs → fermer en blurrant le textarea actif
+      if (e.target.closest('.board-element[data-editing="1"]') || e.target.closest('.el-caption:focus')) return;
       const ta = document.querySelector('.board-element[data-editing="1"] textarea');
       if (ta) { ta.blur(); }
       else { hideTextEditPanel(); }
     }, true); // capture pour intercepter avant les autres handlers
     setupPanelDrop();
-    // Fermer les lightboxes au clic sur l'overlay
+   // Fermer les lightboxes au clic sur l'overlay
     document.getElementById('lightbox-overlay').addEventListener('click', closeLightbox);
     document.getElementById('video-lightbox-overlay').addEventListener('click', e => {
       if (e.target === document.getElementById('video-lightbox-overlay')) closeVideoLightbox();
@@ -188,28 +233,9 @@ const App = (() => {
       if (e.key === 'Escape') { closeLightbox(); closeVideoLightbox(); }
     });
     
-    setupUIEvents();
+    setupUIEvents(); // <-- APPEL DE LA FONCTION (très important)
 
-    // Auto-save toutes les 2 minutes
-    setInterval(() => {
-      if (currentBoardId) saveCurrentBoard();
-    }, 2 * 60 * 1000);
-
-    // ── Sauvegarde avant fermeture de la page ────────────────────────────────
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && currentBoardId) {
-        clearTimeout(saveTimer);
-        saveCurrentBoard();
-      }
-    });
-    window.addEventListener('pagehide', () => {
-      if (currentBoardId) { clearTimeout(saveTimer); saveCurrentBoard(); }
-    });
-    window.addEventListener('beforeunload', () => {
-      if (currentBoardId) { clearTimeout(saveTimer); saveCurrentBoard(); }
-    });
-  } // <--- FIN DE LA FONCTION init()
-
+  } // <--- ACCOLADE MANQUANTE POUR FERMER LA FONCTION init()
 
   // ── ÉVÉNEMENTS UI ───────
   function setupUIEvents() {
@@ -250,62 +276,13 @@ const App = (() => {
     addEvt('ta-left', 'click', () => applyTextAlign('left'));
     addEvt('ta-center', 'click', () => applyTextAlign('center'));
     addEvt('ta-right', 'click', () => applyTextAlign('right'));
-    
-    addEvt('tp-list-ul', 'click', () => {
-      if (!textEditTarget || textEditTarget.dataset.type !== 'note') return;
-      const cd = textEditTarget.querySelector('div[contenteditable]');
-      if (cd) { cd.focus(); }
-      document.execCommand('insertUnorderedList');
-      const isActive = !!textEditTarget.querySelector('ul');
-      document.getElementById('tp-list-ul')?.classList.toggle('active', isActive);
-      document.getElementById('tp-list-ol')?.classList.remove('active');
-      scheduleSave();
-    });
-    
-    addEvt('tp-list-ol', 'click', () => {
-      if (!textEditTarget || textEditTarget.dataset.type !== 'note') return;
-      const cd = textEditTarget.querySelector('div[contenteditable]');
-      if (cd) { cd.focus(); }
-      document.execCommand('insertOrderedList');
-      const isActive = !!textEditTarget.querySelector('ol');
-      document.getElementById('tp-list-ol')?.classList.toggle('active', isActive);
-      document.getElementById('tp-list-ul')?.classList.remove('active');
-      scheduleSave();
-    });
 
     // Panneau bibliothèque
     addEvt('lib-toggle-btn', 'click', () => toggleLibPanel());
     addEvt('lib-add-btn', 'click', () => uploadImages());
     
-    document.querySelectorAll('.lib-folder-chip').forEach(btn => {
-      btn.addEventListener('click', () => setPanelFolder(btn.dataset.folder, btn));
-      btn.addEventListener('dragover', e => {
-        if (isDraggingFromPanel) { e.preventDefault(); btn.classList.add('drag-over'); }
-      });
-      btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'));
-      btn.addEventListener('drop', e => {
-        btn.classList.remove('drag-over');
-        if (!isDraggingFromPanel) return;
-        e.preventDefault(); e.stopPropagation();
-        const targetFolder = btn.dataset.folder;
-        if (targetFolder === 'all' || !libSelectedIds.size) return;
-        libSelectedIds.forEach(id => {
-          for (const folder of Object.keys(library)) {
-            if (folder === targetFolder) continue;
-            const idx = library[folder].findIndex(i => i.id === id);
-            if (idx !== -1) {
-              const [moved] = library[folder].splice(idx, 1);
-              if (!library[targetFolder]) library[targetFolder] = [];
-              library[targetFolder].push(moved);
-              break;
-            }
-          }
-        });
-        libSelectedIds.clear();
-        saveLibrary(); renderPanelLib();
-      });
-    });
-    
+    // Les chips de dossier sont créées dynamiquement dans renderFolderChips()
+
     addEvt('lib-panel-search', 'input', e => searchPanelLib(e.target.value));
 
     document.getElementById('lib-panel-grid')?.addEventListener('click', e => {
@@ -357,10 +334,18 @@ const App = (() => {
     addEvt('export-pdf-lr-btn', 'click', () => { exportPDF(1); closeExportModal(); });
 
     // Menu contextuel
+    addEvt('ctx-bring-front', 'click', () => ctxBringFront());
+    addEvt('ctx-send-back', 'click', () => ctxSendBack());
     addEvt('ctx-duplicate', 'click', () => ctxDuplicate());
     addEvt('ctx-img-download', 'click', () => ctxDownloadImage());
     addEvt('ctx-img-replace', 'click', () => ctxReplaceImage());
-    addEvt('ctx-img-caption', 'click', () => ctxAddCaption());}
+    addEvt('ctx-img-caption', 'click', () => ctxAddCaption());
+    addEvt('ctx-connect', 'click', () => ctxConnect());
+    addEvt('ctx-delete', 'click', () => ctxDelete());
+
+    // Lightbox vidéo
+    addEvt('vlb-close-btn', 'click', () => closeVideoLightbox());
+  }
   // ── BOARDS ───────────────────────────────────────────────────────────────
   function createBoard() {
     const input = document.getElementById('create-board-input');
@@ -429,8 +414,8 @@ const App = (() => {
 
         </div>
         <div class="board-actions">
-                   <button class="board-action-btn btn-rename"><img src="renommer.png" style="width:14px;height:14px;pointer-events:none;"></button>
-          <button class="board-action-btn delete btn-delete"><img src="supprimer.png" style="width:14px;height:14px;pointer-events:none;"></button>
+                   <button class="board-action-btn btn-rename"><img src="PNG/renommer.png" style="width:14px;height:14px;pointer-events:none;"></button>
+          <button class="board-action-btn delete btn-delete"><img src="PNG/supprimer.png" style="width:14px;height:14px;pointer-events:none;"></button>
         </div>
       </div>
       `;
@@ -453,8 +438,8 @@ const App = (() => {
 
         function lerp(a, z, t) { return a + (z - a) * t; }
         function rafLoop() {
-          curX = lerp(curX, targetX, 0.22);
-          curY = lerp(curY, targetY, 0.22);
+          curX = lerp(curX, targetX, 0.16);
+          curY = lerp(curY, targetY, 0.16);
           card.style.left = curX + 'px';
           card.style.top  = curY + 'px';
           if (Math.abs(targetX - curX) > 0.1 || Math.abs(targetY - curY) > 0.1) {
@@ -574,7 +559,7 @@ const App = (() => {
       }, { passive: false });
     }
 
-    // ── Pinch tactile : copie exacte du système board ─────────────────────
+   
     // Supprimer les anciens listeners avant de réattacher
     if (container._homePinchTS) {
       container.removeEventListener('touchstart', container._homePinchTS, { capture: true });
@@ -619,6 +604,7 @@ const App = (() => {
         homePanY = my - (my - homePanY) * (newZ / homeZoom);
         homeZoom = newZ;
         applyHomeTransform(canvas);
+        updateZoomDisplay();
       } else if (e.touches.length === 1 && hPanId !== null) {
         const t = [...e.touches].find(x => x.identifier === hPanId);
         if (t) {
@@ -675,13 +661,30 @@ const App = (() => {
       const canvasEl = document.getElementById('canvas');
       const els = canvasEl.querySelectorAll('.board-element');
       if (!els.length) { reject(); return; }
+
+      // Bounding box — même logique que fitElementsToScreen
       let minL=Infinity, minT=Infinity, maxR=-Infinity, maxB=-Infinity;
       els.forEach(el => {
-        const l=parseFloat(el.style.left)||0, t=parseFloat(el.style.top)||0;
-        minL=Math.min(minL,l); minT=Math.min(minT,t);
-        maxR=Math.max(maxR,l+el.offsetWidth); maxB=Math.max(maxB,t+el.offsetHeight);
+        const l = parseFloat(el.style.left) || 0;
+        const t = parseFloat(el.style.top)  || 0;
+        const r = l + el.offsetWidth;
+        const b = t + el.offsetHeight;
+        if (l < minL) minL = l;
+        if (t < minT) minT = t;
+        if (r > maxR) maxR = r;
+        if (b > maxB) maxB = b;
       });
-      const m=40, cropX=minL-m, cropY=minT-m, cropW=maxR-minL+m*2, cropH=maxB-minT+m*2;
+      const contentW = maxR - minL;
+      const contentH = maxB - minT;
+      if (contentW <= 0 || contentH <= 0) { reject(); return; }
+
+      // Marge proportionnelle de 7% autour du bounding box (entre les 5-10% de fitElementsToScreen)
+      const marginX = contentW * 0.07;
+      const marginY = contentH * 0.07;
+      const cropX = minL - marginX;
+      const cropY = minT - marginY;
+      const cropW = contentW + marginX * 2;
+      const cropH = contentH + marginY * 2;
 
       // Cloner le canvas dans un conteneur caché à scale(1) — le DOM visible n'est pas touché
       const ghost = canvasEl.cloneNode(true);
@@ -692,11 +695,11 @@ const App = (() => {
       ghost.style.pointerEvents = 'none';
       ghost.style.zIndex = '-1';
       document.body.appendChild(ghost);
-      // Forcer le reflow
+      // Forcer le reflow pour que offsetWidth/offsetHeight soient corrects sur le ghost
       ghost.getBoundingClientRect();
 
       html2canvas(ghost, {
-        scale: 0.3, useCORS: true, allowTaint: true,
+        scale: 1.5, useCORS: true, allowTaint: true,
         x: cropX, y: cropY, width: cropW, height: cropH, scrollX: 0, scrollY: 0
       }).then(c => {
         ghost.remove();
@@ -866,105 +869,68 @@ const App = (() => {
     const canvas  = document.getElementById('canvas');
     const selRect = document.getElementById('selection-rect');
 
-    // Alt+molette = zoom, molette seule = pan
-    wrapper.addEventListener('wheel', e => {
-      e.preventDefault();
-      if (e.altKey) {
-        // Zoom centré sur la position du curseur
-        const delta = e.deltaY > 0 ? -0.08 : 0.08;
-        const newZ  = Math.min(Math.max(zoomLevel+delta,0.15),4);
-        const rect  = wrapper.getBoundingClientRect();
-        const mx = e.clientX-rect.left, my = e.clientY-rect.top;
-        panX = mx-(mx-panX)*(newZ/zoomLevel);
-        panY = my-(my-panY)*(newZ/zoomLevel);
-        zoomLevel = newZ;
-        applyTransform(); updateZoomDisplay();
-      } else {
-        // Navigation (pan)
-        panX -= e.deltaX;
-        panY -= e.deltaY;
-        applyTransform();
+  let wheelTargetX = null;
+  let wheelTargetY = null;
+  let wheelRaf = null;
+
+  // Alt+molette = zoom, molette seule = pan
+  // Alt+molette OU Pavé tactile (pinch) = zoom, molette seule = pan
+  wrapper.addEventListener('wheel', e => {
+    e.preventDefault();
+    
+    // Détecte soit Alt + Molette, soit le Pinch du pavé tactile (qui envoie souvent ctrlKey)
+    if (e.altKey || e.ctrlKey) {
+      // Ajustement de la sensibilité pour le pavé tactile
+      const factor = e.ctrlKey ? 0.02 : 0.08; 
+      const delta = e.deltaY > 0 ? -factor : factor;
+      
+      const newZ  = Math.min(Math.max(zoomLevel + delta, 0.15), 4);
+      const rect  = wrapper.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      
+      panX = mx - (mx - panX) * (newZ / zoomLevel);
+      panY = my - (my - panY) * (newZ / zoomLevel);
+      zoomLevel = newZ;
+      
+      applyTransform();
+      updateZoomDisplay(); // Affiche le toast de zoom
+      
+      if (wheelRaf) { cancelAnimationFrame(wheelRaf); wheelRaf = null; }
+    } else {
+      // Navigation (pan) classique
+      if (!wheelRaf) {
+        wheelTargetX = panX;
+        wheelTargetY = panY;
       }
-    }, { passive:false });
-
-    // ── PINCH TO ZOOM + PAN TACTILE (Touch Events — le plus fiable) ─────────
-    if (!pinchTouchSetupDone) {
-      pinchTouchSetupDone = true;
-
-      let pinchStartDist = 0, pinchStartZoom = 1, pinchMidX = 0, pinchMidY = 0;
-      let touchPanStartX = null, touchPanStartY = null;
-      let touchPanId = null; // identifier du doigt de pan
-
-      // Listeners sur canvas-wrapper directement (pas sur document)
-      // On les réattache à chaque openBoard via window._reattachPinch()
-      function attachPinchListeners(wrapEl, canvasEl) {
-        // Supprimer les anciens si existants
-        if (wrapEl._pinchTS) wrapEl.removeEventListener('touchstart',  wrapEl._pinchTS, { capture: true });
-        if (wrapEl._pinchTM) wrapEl.removeEventListener('touchmove',   wrapEl._pinchTM, { capture: true });
-        if (wrapEl._pinchTE) wrapEl.removeEventListener('touchend',    wrapEl._pinchTE, { capture: true });
-
-        pinchStartDist = 0; touchPanId = null;
-
-        wrapEl._pinchTS = function(e) {
-          // Laisser passer les inputs/textareas
-          if (e.target && (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')) return;
-          e.preventDefault();
-          if (e.touches.length >= 2) {
-            touchPanId = null;
-            const t1 = e.touches[0], t2 = e.touches[1];
-            pinchStartDist = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
-            pinchStartZoom = zoomLevel;
-            pinchMidX = (t1.clientX+t2.clientX)/2;
-            pinchMidY = (t1.clientY+t2.clientY)/2;
-          } else if (e.touches.length === 1) {
-            pinchStartDist = 0;
-            const t = e.touches[0];
-            const hit = document.elementFromPoint(t.clientX, t.clientY);
-            if (hit === canvasEl || hit === wrapEl) {
-              touchPanId = t.identifier;
-              touchPanStartX = t.clientX - panX;
-              touchPanStartY = t.clientY - panY;
-            } else { touchPanId = null; }
+      wheelTargetX -= e.deltaX;
+      wheelTargetY -= e.deltaY;
+      
+      if (!wheelRaf) {
+        const loop = () => {
+          panX += (wheelTargetX - panX) * 0.95;
+          panY += (wheelTargetY - panY) * 0.95;
+          
+          if (Math.abs(wheelTargetX - panX) < 0.2 && Math.abs(wheelTargetY - panY) < 0.2) {
+            panX = wheelTargetX;
+            panY = wheelTargetY;
+            applyTransform();
+            wheelRaf = null;
+          } else {
+            applyTransform();
+            wheelRaf = requestAnimationFrame(loop);
           }
         };
-        wrapEl._pinchTM = function(e) {
-          if (e.target && (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')) return;
-          e.preventDefault();
-          if (e.touches.length >= 2 && pinchStartDist > 0) {
-            const t1 = e.touches[0], t2 = e.touches[1];
-            const dist = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
-            const scale = dist / pinchStartDist;
-            const newZ = Math.min(Math.max(pinchStartZoom * scale, 0.15), 4);
-            const rect = wrapEl.getBoundingClientRect();
-            const mx = pinchMidX - rect.left, my = pinchMidY - rect.top;
-            panX = mx - (mx - panX) * (newZ / zoomLevel);
-            panY = my - (my - panY) * (newZ / zoomLevel);
-            zoomLevel = newZ;
-            applyTransform(); updateZoomDisplay();
-          } else if (e.touches.length === 1 && touchPanId !== null) {
-            const t = [...e.touches].find(x => x.identifier === touchPanId);
-            if (t) { panX = t.clientX - touchPanStartX; panY = t.clientY - touchPanStartY; applyTransform(); }
-          }
-        };
-        wrapEl._pinchTE = function(e) {
-          if (e.touches.length < 2) pinchStartDist = 0;
-          if (e.touches.length === 0) touchPanId = null;
-        };
-
-        wrapEl.addEventListener('touchstart',  wrapEl._pinchTS, { passive: false, capture: true });
-        wrapEl.addEventListener('touchmove',   wrapEl._pinchTM, { passive: false, capture: true });
-        wrapEl.addEventListener('touchend',    wrapEl._pinchTE, { passive: true,  capture: true });
+        wheelRaf = requestAnimationFrame(loop);
       }
+    }
+  }, { passive: false });
 
-      // Attacher immédiatement (pour si on est déjà sur le board)
-      attachPinchListeners(wrapper, canvas);
-      // Exposer pour que openBoard puisse réattacher après display:flex
-      window._reattachPinch = () => attachPinchListeners(
-        document.getElementById('canvas-wrapper'),
-        document.getElementById('canvas')
-      );
+  // Sécurité pour stopper net l'inertie si on clique pour faire un pan manuel (espace + clic / clic molette)
+  wrapper.addEventListener('mousedown', () => {
+    if (wheelRaf) { cancelAnimationFrame(wheelRaf); wheelRaf = null; }
+  }, true);
 
-    } // end pinchTouchSetupDone guard
+  
 
     // Clic molette (button 1) sur n'importe quelle zone = pan
     wrapper.addEventListener('mousedown', e => {
@@ -1092,6 +1058,30 @@ const App = (() => {
         }
         return;
       }
+      // Drop multiple depuis le panneau bibliothèque
+      if (src === 'multi-lib' && draggedLibItems.length > 0) {
+        const rect = wrapper.getBoundingClientRect();
+        draggedLibItems.forEach((libItem, i) => {
+          const tmpImg = new Image();
+          tmpImg.onload = () => {
+            const w = tmpImg.naturalWidth || 220;
+            const h = tmpImg.naturalHeight || 170;
+            const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
+            const y = (e.clientY - rect.top  - panY) / zoomLevel - h / 2 + i * 30;
+            createImageElement(libItem.src, x, y, w, h);
+            pushHistory(); scheduleSave();
+          };
+          tmpImg.onerror = () => {
+            const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 30;
+            const y = (e.clientY - rect.top  - panY) / zoomLevel -  85 + i * 30;
+            createImageElement(libItem.src, x, y, 220, 170);
+            pushHistory(); scheduleSave();
+          };
+          tmpImg.src = libItem.src;
+        });
+        draggedLibItems = [];
+        return;
+      }
       if (src && src.startsWith('data:')) {
         const rect = wrapper.getBoundingClientRect();
         const tmpImg = new Image();
@@ -1171,6 +1161,10 @@ const App = (() => {
 
   function setupKeyboard() {
     document.addEventListener('keydown', async e => {
+      // Touches de mode (Alt, Ctrl) — traitées en premier, sans test isTyping
+      if (e.key === 'Alt') { e.preventDefault(); isAltDown = true; }
+      if (e.key === 'Control') ctrlSnap = true;
+
       if (e.code === 'Space' && !isTyping(e)) {
         e.preventDefault(); isPanningMode = true;
         document.getElementById('canvas-wrapper').style.cursor = 'grab';
@@ -1182,12 +1176,7 @@ const App = (() => {
         if (previewMode) { togglePreviewMode(); return; }
         deselectAll(); multiSelected.clear(); hideContextMenu(); closeAllModals();
       }
-
       // (Ctrl+V géré par l'événement 'paste' ci-dessous, sans demande de permission)
-    });
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Alt') { e.preventDefault(); isAltDown = true; }
-      if (e.key === 'Control') ctrlSnap = true;
     });
     document.addEventListener('keyup', e => {
       if (e.key === 'Alt') isAltDown = false;
@@ -1690,7 +1679,7 @@ const App = (() => {
     return { x:(r.width/2-panX)/zoomLevel, y:(r.height/2-panY)/zoomLevel };
   }
 
-  function makeElement(type, x, y, w, h) {
+ function makeElement(type, x, y, w, h) {
     const el = document.createElement('div');
     el.className = 'board-element';
     el.dataset.type = type;
@@ -1704,8 +1693,19 @@ const App = (() => {
     const tb = document.createElement('div');
     tb.className = 'element-toolbar';
     tb.innerHTML = `
-      <button class="el-tool-btn" onclick="App.duplicateEl(this)" title="Dupliquer"><img src="dupliquer.png"></button>
-      <button class="el-tool-btn danger" onclick="App.removeEl(this)" title="Supprimer"><img src="supprimer.png"></button>`;
+      <button class="el-tool-btn btn-duplicate" title="Dupliquer"><img src="PNG/dupliquer.png"></button>
+      <button class="el-tool-btn danger btn-delete" title="Supprimer"><img src="PNG/supprimer.png"></button>`;
+    
+    // Ajout des événements via JS pur pour respecter la CSP
+    tb.querySelector('.btn-duplicate').addEventListener('click', function(e) {
+      e.stopPropagation();
+      duplicateEl(this);
+    });
+    tb.querySelector('.btn-delete').addEventListener('click', function(e) {
+      e.stopPropagation();
+      removeEl(this);
+    });
+
     el.appendChild(tb);
 
     const rh = document.createElement('div');
@@ -1716,7 +1716,6 @@ const App = (() => {
     document.getElementById('canvas').appendChild(el);
     return el;
   }
-
   function attachElementEvents(el) {
     el.addEventListener('mousedown', e => {
       if (e.target.classList.contains('resize-handle')) return;
@@ -1752,6 +1751,8 @@ const App = (() => {
         duplicated = true;
         const copy = el.cloneNode(true);
         copy.dataset.id = 'el_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+        if (el.dataset.type === 'image' && _imgStore.has(el.dataset.id))
+          _imgStore.set(copy.dataset.id, _imgStore.get(el.dataset.id));
         copy.style.zIndex = ++nextZ;
         copy.style.left = dragEl.style.left;
         copy.style.top  = dragEl.style.top;
@@ -1784,21 +1785,25 @@ const App = (() => {
 
       function dragRAF() {
         if (!dragActive) return;
+        const prevX = curX, prevY = curY;
         curX = lerp(curX, targetX, 0.22);
         curY = lerp(curY, targetY, 0.22);
 
-        dragEl.style.left = curX + 'px';
-        dragEl.style.top  = curY + 'px';
+        const hasMoved = Math.abs(curX - prevX) > 0.05 || Math.abs(curY - prevY) > 0.05;
+        if (hasMoved) {
+          dragEl.style.left = curX + 'px';
+          dragEl.style.top  = curY + 'px';
 
-        if (ctrlSnap) { applySnap(dragEl, excludeSet); } else { clearSnapGuides(); }
-        updateConnectionsForEl(dragEl);
+          if (ctrlSnap) { applySnap(dragEl, excludeSet); } else { clearSnapGuides(); }
+          updateConnectionsForEl(dragEl);
 
-        const _elId = dragEl.dataset.id;
-        if (_elId) {
-          document.querySelectorAll(`.el-caption[data-parent-id="${_elId}"]`).forEach(cap => {
-            cap.style.left = curX + 'px';
-            cap.style.top  = (curY + dragEl.offsetHeight) + 'px';
-          });
+          const _elId = dragEl.dataset.id;
+          if (_elId) {
+            document.querySelectorAll(`.el-caption[data-parent-id="${_elId}"]`).forEach(cap => {
+              cap.style.left = curX + 'px';
+              cap.style.top  = (curY + dragEl.offsetHeight) + 'px';
+            });
+          }
         }
 
         rafId = requestAnimationFrame(dragRAF);
@@ -1961,6 +1966,8 @@ const App = (() => {
       activeGroup.forEach(el => {
         const copy = el.cloneNode(true);
         copy.dataset.id = 'el_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+        if (el.dataset.type === 'image' && _imgStore.has(el.dataset.id))
+          _imgStore.set(copy.dataset.id, _imgStore.get(el.dataset.id));
         copy.style.zIndex = ++nextZ;
         const cur = curPositions.get(el);
         copy.style.left = cur.left + 'px';
@@ -1993,16 +2000,21 @@ const App = (() => {
 
     function groupDragRAF() {
       if (!groupDragActive) return;
+      const prevDX = curDX, prevDY = curDY;
       curDX += (targetDX - curDX) * lerpFactor;
       curDY += (targetDY - curDY) * lerpFactor;
-      activeGroup.forEach(el => {
-        const s = starts.get(el);
-        if (!s) return;
-        el.style.left = (s.left + curDX) + 'px';
-        el.style.top  = (s.top  + curDY) + 'px';
-      });
-      activeGroup.forEach(el => updateConnectionsForEl(el));
-      updateMultiResizeHandle();
+
+      const hasMoved = Math.abs(curDX - prevDX) > 0.05 || Math.abs(curDY - prevDY) > 0.05;
+      if (hasMoved) {
+        activeGroup.forEach(el => {
+          const s = starts.get(el);
+          if (!s) return;
+          el.style.left = (s.left + curDX) + 'px';
+          el.style.top  = (s.top  + curDY) + 'px';
+        });
+        activeGroup.forEach(el => updateConnectionsForEl(el));
+        updateMultiResizeHandle();
+      }
       groupRafId = requestAnimationFrame(groupDragRAF);
     }
 
@@ -2174,7 +2186,7 @@ const App = (() => {
       setTimeout(() => createConnection(s.from, s.to), 50);
       return null;
     }
-    else if (s.type==='caption') {
+   else if (s.type==='caption') {
       const cap = document.createElement('div');
       cap.classList.add('el-caption');
       cap.contentEditable = 'true';
@@ -2185,6 +2197,11 @@ const App = (() => {
       cap.style.top   = s.y + 'px';
       if (s.width) cap.style.width = s.width;
       cap.textContent = s.text || '';
+      
+      // Liaison au panneau de texte
+      cap.addEventListener('focus', () => showTextEditPanel(cap));
+      cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
+      
       document.getElementById('canvas').appendChild(cap);
       return cap;
     }
@@ -2208,7 +2225,7 @@ const App = (() => {
         if (fh > maxDim) { fw = Math.round(fw * maxDim / fh); fh = Math.round(maxDim); }
       }
       const el = makeElement('image', x||100, y||100, fw, fh);
-      el.dataset.savedata = src;
+      _imgStore.set(el.dataset.id, src); // base64 hors-DOM → inspecteur léger
       // Stocker le ratio w/h pour le resize proportionnel
       el.dataset.ratio = (fw / fh).toFixed(6);
       // L'img est posée directement dans le board-element, sans div wrapper
@@ -2392,7 +2409,7 @@ const App = (() => {
     const eyeBtn = document.createElement('button');
     eyeBtn.className = 'color-eyedropper';
     eyeBtn.title = 'Pipette — cliquer sur le canvas pour prendre une couleur';
-    eyeBtn.innerHTML = '<img src="pipette.png" style="width:14px;height:14px;object-fit:contain;display:block;">';
+    eyeBtn.innerHTML = '<img src="PNG/pipette.png" style="width:14px;height:14px;object-fit:contain;display:block;">';
     eyeBtn.addEventListener('mousedown', e => e.stopPropagation());
     eyeBtn.addEventListener('pointerdown', e => e.stopPropagation());
     eyeBtn.addEventListener('click', e => {
@@ -2554,18 +2571,53 @@ const App = (() => {
     w=w||360; h=h||202;
     const el = makeElement('video', x||100, y||100, w, h);
     el.dataset.savedata = JSON.stringify({src,isEmbed});
+    
     const wrap = document.createElement('div');
     wrap.className = 'el-video';
+    wrap.style.position = 'relative';
+    wrap.style.cursor = 'pointer';
+
+    // Image de fond statique
+    const img = document.createElement('img');
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'cover';
+    img.style.display = 'block';
+    img.style.pointerEvents = 'none';
+
     if (isEmbed) {
-      const iframe = document.createElement('iframe');
-      iframe.src=src; iframe.allowFullscreen=true;
-      iframe.setAttribute('allow','accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope');
-      iframe.style.pointerEvents='none';
-      wrap.appendChild(iframe);
+      const ytMatch = src.match(/youtube\.com\/embed\/([^&\s?]+)/);
+      if (ytMatch) {
+        img.src = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+      } else {
+        img.style.background = '#111';
+      }
     } else {
-      const v = document.createElement('video'); v.src=src; v.controls=true;
-      wrap.appendChild(v);
+      img.style.background = '#111';
     }
+
+    // Indicateur Play central (styles codés en dur pour s'affranchir d'éditer le CSS)
+    const hint = document.createElement('div');
+    hint.style.position = 'absolute';
+    hint.style.top = '50%';
+    hint.style.left = '50%';
+    hint.style.transform = 'translate(-50%,-50%)';
+    hint.style.width = '44px';
+    hint.style.height = '44px';
+    hint.style.background = 'rgba(255,255,255,0.18)';
+    hint.style.borderRadius = '50%';
+    hint.style.backdropFilter = 'blur(2px)';
+    hint.style.pointerEvents = 'none';
+    hint.innerHTML = '<div style="position:absolute;top:50%;left:50%;transform:translate(-38%,-50%);width:0;height:0;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:15px solid rgba(255,255,255,0.9);"></div>';
+
+    wrap.appendChild(img);
+    wrap.appendChild(hint);
+
+    wrap.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      openVideoLightbox(src, isEmbed);
+    });
+
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
     return el;
   }
@@ -2663,71 +2715,121 @@ const App = (() => {
 
   function createVideoFileElement(name, size, videoSrc, x, y, w, h) {
     const el = makeElement('file', x||100, y||100, w||300, h||200);
-    // Sauvegarder le src (base64 ou objectURL) dans savedata pour la persistance
     el.dataset.savedata = JSON.stringify({name, size, icon:'video', isVideo:true, src: videoSrc});
     const wrap = document.createElement('div');
     wrap.className = 'el-file-video';
-    const vid = document.createElement('video');
-    vid.preload = 'metadata';
-    vid.muted = true;
+    
+    // Remplacement strict par une image (zéro balise <video> dans le DOM = zéro lag)
+    const img = document.createElement('img');
+    img.style.cssText = 'width:100%; height:100%; object-fit:contain; display:block; pointer-events:none; position:absolute; top:0; left:0;';
+    wrap.appendChild(img);
+
+    // Extraction isolée et destruction immédiate pour la miniature
     if (videoSrc) {
-      vid.src = videoSrc;
-      // Aller sur la première frame pour l'aperçu
-      vid.addEventListener('loadedmetadata', () => { vid.currentTime = 0.5; }, { once: true });
+      const d = tryParse(el.dataset.savedata);
+      if (d.thumb) {
+        img.src = d.thumb;
+      } else {
+        const tempVid = document.createElement('video');
+        tempVid.muted = true; tempVid.playsInline = true; tempVid.src = videoSrc;
+        tempVid.onloadeddata = () => { tempVid.currentTime = 1.0; };
+        tempVid.onseeked = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = tempVid.videoWidth; canvas.height = tempVid.videoHeight;
+          canvas.getContext('2d').drawImage(tempVid, 0, 0, canvas.width, canvas.height);
+          img.src = canvas.toDataURL('image/jpeg', 0.6);
+          d.thumb = img.src; // Sauvegarde dans les données pour ne plus jamais recalculer
+          el.dataset.savedata = JSON.stringify(d);
+          tempVid.removeAttribute('src'); tempVid.load(); // Nettoyage agressif de la RAM
+        };
+      }
     }
+
     const hint = document.createElement('div');
     hint.className = 'video-play-hint';
-    // Le triangle est rendu via ::after en CSS pur (centré optiquement)
-    wrap.appendChild(vid);
     wrap.appendChild(hint);
+
     wrap.addEventListener('dblclick', e => {
       e.stopPropagation();
-      // Récupérer le src depuis savedata (toujours à jour)
-      const d = (() => { try { return JSON.parse(el.dataset.savedata||'{}'); } catch(_){return {};} })();
+      const d = tryParse(el.dataset.savedata);
       const src = d.src || videoSrc;
-      if (src) { openVideoLightbox(src); return; }
-      // Pas de src : proposer de remplacer
+      if (src) { openVideoLightbox(src, false); return; }
       fileReplaceTarget = el;
       document.getElementById('file-input-file').click();
     });
+
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
     el._fileEventsAttached = true;
     return el;
   }
 
-  function createFileElement(name, size, icon, x, y) {
-    const el = makeElement('file', x||100, y||100, 260, 76);
-    el.dataset.savedata = JSON.stringify({name,size,icon});
+  function createVideoElement(src, isEmbed, x, y, w, h) {
+    w=w||360; h=h||202;
+    const el = makeElement('video', x||100, y||100, w, h);
+    el.dataset.savedata = JSON.stringify({src,isEmbed});
     const wrap = document.createElement('div');
-    wrap.className = 'el-file';
-    // Icône : utiliser fichier.png si icon==='file' / '📎' / inconnu, sinon emoji spécifique
-    const iconHtml = (icon === 'file' || icon === '📎' || !icon)
-      ? `<div class="file-icon"><img src="fichier.png" alt=""></div>`
-      : `<div class="file-icon">${icon}</div>`;
-    wrap.innerHTML = `${iconHtml}<div class="file-info"><div class="file-name">${escHtml(name)}</div><div class="file-size">${size||''}</div></div>`;
+    wrap.className = 'el-video';
+    wrap.style.position = 'relative';
+
+    // Remplacement strict par une image
+    const img = document.createElement('img');
+    img.style.cssText = 'width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; background:#111;';
+    
+    if (isEmbed) {
+      const yt = src.match(/youtube\.com\/embed\/([^&\s?]+)/);
+      if (yt) img.src = `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
+    }
+    wrap.appendChild(img);
+
+    const hint = document.createElement('div');
+    hint.className = 'video-play-hint';
+    // Style forcé ici car .el-video n'a pas les CSS natifs du .video-play-hint de .el-file-video
+    hint.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;background:rgba(255,255,255,0.18);border-radius:50%;backdrop-filter:blur(2px);pointer-events:none;';
+    hint.innerHTML = '<div style="position:absolute;top:50%;left:50%;transform:translate(-38%,-50%);width:0;height:0;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:15px solid rgba(255,255,255,0.9);"></div>';
+    wrap.appendChild(hint);
+
     wrap.addEventListener('dblclick', e => {
       e.stopPropagation();
-      fileReplaceTarget = el; // remplacer cet élément
-      document.getElementById('file-input-file').click();
+      openVideoLightbox(src, isEmbed);
     });
+
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
-    el._fileEventsAttached = true;
     return el;
   }
 
-  // ── LIGHTBOX VIDÉO ────────────────────────────────────────────────────────
-  function openVideoLightbox(src) {
+  function openVideoLightbox(src, isEmbed = false) {
     const overlay = document.getElementById('video-lightbox-overlay');
     const vid = document.getElementById('vlb-video');
-    vid.src = src;
+    let iframe = document.getElementById('vlb-iframe');
+
+    if (isEmbed) {
+      vid.style.display = 'none';
+      vid.pause();
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'vlb-iframe';
+        iframe.allowFullscreen = true;
+        iframe.setAttribute('allow', 'autoplay; fullscreen; encrypted-media');
+        iframe.style.cssText = 'width:92vw; height:82vh; max-width:1200px; max-height:800px; background:#000; border:none; box-shadow:0 8px 48px rgba(0,0,0,0.6); display:block;';
+        overlay.appendChild(iframe);
+      }
+      iframe.style.display = 'block';
+      iframe.src = src.includes('?') ? src + '&autoplay=1' : src + '?autoplay=1';
+    } else {
+      if (iframe) { iframe.style.display = 'none'; iframe.src = ''; }
+      vid.style.display = 'block';
+      vid.src = src;
+      setTimeout(() => vid.play(), 100);
+    }
     overlay.classList.add('show');
-    vid.focus();
   }
+
   function closeVideoLightbox() {
     const overlay = document.getElementById('video-lightbox-overlay');
     const vid = document.getElementById('vlb-video');
-    vid.pause();
-    vid.src = '';
+    const iframe = document.getElementById('vlb-iframe');
+    vid.pause(); vid.src = '';
+    if (iframe) iframe.src = '';
     overlay.classList.remove('show');
   }
 
@@ -2924,6 +3026,9 @@ const App = (() => {
     cap.style.left  = l + 'px';
     cap.style.top   = (t + h) + 'px';   // collée directement sous l'image
     cap.style.width = w + 'px';
+    // Ajout des listeners
+    cap.addEventListener('focus', () => showTextEditPanel(cap));
+    cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
     document.getElementById('canvas').appendChild(cap);
     cap.focus();
     pushHistory(); scheduleSave();
@@ -2938,20 +3043,22 @@ const App = (() => {
     document.getElementById('toolbar').style.display = 'none';
     const panel = document.getElementById('text-edit-panel');
     panel.classList.add('active');
-    // Afficher la taille courante de la textarea
-    const ta = el.querySelector('textarea');
-    if (ta) {
-      const sz = parseInt(ta.style.fontSize) || 14;
+    
+    // Déterminer la cible du style (le textarea dans une note, ou l'élément lui-même si c'est une caption)
+    const target = el.querySelector('textarea') || el;
+    
+    if (target) {
+      const sz = parseInt(target.style.fontSize) || 12; // 12px par défaut pour caption
       const sizeVal = document.getElementById('text-size-val');
       if (sizeVal) sizeVal.textContent = sz;
-      // Marquer le bouton de police actif
-      const fw = ta.style.fontWeight;
+      
+      const fw = target.style.fontWeight;
       document.querySelectorAll('.text-font-btn').forEach(b => b.classList.remove('active'));
       const activeId = (fw === '700' || fw === 'bold') ? 'tp-bold' : 'tp-roman';
       const activeBtn = document.getElementById(activeId);
       if (activeBtn) activeBtn.classList.add('active');
     }
-    // mousedown sur le panneau : flag pour que blur ne ferme pas le panneau
+    
     if (!panel._mousedownGuard) {
       panel._mousedownGuard = true;
       panel.addEventListener('mousedown', () => { window._textPanelKeepOpen = true; });
@@ -2963,22 +3070,48 @@ const App = (() => {
     document.getElementById('toolbar').style.display = '';
     textEditTarget = null;
   }
+  
+  function handleCaptionBlur(e, cap) {
+    const panel = document.getElementById('text-edit-panel');
+    const goingToPanel = (panel && e.relatedTarget && panel.contains(e.relatedTarget));
+    
+    // Si on clique vers le panneau de texte, on ne ferme pas
+    if (goingToPanel || window._textPanelKeepOpen) return;
+    
+    hideTextEditPanel();
+    
+    // Si le commentaire est vide après l'édition, on le supprime
+    if (!cap.textContent.trim()) {
+      cap.remove();
+      pushHistory(); 
+      scheduleSave();
+    }
+  }
   function applyTextFont(val) {
     if (!textEditTarget) return;
-    const ta = textEditTarget.querySelector('textarea, .el-caption');
+    
+    // On cible soit le textarea (pour les notes), soit l'élément lui-même (si c'est une caption)
+    const ta = textEditTarget.querySelector('textarea') || 
+               (textEditTarget.classList.contains('el-caption') ? textEditTarget : null);
+    
     if (!ta) return;
+
     const fontMap = {
       'helvetica-roman': "'HelveticaRoman','Helvetica Neue',Helvetica,Arial,sans-serif",
       'helvetica-bold':  "'HelveticaBold','Helvetica Neue',Helvetica,Arial,sans-serif"
     };
+
     if (fontMap[val]) {
       ta.style.fontFamily = fontMap[val];
-      ta.style.fontWeight = val === 'helvetica-bold' ? '700' : '400';
+      // Important : pour les captions, il faut forcer le poids de la police
+      ta.style.fontWeight = (val === 'helvetica-bold') ? '700' : '400';
     }
-    // Mettre à jour l'état actif des boutons
+
+    // Mettre à jour l'état visuel des boutons dans le panneau
     document.querySelectorAll('.text-font-btn').forEach(b => b.classList.remove('active'));
     const activeBtn = document.getElementById(val === 'helvetica-bold' ? 'tp-bold' : 'tp-roman');
     if (activeBtn) activeBtn.classList.add('active');
+    
     scheduleSave();
   }
   function applyTextSizeDelta(delta) {
@@ -3046,7 +3179,70 @@ const App = (() => {
     if (libPanelOpen) renderPanelLib();
   }
 
+  // ── Rendu dynamique des chips de dossier (+ bouton "+") ─────────────────
+  function renderFolderChips() {
+    const foldersDiv = document.getElementById('lib-folders');
+    if (!foldersDiv) return;
+    foldersDiv.innerHTML = '';
+    const folderLabels = { all:'Tout', typographie:'Typo', couleur:'Couleur', logo:'Logo', image:'Image' };
+    const allFolders = ['all', ...Object.keys(library)];
+
+    allFolders.forEach(f => {
+      const btn = document.createElement('button');
+      btn.className = 'lib-folder-chip' + (f === panelFolder ? ' active' : '');
+      btn.dataset.folder = f;
+      const label = folderLabels[f] || f;
+      const count = f === 'all'
+        ? Object.values(library).reduce((a, b) => a + b.length, 0)
+        : (library[f] || []).length;
+      btn.textContent = `${label} (${count})`;
+
+      btn.addEventListener('click', () => setPanelFolder(f, btn));
+      btn.addEventListener('dragover', e => {
+        if (isDraggingFromPanel) { e.preventDefault(); btn.classList.add('drag-over'); }
+      });
+      btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'));
+      btn.addEventListener('drop', e => {
+        btn.classList.remove('drag-over');
+        if (!isDraggingFromPanel) return;
+        e.preventDefault(); e.stopPropagation();
+        const targetFolder = btn.dataset.folder;
+        if (targetFolder === 'all') return;
+        // Si aucun item sélectionné, utiliser l'item draggé seul
+        const idsToMove = libSelectedIds.size > 0 ? new Set(libSelectedIds) : (draggedLibItemId ? new Set([draggedLibItemId]) : new Set());
+        if (idsToMove.size === 0) return;
+        idsToMove.forEach(id => {
+          for (const folder of Object.keys(library)) {
+            if (folder === targetFolder) continue;
+            const idx = library[folder].findIndex(i => i.id === id);
+            if (idx !== -1) {
+              const [moved] = library[folder].splice(idx, 1);
+              if (!library[targetFolder]) library[targetFolder] = [];
+              library[targetFolder].push(moved);
+              break;
+            }
+          }
+        });
+        libSelectedIds.clear();
+        draggedLibItemId = null;
+        saveLibrary(); renderPanelLib();
+      });
+      foldersDiv.appendChild(btn);
+    });
+
+    // Bouton "+" pour créer une nouvelle catégorie
+    const addBtn = document.createElement('button');
+    addBtn.className = 'lib-folder-chip';
+    addBtn.title = 'Nouvelle catégorie';
+    addBtn.textContent = '+';
+    addBtn.style.cssText = 'color:#ff3c00;font-weight:800;padding:5px 9px;';
+    addBtn.addEventListener('click', () => addNewLibFolder());
+    foldersDiv.appendChild(addBtn);
+  }
+
   function renderPanelLib() {
+    renderFolderChips();
+
     const grid  = document.getElementById('lib-panel-grid');
     const empty = document.getElementById('lib-panel-empty');
     grid.innerHTML = '';
@@ -3058,18 +3254,6 @@ const App = (() => {
     }
     const q = document.getElementById('lib-panel-search').value.toLowerCase();
     if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
-
-    // Compteurs chips
-    document.querySelectorAll('.lib-folder-chip').forEach(btn => {
-      const f = btn.dataset.folder;
-      if (f === 'all') {
-        const total = Object.values(library).reduce((a,b)=>a+b.length,0);
-        btn.textContent = `Tout (${total})`;
-      } else {
-        btn.textContent = {typographie:'Typo',couleur:'Couleur',logo:'Logo',image:'Image'}[f] + ` (${(library[f]||[]).length})`;
-      }
-      btn.classList.toggle('active', f === panelFolder);
-    });
 
     if (!items.length) {
       grid.style.display='none'; empty.classList.remove('hidden'); return;
@@ -3099,14 +3283,44 @@ const App = (() => {
         deletePanelLibItem(item.id, item.folder);
       });
 
-      div.appendChild(img);
-      div.appendChild(name);
-      div.appendChild(delBtn);
+      // Sélection SHIFT+clic
+      div.addEventListener('click', e => {
+        if (e.shiftKey) {
+          // Basculer la sélection de cet item
+          if (libSelectedIds.has(item.id)) {
+            libSelectedIds.delete(item.id);
+            div.classList.remove('selected-lib-item');
+          } else {
+            libSelectedIds.add(item.id);
+            div.classList.add('selected-lib-item');
+          }
+        } else {
+          // Clic simple : sélectionner uniquement cet item
+          libSelectedIds.clear();
+          document.querySelectorAll('.lib-panel-item.selected-lib-item').forEach(d => d.classList.remove('selected-lib-item'));
+          libSelectedIds.add(item.id);
+          div.classList.add('selected-lib-item');
+        }
+      });
 
       div.addEventListener('dragstart', e => {
-        e.dataTransfer.setData('text/plain', item.src);
+        draggedLibItemId = item.id;
+        // Drag multiple si plusieurs items sélectionnés et celui-ci en fait partie
+        if (libSelectedIds.has(item.id) && libSelectedIds.size > 1) {
+          draggedLibItems = [];
+          libSelectedIds.forEach(id => {
+            for (const f of Object.keys(library)) {
+              const found = library[f].find(i => i.id === id);
+              if (found) { draggedLibItems.push(found); break; }
+            }
+          });
+          e.dataTransfer.setData('text/plain', 'multi-lib');
+        } else {
+          draggedLibItems = [item];
+          e.dataTransfer.setData('text/plain', item.src);
+        }
         isDraggingFromPanel = true;
-        // Ghost = image seule sous le curseur (pas le conteneur)
+        // Ghost = image seule sous le curseur
         const ghost = new Image();
         ghost.src = item.src;
         ghost.style.cssText = 'position:fixed;top:-200px;left:-200px;max-width:80px;max-height:80px;pointer-events:none;';
@@ -3114,8 +3328,12 @@ const App = (() => {
         e.dataTransfer.setDragImage(ghost, 40, 40);
         setTimeout(() => { if (ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 0);
       });
-      div.addEventListener('dragend', () => { isDraggingFromPanel = false; });
-      // Pas de clic : uniquement drag & drop pour ajouter au board
+      div.addEventListener('dragend', () => { isDraggingFromPanel = false; draggedLibItemId = null; });
+
+      div.appendChild(indicator);
+      div.appendChild(img);
+      div.appendChild(name);
+      div.appendChild(delBtn);
       grid.appendChild(div);
     });
   }
@@ -3166,6 +3384,19 @@ const App = (() => {
     renderPanelLib();
   }
 
+  function addNewLibFolder() {
+    const name = prompt('Nom de la nouvelle catégorie :');
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    if (Object.keys(library).some(k => k.toLowerCase() === trimmed.toLowerCase())) {
+      toast('Cette catégorie existe déjà.'); return;
+    }
+    library[trimmed] = [];
+    panelFolder = trimmed;
+    saveLibrary();
+    renderPanelLib();
+  }
+
   function setupPanelDrop() {
     const panel   = document.getElementById('lib-panel-content');
     const overlay = document.getElementById('lib-panel-drop-overlay');
@@ -3203,13 +3434,77 @@ const App = (() => {
 
   // ── EXPORT ────────────────────────────────────────────────────────────────
   // Calcule le bounding box des éléments + 10% de marge, capture le canvas
-  // en coordonnées brutes (sans transform zoom/pan), retourne un canvas découpé.
+ // ── FONCTIONS D'OPTIMISATION DE TAILLE DE FICHIER ──
+
+  // Redimensionne proprement un canvas
+  function scaleCanvas(originalCanvas, scale) {
+    const scaledCanvas = document.createElement('canvas');
+    scaledCanvas.width = Math.round(originalCanvas.width * scale);
+    scaledCanvas.height = Math.round(originalCanvas.height * scale);
+    const ctx = scaledCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(originalCanvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
+    return scaledCanvas;
+  }
+
+  // Boucle pour atteindre le poids en Mo ciblé (minMB / maxMB)
+  async function optimizeFileSize(sourceCanvas, format, minMB, maxMB) {
+    const minBytes = minMB * 1024 * 1024;
+    const maxBytes = maxMB * 1024 * 1024;
+    
+    let currentCanvas = sourceCanvas;
+    let quality = format === 'image/jpeg' ? 0.9 : 1.0; 
+    let scale = 1.0;
+    
+    let dataUrl = currentCanvas.toDataURL(format, quality);
+    let sizeBytes = Math.round((dataUrl.length * 3) / 4);
+
+    let attempts = 0;
+    const maxAttempts = 6; // On limite à 6 essais pour ne pas bloquer l'interface
+
+    while (attempts < maxAttempts) {
+      if (sizeBytes >= minBytes && sizeBytes <= maxBytes) {
+        break; // Le fichier est dans la bonne fourchette
+      }
+
+      if (sizeBytes > maxBytes) {
+        // Trop lourd : on baisse la qualité (JPEG) ou on réduit la résolution
+        if (format === 'image/jpeg' && quality > 0.4) {
+          quality -= 0.15;
+        } else {
+          scale *= 0.75; 
+          currentCanvas = scaleCanvas(sourceCanvas, scale);
+        }
+      } else if (sizeBytes < minBytes) {
+        // Trop léger : on augmente la résolution.
+        // SÉCURITÉ : On bloque si la largeur dépasse 8000px pour ne pas faire crasher l'onglet
+        if (currentCanvas.width * 1.3 > 8000) break; 
+        
+        if (format === 'image/jpeg' && quality < 1.0) {
+          quality += 0.05;
+        } else {
+          scale *= 1.3;
+          currentCanvas = scaleCanvas(sourceCanvas, scale);
+        }
+      }
+
+      dataUrl = currentCanvas.toDataURL(format, quality);
+      sizeBytes = Math.round((dataUrl.length * 3) / 4);
+      attempts++;
+    }
+
+    return dataUrl;
+  }
+
+  // ── FONCTIONS D'EXPORT MISES À JOUR ──
+
   function captureBoard(exportScale = 2) {
     return new Promise((resolve, reject) => {
-      const els = document.querySelectorAll('#canvas .board-element');
+      const canvasEl = document.getElementById('canvas');
+      const els = canvasEl.querySelectorAll('.board-element');
       if (!els.length) { reject('Aucun élément sur le board'); return; }
 
-      // Bounding box en coordonnées CSS brutes (indépendant du zoom)
       let minL=Infinity, minT=Infinity, maxR=-Infinity, maxB=-Infinity;
       els.forEach(el => {
         const l = parseFloat(el.style.left)||0;
@@ -3219,115 +3514,82 @@ const App = (() => {
         if (l < minL) minL = l; if (t < minT) minT = t;
         if (r > maxR) maxR = r; if (b > maxB) maxB = b;
       });
+
       const contentW = maxR - minL;
       const contentH = maxB - minT;
       const margin = Math.round(Math.max(contentW, contentH) * 0.05);
-      const cropX = Math.max(0, minL - margin);
-      const cropY = Math.max(0, minT - margin);
+      const cropX = minL - margin;
+      const cropY = minT - margin;
       const cropW = contentW + margin * 2;
       const cropH = contentH + margin * 2;
 
-      // Créer un conteneur de capture en top-left (viewport = 0,0) avec opacity quasi-nulle
-      // — html2canvas capture correctement les éléments dans le viewport, pas hors-écran
       const wrapperBg = getComputedStyle(document.getElementById('canvas-wrapper')).backgroundColor || '#f4f4f6';
-      const tempContainer = document.createElement('div');
-      tempContainer.style.cssText = [
-        'position:fixed', 'top:0', 'left:0',
-        'opacity:0.001',          // pratiquement invisible mais dans le viewport pour html2canvas
-        `width:${cropW}px`, `height:${cropH}px`,
-        `background:${wrapperBg}`,
-        'overflow:hidden',
-        'pointer-events:none',
-        'z-index:99999'           // visible pour html2canvas, hors viewport (au-dessus)
-      ].join(';');
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.top = '0px';
+      container.style.left = '-99999px';
+      container.style.width = cropW + 'px';
+      container.style.height = cropH + 'px';
+      container.style.backgroundColor = wrapperBg;
+      container.style.overflow = 'hidden';
 
-      // Cloner chaque board-element et le repositionner dans le conteneur temp
-      els.forEach(el => {
-        const clone = el.cloneNode(true);
-        const l = parseFloat(el.style.left)||0;
-        const t = parseFloat(el.style.top) ||0;
-        clone.style.position = 'absolute';
-        clone.style.left = (l - cropX) + 'px';
-        clone.style.top  = (t - cropY) + 'px';
-        clone.style.transform = '';
-        clone.classList.remove('selected','multi-selected');
-        // Retirer UI non nécessaire à l'export
-        clone.querySelectorAll('.element-toolbar,.resize-handle,.color-eyedropper,.video-play-hint').forEach(n => n.remove());
-        // Pour les cartes vidéo-fichier : remplacer le <video> (zone noire en export)
-        // par une <img> capturant la frame courante de la vraie vidéo source
-        if (el.dataset.type === 'file' && el.querySelector('.el-file-video')) {
-          const realVid = el.querySelector('video');
-          const cloneVid = clone.querySelector('video');
-          if (realVid && cloneVid && (realVid.readyState >= 2)) {
-            try {
-              const fc = document.createElement('canvas');
-              fc.width  = realVid.videoWidth  || realVid.offsetWidth  || 300;
-              fc.height = realVid.videoHeight || realVid.offsetHeight || 200;
-              fc.getContext('2d').drawImage(realVid, 0, 0, fc.width, fc.height);
-              const img = document.createElement('img');
-              img.src = fc.toDataURL('image/png');
-              img.style.cssText = cloneVid.style.cssText;
-              img.style.width  = '100%';
-              img.style.height = '100%';
-              img.style.objectFit = 'contain';
-              img.style.display = 'block';
-              cloneVid.replaceWith(img);
-            } catch(_) { /* canvas tainted — laisser la vidéo */ }
-          } else if (cloneVid) {
-            // Vidéo pas encore chargée → fond noir avec texte
-            cloneVid.style.background = '#111';
-          }
-        }
-        // Forcer visibilité complète (retirer tout display:none résiduel)
-        clone.style.display = '';
-        tempContainer.appendChild(clone);
+      const ghostCanvas = canvasEl.cloneNode(true);
+      ghostCanvas.style.position = 'absolute';
+      ghostCanvas.style.top = '0px';
+      ghostCanvas.style.left = '0px';
+      ghostCanvas.style.transformOrigin = '0 0';
+      ghostCanvas.style.transform = `translate(${-cropX}px, ${-cropY}px) scale(1)`;
+      
+      ghostCanvas.style.width = (cropX + cropW + margin) + 'px';
+      ghostCanvas.style.height = (cropY + cropH + margin) + 'px';
+
+      ghostCanvas.querySelectorAll('.selected, .multi-selected').forEach(el => {
+        el.classList.remove('selected', 'multi-selected');
       });
+      ghostCanvas.querySelectorAll('.element-toolbar, .resize-handle, .color-eyedropper, .video-play-hint').forEach(el => el.remove());
 
-      // Cloner les connexions SVG
-      document.querySelectorAll('#canvas .el-connection').forEach(svg => {
-        const svgClone = svg.cloneNode(true);
-        const svgL = parseFloat(svg.style.left)||0;
-        const svgT = parseFloat(svg.style.top) ||0;
-        svgClone.style.position = 'absolute';
-        svgClone.style.left = (svgL - cropX) + 'px';
-        svgClone.style.top  = (svgT - cropY) + 'px';
-        tempContainer.appendChild(svgClone);
-      });
+      ghostCanvas.querySelectorAll('video').forEach(vid => { vid.style.backgroundColor = '#111'; });
 
-      document.body.appendChild(tempContainer);
-      // Laisser 2 frames de rendu au navigateur
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          html2canvas(tempContainer, {
-            scale: exportScale, useCORS: true, allowTaint: true,
-            width: cropW, height: cropH,
-            x: 0, y: 0,
-            scrollX: 0, scrollY: 0,
-            logging: false,
-            imageTimeout: 15000,
-            backgroundColor: wrapperBg
-          }).then(cropped => {
-            document.body.removeChild(tempContainer);
-            resolve({ canvas: cropped, w: cropW * exportScale, h: cropH * exportScale });
-          }).catch(err => {
-            if (tempContainer.parentNode) document.body.removeChild(tempContainer);
-            reject(err);
-          });
+      container.appendChild(ghostCanvas);
+      document.body.appendChild(container);
+
+      setTimeout(() => {
+        html2canvas(container, {
+          scale: exportScale,
+          useCORS: true,
+          allowTaint: true,
+          x: 0,
+          y: 0,
+          width: cropW,
+          height: cropH,
+          scrollX: 0,
+          scrollY: 0,
+          backgroundColor: wrapperBg,
+          logging: false
+        }).then(canvas => {
+          container.remove();
+          resolve({ canvas, w: cropW, h: cropH });
+        }).catch(err => {
+          container.remove();
+          reject(err);
         });
-      });
+      }, 150);
     });
   }
 
   function exportPNG() {
-    if (typeof html2canvas === 'undefined') {
-      toast('html2canvas non chargé'); return;
-    }
-    toast('Export PNG en cours...');
-    captureBoard().then(({ canvas }) => {
+    if (typeof html2canvas === 'undefined') { toast('html2canvas non chargé'); return; }
+    toast('Export PNG');
+    
+    // Capture brute en haute définition
+    captureBoard(3).then(async ({ canvas }) => {
+      // Optimisation: cible de 20 Mo à 40 Mo
+      const optimizedDataUrl = await optimizeFileSize(canvas, 'image/png', 20, 40);
+      
       const a = document.createElement('a');
       const b = boards.find(b => b.id === currentBoardId);
       a.download = (b ? b.name : 'moodboard') + '.png';
-      a.href = canvas.toDataURL('image/png');
+      a.href = optimizedDataUrl;
       a.click();
       toast('PNG exporté !');
     }).catch(msg => toast(msg || 'Erreur export PNG'));
@@ -3337,16 +3599,32 @@ const App = (() => {
     if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
       toast('Librairies PDF non chargées'); return;
     }
-    const label = quality <= 1 ? 'basse résolution' : 'haute résolution';
-    toast(`Export PDF ${label} en cours...`);
-    captureBoard(quality).then(({ canvas, w, h }) => {
+    
+    const isHR = quality > 1;
+    const label = isHR ? '— Haute résolution' : '— Basse résolution';
+    toast(`Export PDF ${label}`);
+    
+    // Pour éviter les artefacts gris en basse résolution, on capture toujours minimum à scale 2
+    const baseScale = isHR ? 3 : 2;
+
+    captureBoard(baseScale).then(async ({ canvas, w, h }) => {
+      // Cibles en Mégaoctets
+      const minMB = isHR ? 20 : 5;
+      const maxMB = isHR ? 40 : 20;
+      
+      // Optimisation
+      const optimizedDataUrl = await optimizeFileSize(canvas, 'image/jpeg', minMB, maxMB);
+
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF({
         orientation: w > h ? 'landscape' : 'portrait',
         unit: 'px',
         format: [w, h]
       });
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, h);
+      
+      // Les dimensions physiques (w, h) du PDF restent fixes, seule la résolution de l'image change
+      pdf.addImage(optimizedDataUrl, 'JPEG', 0, 0, w, h);
+      
       const board = boards.find(b => b.id === currentBoardId);
       pdf.save((board ? board.name : 'moodboard') + '.pdf');
       toast('PDF exporté !');
@@ -3382,6 +3660,14 @@ const App = (() => {
     document.getElementById('toolbar').classList.toggle('collapsed');
   }
 
+async function syncLibraryFromStorage() {
+    await loadBoardsFromStorage();
+    if (currentBoardId) {
+      loadLibraryForBoard(currentBoardId);
+      if (libPanelOpen) renderPanelLib();
+    }
+  }
+
   // ── API PUBLIQUE ──────────────────────────────────────────────────────────
   return {
     init, goHome, openBoard, addBoard, deleteBoard, renameBoardPrompt, confirmRename, closeRenameModal,
@@ -3391,7 +3677,7 @@ const App = (() => {
     openLinkModal, closeLinkModal, addLinkElement,
     openVideoModal, closeVideoModal, switchVideoTab, addVideoURL, handleVideoUpload,
     toggleLibPanel, renderPanelLib, setPanelFolder, searchPanelLib,
-    uploadImages, handleImageUpload, deletePanelLibItem,
+    uploadImages, handleImageUpload, deletePanelLibItem, addNewLibFolder,
     handleFileUpload,
     deleteSelected, clearBoard, undo,
     duplicateEl, removeEl,
@@ -3403,9 +3689,10 @@ const App = (() => {
     applyTextFont, applyTextSize: applyTextSizeDelta, applyTextSizeDelta, applyTextAlign,
     createBoard, closeCreateBoardModal, confirmCreateBoard,
     toolDragStart,
-    toast
-  };
-})();
+    toast,
+    syncLibraryFromStorage
+  }
+}());
 
 // ── EXTENSION MOODBOARD : rafraîchissement galerie ────────────────────────────
 // Déclenché par background.js après injection d'une image dans le localStorage.
@@ -3417,15 +3704,13 @@ window.addEventListener('mb-image-injected', () => {
 
 window.addEventListener('DOMContentLoaded', App.init);
 
-// ── EXTENSION MOODBOARD : écoute chrome.storage ──────────────────────────────
-// background.js écrit directement dans chrome.storage.local lors d'une injection.
-// Ce listener détecte le changement et resynchronise l'état mémoire + le panneau.
-// Guard : inopérant hors contexte extension (Live Server, ouverture directe…).
-if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.mb_boards) {
+// ── EXTENSION MOODBOARD : Écoute des messages du background ──────────────────
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'MB_IMAGE_INJECTED') {
       if (typeof App !== 'undefined' && typeof App.syncLibraryFromStorage === 'function') {
         App.syncLibraryFromStorage();
+        App.toast("Image ajoutée au Moodboard !");
       }
     }
   });

@@ -1,6 +1,3 @@
-index avant l'extension sans script
-
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -61,9 +58,7 @@ body {
   top: 0; left: 0;
   width: 100%; height: 100%;
 }
-/* Animation d'entrée des cartes */
 .board-card { animation: zoomIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
-
 .board-card {
   background: #ff3c00; color: #fff;
   width: 180px; border: none; padding: 0;
@@ -96,11 +91,11 @@ body {
 .board-card .board-actions {
   position: absolute; bottom: -48px; top: auto; left: 50%; transform: translateX(-50%);
   display: none; gap: 4px; background: #fff; padding: 3px 5px;
-  border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.12); white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.12); white-space: nowrap;
 }
 .board-card.selected .board-actions { display: flex; }
 .board-action-btn {
-  width: 26px; height: 26px; border-radius: 6px; border: none;
+  width: 26px; height: 26px;   border: none;
   background: #fff; cursor: pointer; font-size: 12px;
   display: flex; align-items: center; justify-content: center;
   transition: background 0.15s; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
@@ -108,7 +103,6 @@ body {
 .board-action-btn:hover { background: #f5f5f5; }
 .board-action-btn.delete:hover { background: #fee2e2; color: #ef4444; }
 
-/* Bouton nouveau moodboard — carré orange fixe */
 #new-board-btn {
   position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%);
   width: 56px; height: 56px; background: #ff3c00; color: #fff;
@@ -123,7 +117,6 @@ body {
 /* ===== INTERFACE BOARD ===== */
 #board-screen { position: fixed; inset: 0; display: none; flex-direction: column; }
 
-/* ── HEADER BOARD (barre horizontale pleine largeur) ── */
 #board-header {
   width: 100%; height: 48px; background: #fff;
   border-bottom: 1px solid #eaeaf0;
@@ -135,7 +128,7 @@ body {
 }
 .back-btn {
   background: none; border: none; cursor: pointer; color: #999;
-  font-size: 18px; padding: 6px 8px; border-radius: 6px; transition: all 0.15s;
+  font-size: 18px; padding: 6px 8px; transition: all 0.15s;
   display: flex; align-items: center; line-height: 1;
 }
 .back-btn:hover { background: #f0f0f6; color: #2d2d2d; }
@@ -150,24 +143,15 @@ body {
   position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
   display: flex; gap: 4px; z-index: 300;
 }
-.fit-screen-btn {
+.fit-screen-btn, .preview-btn {
   width: 36px; height: 36px; background: #ff3c00; color: #fff;
   border: none; border-radius: 0; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   font-size: 15px; transition: background 0.15s;
   box-shadow: 0 2px 10px rgba(255,60,0,0.25);
 }
-.fit-screen-btn:hover { background: #e03500; }
-.preview-btn {
-  width: 36px; height: 36px; background: #ff3c00; color: #fff;
-  border: none; border-radius: 0; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 15px; transition: background 0.15s;
-  box-shadow: 0 2px 10px rgba(255,60,0,0.25);
-}
-.preview-btn:hover { background: #e03500; }
+.fit-screen-btn:hover, .preview-btn:hover { background: #e03500; }
 
-/* ── MODE APERÇU PLEIN ÉCRAN ── */
 body.preview-mode #header,
 body.preview-mode #toolbar,
 body.preview-mode #lib-panel,
@@ -181,12 +165,10 @@ body.preview-mode .resize-handle,
 body.preview-mode .color-eyedropper { display: none !important; }
 body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !important; z-index: 9999 !important; }
 
-/* ── CORPS DU BOARD (toolbar + canvas + panneau) ── */
 .board-body {
   flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0;
 }
 
-/* ── TOOLBAR GAUCHE ── */
 .toolbar {
   width: 80px; min-width: 80px; background: #fff;
   border-right: 1px solid #eaeaf0;
@@ -195,18 +177,13 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   padding: 16px 0; gap: 4px;
   flex-shrink: 0;
 }
-
-/* Outils : icône + label */
 .tool-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 5px; width: 64px; padding: 10px 4px; border-radius: 6px;
+  gap: 5px; width: 64px; padding: 10px 4px;
   border: none; background: none; cursor: pointer;
   transition: background 0.15s, transform 0.15s;
 }
-.tool-btn:hover {
-  background: rgba(255,60,0,0.07);
-  transform: translateY(-2px) scale(1.06);
-}
+.tool-btn:hover { background: rgba(255,60,0,0.07); transform: translateY(-2px) scale(1.06); }
 .tool-btn:hover img { filter: brightness(0) saturate(100%) invert(20%) sepia(90%) saturate(2500%) hue-rotate(5deg) brightness(115%); }
 .tool-btn:hover .tool-label { color: #ff3c00; }
 .tool-btn:active { transform: scale(0.94); }
@@ -217,198 +194,126 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   white-space: nowrap; line-height: 1; transition: color 0.15s;
 }
 .tool-btn.active .tool-label { color: #ff3c00; }
-.tool-icon { font-size: 17px; width: 28px; text-align: center; flex-shrink: 0; }
 .toolbar-divider { width: 44px; height: 1px; background: #f0f0f6; margin: 4px 0; flex-shrink: 0; }
 
-/* ── CANVAS (fond uni, pas de grille) ── */
 .canvas-wrapper {
   flex: 1; position: relative; overflow: hidden;
   background: #f8f8fb;
-  touch-action: none !important; /* Désactive scroll/zoom natif du navigateur, laisse JS gérer le pinch */
-  /* Curseur flèche orange custom */
+  touch-action: none !important;
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='22' viewBox='0 0 18 22'%3E%3Cpath d='M2 2 L2 17 L6 13 L9 20 L11 19 L8 12 L14 12 Z' fill='%23ff3c00'/%3E%3C/svg%3E") 2 2, default;
 }
-/* touch-action:none sur tout le contenu pour que le pinch fonctionne même doigt sur un élément */
-#canvas, .board-element, .board-element * {
-  touch-action: none !important;
-}
+#canvas, .board-element, .board-element * { touch-action: none !important; }
 #canvas {
   position: absolute; width: 8000px; height: 8000px;
   top: 0; left: 0; transform-origin: 0 0;
 }
 
-/* ── ZOOM TOAST (vignette orange temporaire) ── */
-#zoom-toast {
+#zoom-toast, #preview-toast {
   position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
-  background: #ff3c00; color: #fff; padding: 10px 22px; border-radius: 6px;
+  background: #ff3c00; color: #fff; padding: 10px 22px;  
   font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 14px; font-weight: 700; opacity: 0; transition: opacity 0.25s;
   z-index: 9000; pointer-events: none; white-space: nowrap;
   box-shadow: 0 4px 20px rgba(255,60,0,0.3);
 }
-#zoom-toast.show { opacity: 1; }
-/* ── PREVIEW TOAST (séparé de zoom-toast, non masqué en preview-mode) ── */
-#preview-toast {
-  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-  background: #ff3c00; color: #fff; padding: 10px 22px; border-radius: 6px;
-  font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 14px; font-weight: 700; opacity: 0; transition: opacity 0.25s;
-  z-index: 99999; pointer-events: none; white-space: nowrap;
-  box-shadow: 0 4px 20px rgba(255,60,0,0.3);
-}
-#preview-toast.show { opacity: 1; }
+#zoom-toast.show, #preview-toast.show { opacity: 1; }
+#preview-toast { z-index: 99999; position: fixed; }
 
-/* ===== PANNEAU ÉDITION TEXTE (swap avec toolbar) ===== */
 #text-edit-panel {
   width: 80px; min-width: 80px; background: #fff;
   border-right: 1px solid #eaeaf0;
   display: none; flex-direction: column; align-items: center;
   z-index: 101; box-shadow: 2px 0 8px rgba(0,0,0,0.04);
-  padding: 12px 0; gap: 6px;
-  flex-shrink: 0;
+  padding: 12px 0; gap: 6px; flex-shrink: 0;
 }
 #text-edit-panel.active { display: flex; }
-.text-font-btn {
-  width: 68px; padding: 5px 4px; border: 1px solid #eaeaf0; border-radius: 6px;
-  font-size: 11px; cursor: pointer; background: none; text-align: center;
-  font-family: 'HelveticaRoman','Helvetica Neue',Helvetica,Arial,sans-serif;
+.text-font-btn, .text-size-btn, .text-align-btn {
+  border: 1px solid #eaeaf0;   background: none; cursor: pointer;
 }
-.text-font-btn:hover { background: #f5f5fb; }
-.text-font-btn.active { background: rgba(255,60,0,0.08); border-color: #ff3c00; color: #ff3c00; }
-.text-size-row {
-  display: flex; align-items: center; gap: 4px; width: 68px; justify-content: center;
-}
-.text-size-btn {
-  width: 24px; height: 24px; border: 1px solid #eaeaf0; border-radius: 6px;
-  background: none; cursor: pointer; font-size: 15px; line-height: 1;
-  display: flex; align-items: center; justify-content: center;
-}
-.text-size-btn:hover { background: #f5f5fb; }
-.text-size-val {
-  font-size: 12px; font-weight: 700; min-width: 20px; text-align: center; color: #444;
-}
+.text-font-btn { width: 68px; padding: 5px 4px; font-size: 11px; text-align: center; font-family: 'HelveticaRoman','Helvetica Neue',Helvetica,Arial,sans-serif; }
+.text-size-btn { width: 24px; height: 24px; font-size: 15px; display: flex; align-items: center; justify-content: center; }
+.text-align-btn { width: 30px; height: 28px; font-size: 13px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.text-font-btn:hover, .text-size-btn:hover, .text-align-btn:hover { background: #f5f5fb; }
+.text-font-btn.active, .text-align-btn.active { background: rgba(255,60,0,0.08); border-color: #ff3c00; color: #ff3c00; }
+.text-size-row { display: flex; align-items: center; gap: 4px; width: 68px; justify-content: center; }
+.text-size-val { font-size: 12px; font-weight: 700; min-width: 20px; text-align: center; color: #444; }
 .text-align-btns { display: flex; flex-wrap: wrap; gap: 3px; width: 68px; justify-content: center; }
-.text-align-btn {
-  width: 30px; height: 28px; border: 1px solid #eaeaf0; border-radius: 6px;
-  background: none; cursor: pointer; font-size: 13px; transition: all 0.15s;
-  display: flex; align-items: center; justify-content: center;
-}
-.text-align-btn:hover { background: #f5f5fb; }
-.text-align-btn.active { background: rgba(255,60,0,0.08); border-color: #ff3c00; color: #ff3c00; }
-.text-panel-label {
-  font-size: 9px; color: #bbb; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.5px; text-align: center;
-}
+.text-panel-label { font-size: 9px; color: #bbb; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
 
-/* ===== PANNEAU BIBLIOTHÈQUE DROITE ===== */
 #lib-panel {
-  position: relative;
-  width: 48px; /* fermé */
-  min-width: 48px;
-  background: #fff;
-  border-left: 1px solid #eaeaf0;
-  box-shadow: -2px 0 14px rgba(0,0,0,0.06);
-  display: flex; flex-direction: column;
-  z-index: 100;
-  transition: width 0.32s cubic-bezier(0.4,0,0.2,1);
-  overflow: hidden;
+  position: relative; width: 48px; min-width: 48px; background: #fff;
+  border-left: 1px solid #eaeaf0; box-shadow: -2px 0 14px rgba(0,0,0,0.06);
+  display: flex; flex-direction: column; z-index: 100;
+  transition: width 0.32s cubic-bezier(0.4,0,0.2,1); overflow: visible;
 }
 #lib-panel.open { width: 300px; min-width: 300px; }
-
-/* Bouton flèche toggle */
-#lib-toggle-btn {
-  position: absolute; top: 16px; left: 0; width: 48px; height: 48px;
-  background: none; border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  z-index: 10; flex-shrink: 0;
-  transition: background 0.15s; border-radius: 6px;
+/* Wrapper interne : remplace overflow:hidden du panneau pour permettre à l'onglet de déborder */
+#lib-panel-inner {
+  position: absolute; inset: 0; overflow: hidden;
 }
-#lib-toggle-btn:hover { background: #f0f0f6; }
+/* Onglet/tab qui dépasse à gauche du panneau */
+#lib-toggle-btn {
+  position: absolute;
+  left: -38px; width: 38px; height: 80px;
+  background: #fff; border: 1px solid #eaeaf0; border-right: none;
+
+  box-shadow: -4px 2px 12px rgba(0,0,0,0.08);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  z-index: 101; transition: background 0.15s;
+}
+#lib-toggle-btn:hover { background: #f5f5fb; }
 #lib-toggle-btn svg {
-  width: 20px; height: 20px; stroke: #888; fill: none;
+  width: 18px; height: 18px; stroke: #888; fill: none;
   stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
-  transition: transform 0.32s cubic-bezier(0.4,0,0.2,1);
-  flex-shrink: 0;
+  transition: transform 0.32s cubic-bezier(0.4,0,0.2,1); flex-shrink: 0;
 }
 #lib-panel.open #lib-toggle-btn svg { transform: rotate(180deg); }
-
-/* Contenu du panneau (visible seulement quand ouvert) */
 #lib-panel-content {
-  width: 300px; min-width: 300px;
-  display: flex; flex-direction: column;
-  height: 100%; padding-top: 64px; /* espace pour le bouton toggle */
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.2s;
+  width: 300px; min-width: 300px; display: flex; flex-direction: column;
+  height: 100%; padding-top: 14px; opacity: 0; pointer-events: none; transition: opacity 0.2s;
 }
-#lib-panel.open #lib-panel-content {
-  opacity: 1; pointer-events: all;
-  transition: opacity 0.25s 0.1s;
-}
-
-/* Header panneau */
-.lib-panel-header {
-  padding: 0 14px 12px; flex-shrink: 0;
-}
+#lib-panel.open #lib-panel-content { opacity: 1; pointer-events: all; transition: opacity 0.25s 0.1s; }
+.lib-panel-header { padding: 0 14px 12px; flex-shrink: 0; }
 .lib-add-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  width: 100%; padding: 11px 16px;
-  background: #ff3c00; color: #fff; border: none; border-radius: 6px;
-  cursor: pointer; font-size: 13px; font-weight: 700;
-  transition: background 0.15s; white-space: nowrap;
+  width: 100%; padding: 11px 16px; background: #ff3c00; color: #fff; border: none;  
+  cursor: pointer; font-size: 13px; font-weight: 700; transition: background 0.15s; white-space: nowrap;
 }
 .lib-add-btn:hover { background: #e03500; }
-
-/* Dossiers */
 .lib-folders {
-  padding: 10px 14px 6px; flex-shrink: 0;
-  border-top: 1px solid #f0f0f6; border-bottom: 1px solid #f0f0f6;
+  padding: 10px 14px 6px; flex-shrink: 0; border-top: 1px solid #f0f0f6; border-bottom: 1px solid #f0f0f6;
   display: flex; flex-wrap: wrap; gap: 5px;
 }
 .lib-folder-chip {
-  padding: 5px 10px; border-radius: 6px; border: 1px solid #eaeaf0;
+  padding: 5px 10px;   border: 1px solid #eaeaf0;
   background: none; cursor: pointer; font-size: 11px; color: #666; font-weight: 600;
   transition: all 0.15s; white-space: nowrap;
 }
 .lib-folder-chip:hover { background: #f5f5fb; border-color: #d0d0e0; }
 .lib-folder-chip.active { background: rgba(255,60,0,0.08); border-color: #ff3c00; color: #ff3c00; }
-
-/* Recherche */
 .lib-search-wrap { padding: 10px 14px; flex-shrink: 0; }
 .lib-search-input {
-  width: 100%; padding: 8px 12px 8px 34px; border: 1px solid #eaeaf0; border-radius: 6px;
+  width: 100%; padding: 8px 12px 8px 34px; border: 1px solid #eaeaf0;  
   font-size: 13px; outline: none; background: #fafafa; transition: border-color 0.15s;
-  background-image: url('loupe.png'); background-size: 16px; background-repeat: no-repeat;
-  background-position: 10px center;
-  font-family: inherit;
+  background-image: url('PNG/loupe.png'); background-size: 16px; background-repeat: no-repeat;
+  background-position: 10px center; font-family: inherit;
 }
 .lib-search-input:focus { border-color: #ff3c00; background: #fff; }
-
-/* Grille d'images */
 .lib-panel-grid {
   flex: 1; overflow-y: auto; padding: 8px 14px 14px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-auto-rows: 120px;
-  gap: 8px;
-  align-items: start;
+  display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 120px; gap: 8px; align-items: start;
 }
 .lib-panel-item {
   border-radius: 0; overflow: hidden; border: 2px solid transparent;
   cursor: grab; transition: border-color 0.18s, box-shadow 0.18s; position: relative;
-  background: #f0f0f5;
-  width: 100%; height: 120px;
-  display: flex; align-items: center; justify-content: center;
+  background: #f0f0f5; width: 100%; height: 120px; display: flex; align-items: center; justify-content: center;
 }
 .lib-panel-item:hover { border-color: #ff3c00; box-shadow: 0 4px 16px rgba(255,60,0,0.18); }
 .lib-panel-item:active { cursor: grabbing; }
-.lib-panel-item img {
-  max-width: 100%; max-height: 100%;
-  width: auto; height: auto;
-  object-fit: contain; display: block;
-}
+.lib-panel-item img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
 .lib-panel-item .lib-item-delete {
   position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.55);
-  border: none; color: #fff; font-size: 11px; border-radius: 4px;
+  border: none; color: #fff; font-size: 11px;
   cursor: pointer; padding: 2px 6px; display: none; transition: background 0.1s;
 }
 .lib-panel-item:hover .lib-item-delete { display: block; }
@@ -422,17 +327,13 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 }
 .lib-panel-item:hover .lib-item-name { opacity: 1; }
 .lib-select-indicator {
-  position: absolute; top: 4px; left: 4px;
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid #fff; background: transparent;
-  display: none; pointer-events: none; z-index: 2;
+  position: absolute; top: 4px; left: 4px; width: 14px; height: 14px;
+  border: 2px solid #fff; background: transparent; display: none; pointer-events: none; z-index: 2;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
 }
 .lib-panel-item.selected-lib-item .lib-select-indicator { display: block; background: #ff3c00; }
 .lib-panel-item.selected-lib-item { border-color: #ff3c00; box-shadow: 0 4px 16px rgba(255,60,0,0.28); }
 .lib-folder-chip.drag-over { background: #ff3c00; color: #fff; }
-
-/* Drop overlay panneau */
 .lib-panel-drop-overlay {
   position: absolute; inset: 0; background: rgba(255,60,0,0.08);
   border: 3px dashed #ff3c00; border-radius: 0; margin: 8px;
@@ -441,8 +342,6 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
   z-index: 10; pointer-events: none;
 }
 .lib-panel-drop-overlay.show { display: flex; }
-
-/* État vide */
 .lib-panel-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center;
   justify-content: center; color: #ccc; padding: 20px; text-align: center;
@@ -451,329 +350,127 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 .lib-panel-empty p { font-size: 13px; font-weight: 500; }
 .lib-panel-empty small { font-size: 11px; color: #ddd; margin-top: 5px; display: block; }
 
-/* ===== ÉLÉMENTS DU BOARD ===== */
 .board-element {
   position: absolute;
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='22' viewBox='0 0 18 22'%3E%3Cpath d='M2 2 L2 17 L6 13 L9 20 L11 19 L8 12 L14 12 Z' fill='%23ff3c00'/%3E%3C/svg%3E") 2 2, default;
 }
-.board-element.selected {
-  outline: 1px solid #FF3C00; outline-offset: 0px;
-  z-index: 1000 !important;
-}
-.board-element.multi-selected {
-  outline: 1px solid #FF3C00; outline-offset: 0px;
-}
+.board-element.selected { outline: 1px solid #FF3C00; outline-offset: 0px; z-index: 1000 !important; }
+.board-element.multi-selected { outline: 1px solid #FF3C00; outline-offset: 0px; }
 
-/* Toolbar flottante */
 .element-toolbar {
   position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
-  background: #fff; border-radius: 6px; padding: 4px 6px;
-  display: none; gap: 2px; white-space: nowrap; z-index: 20;
+  background: #fff;   padding: 4px 6px; display: none; gap: 2px; white-space: nowrap; z-index: 20;
   box-shadow: 0 2px 10px rgba(0,0,0,0.12);
 }
 .board-element.selected .element-toolbar { display: flex; }
-.el-tool-btn {
-  background: none; border: none; cursor: pointer;
-  padding: 4px 6px; border-radius: 4px; transition: background 0.1s;
-  display: flex; align-items: center; justify-content: center;
-}
+.el-tool-btn { background: none; border: none; cursor: pointer; padding: 4px 6px; transition: background 0.1s; display: flex; align-items: center; justify-content: center; }
 .el-tool-btn img { width: 16px; height: 16px; object-fit: contain; display: block; }
 .el-tool-btn:hover { background: rgba(0,0,0,0.06); }
 .el-tool-btn.danger:hover { background: #fee2e2; }
 
-/* Resize handle — carré visible 13×13, hitbox 26×26 via ::before */
 .resize-handle {
-  position: absolute; bottom: -7px; right: -7px;
-  width: 14px; height: 14px; background: #FF3C00;
-  border-radius: 0; cursor: se-resize; display: none; z-index: 20;
-  border: 2px solid #fff; 
-  transform-origin: center center;
+  position: absolute; bottom: -7px; right: -7px; width: 14px; height: 14px; background: #FF3C00;
+  border-radius: 0; cursor: se-resize; display: none; z-index: 20; border: 2px solid #fff; transform-origin: center center;
 }
-.resize-handle::before {
-  content: ''; position: absolute;
-  top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: 48px; height: 48px;
-}
+.resize-handle::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 48px; height: 48px; }
 .board-element.selected .resize-handle { display: block; }
-
-/* Rectangle de sélection du groupe */
-#group-bounding-box {
-  position: absolute;
-  border: 1px solid #FF3C00;
-  pointer-events: none;
-  display: none;
-  z-index: 9000;
-}
-
-/* Handle de resize pour la multi-sélection — même logique */
+#group-bounding-box { position: absolute; border: 1px solid #FF3C00; pointer-events: none; display: none; z-index: 9000; }
 #multi-resize-handle {
-  position: absolute; width: 12px; height: 12px; background: #FF3C00;
-  border: 2px solid #FFF;
-  cursor: se-resize; z-index: 9100; display: none;
-  transform: translate(-50%, -50%);
+  position: absolute; width: 12px; height: 12px; background: #FF3C00; border: 2px solid #FFF;
+  cursor: se-resize; z-index: 9100; display: none; transform: translate(-50%, -50%);
 }
-#multi-resize-handle::before {
-  content: ''; position: absolute;
-  top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: 48px; height: 48px;
-}
+#multi-resize-handle::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 48px; height: 48px; }
 
-/* IMAGE — pas de conteneur intermédiaire, l'img est directe dans .board-element */
-.board-element[data-type="image"] {
-  box-shadow: 0 3px 16px rgba(0,0,0,0.12);
-  overflow: hidden;
-}
-.board-element[data-type="image"] > img {
-  display: block; pointer-events: none;
-  width: 100%; height: 100%;
-  object-fit: contain;
-}
+.board-element[data-type="image"] { box-shadow: 0 3px 16px rgba(0,0,0,0.12); overflow: hidden; }
+.board-element[data-type="image"] > img { display: block; pointer-events: none; width: 100%; height: 100%; object-fit: contain; }
 
-/* NOTE — déformable */
-.board-element[data-type="note"] {
-  min-width: 160px;
-  min-height: 54px;
-}
-.el-note {
-  background: #fff; border-radius: 0;
-  box-shadow: 0 3px 16px rgba(0,0,0,0.1); padding: 14px;
-  border: 1px solid #eaeaf0;
-  display: flex; flex-direction: column;
-  width: 100%; height: 100%;  
-}
-.el-note textarea {
-  width: 100%; flex: 1; border: none; outline: none; resize: none;
-  font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 14px; color: #2d2d2d;
-  background: transparent; line-height: 1.6;
-  overflow-y: auto;
-  overflow-x:hidden ;
-}
+.board-element[data-type="note"] { min-width: 160px; min-height: 54px; }
+.el-note { background: #fff; border-radius: 0; box-shadow: 0 3px 16px rgba(0,0,0,0.1); padding: 14px; border: 1px solid #eaeaf0; display: flex; flex-direction: column; width: 100%; height: 100%; }
+.el-note textarea { width: 100%; flex: 1; border: none; outline: none; resize: none; font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; color: #2d2d2d; background: transparent; line-height: 1.6; overflow-y: auto; overflow-x:hidden ; }
 
-/* COULEUR — déformable */
-
-.board-element[data-type="color"] {
-  min-width: 153px; 
-  min-height: 127px;
-}
-.el-color {
-  border-radius: 0; box-shadow: 0 3px 16px rgba(0,0,0,0.1);
-  overflow: hidden; display: flex; flex-direction: column;
-  width: 100%; height: 100%;
-}
+.board-element[data-type="color"] { min-width: 153px; min-height: 127px; }
+.el-color { border-radius: 0; box-shadow: 0 3px 16px rgba(0,0,0,0.1); overflow: hidden; display: flex; flex-direction: column; width: 100%; height: 100%; }
 .el-color .color-swatch { flex: 1; min-height: 40px; }
 .el-color .color-info { background: #fff; padding: 6px 10px; border-top: 1px solid rgba(0,0,0,0.06); flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
-.el-color .color-hex-input {
-  font-size: 13px; font-weight: 700; color: #2d2d2d;
-  font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  letter-spacing: 0.5px;
-  border: none; outline: none; background: transparent; width: 0; flex: 1; min-width: 0;
-  cursor: text; padding: 0;
-}
+.el-color .color-hex-input { font-size: 13px; font-weight: 700; color: #2d2d2d; font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: 0.5px; border: none; outline: none; background: transparent; width: 0; flex: 1; min-width: 0; cursor: text; padding: 0; }
 .el-color .color-hex-input:focus { color: #ff3c00; }
-.el-color .color-eyedropper {
-  flex-shrink: 0; width: 22px; height: 22px; background: none; border: none;
-  cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center;
-  opacity: 0.45; transition: opacity 0.15s;
-}
+.el-color .color-eyedropper { flex-shrink: 0; width: 22px; height: 22px; background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; opacity: 0.45; transition: opacity 0.15s; }
 .el-color .color-eyedropper:hover { opacity: 1; }
 .el-color .color-name { font-size: 11px; color: #aaa; margin-top: 2px; }
 
-/* LIEN — déformable */
-.el-link {
-  background: #fff; border-radius: 0; overflow: hidden;
-  box-shadow: 0 3px 16px rgba(0,0,0,0.1); border: 1px solid #eaeaf0;
-  width: 100%; height: 100%; cursor: pointer;
-  display: flex; flex-direction: column;
-}
+.el-link { background: #fff; border-radius: 0; overflow: hidden; box-shadow: 0 3px 16px rgba(0,0,0,0.1); border: 1px solid #eaeaf0; width: 100%; height: 100%; cursor: pointer; display: flex; flex-direction: column; }
 .el-link .link-image { width: 100%; flex: 1; object-fit: cover; display: block; min-height: 60px; }
-.el-link .link-image-placeholder {
-  width: 100%; flex: 1; min-height: 60px;
-  background: linear-gradient(135deg, #ffe8e0, #ffd0c0);
-  display: flex; align-items: center; justify-content: center; font-size: 32px;
-}
+.el-link .link-image-placeholder { width: 100%; flex: 1; min-height: 60px; background: linear-gradient(135deg, #ffe8e0, #ffd0c0); display: flex; align-items: center; justify-content: center; font-size: 32px; }
 .el-link .link-body { padding: 10px 14px; flex-shrink: 0; }
 .el-link .link-title { font-size: 13px; font-weight: 600; color: #2d2d2d; margin-bottom: 5px; line-height: 1.4; }
 .el-link .link-url { font-size: 11px; color: #ff3c00; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* VIDÉO */
 .el-video { background: #000; border-radius: 0; overflow: hidden; box-shadow: 0 3px 16px rgba(0,0,0,0.18); width: 100%; height: 100%; }
 .el-video video { width: 100%; height: 100%; display: block; }
 .el-video iframe { width: 100%; height: 100%; border: none; display: block; }
 
-/* FICHIER — déformable */
-.el-file {
-  background: #fff; border-radius: 0; padding: 16px 20px;
-  box-shadow: 0 3px 16px rgba(0,0,0,0.1); border: 1px solid #eaeaf0;
-  display: flex; align-items: center; gap: 14px;
-  width: 100%; height: 100%; overflow: hidden;
-}
+.el-file { background: #fff; border-radius: 0; padding: 16px 20px; box-shadow: 0 3px 16px rgba(0,0,0,0.1); border: 1px solid #eaeaf0; display: flex; align-items: center; gap: 14px; width: 100%; height: 100%; overflow: hidden; }
 .el-file .file-icon { font-size: 30px; flex-shrink: 0; }
 .el-file .file-icon img { width: 30px; height: 30px; object-fit: contain; display: block; }
 .el-file .file-info { flex: 1; overflow: hidden; }
 .el-file .file-name { font-size: 13px; font-weight: 600; color: #2d2d2d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .el-file .file-size { font-size: 11px; color: #bbb; margin-top: 3px; }
 
-/* FICHIER VIDÉO — aperçu pur sans texte */
-.el-file-video {
-  background: #000; border-radius: 0;
-  box-shadow: 0 3px 16px rgba(0,0,0,0.18); border: 1px solid #111;
-  width: 100%; height: 100%; overflow: hidden; position: relative;
-  cursor: pointer;
-}
-.el-file-video video {
-  width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none;
-}
-.el-file-video .video-play-hint {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-  width: 44px; height: 44px; background: rgba(255,255,255,0.18);
-  border-radius: 50%; pointer-events: none; backdrop-filter: blur(2px);
-}
-/* Triangle CSS pur — optiquement centré dans le cercle */
-.el-file-video .video-play-hint::after {
-  content: '';
-  position: absolute;
-  top: 50%; left: 50%;
-  /* décalage +2px à droite pour compenser l'asymétrie visuelle du triangle */
-  transform: translate(-42%, -50%);
-  width: 0; height: 0;
-  border-top: 9px solid transparent;
-  border-bottom: 9px solid transparent;
-  border-left: 15px solid rgba(255,255,255,0.9);
-}
+.el-file-video { background: #000; border-radius: 0; box-shadow: 0 3px 16px rgba(0,0,0,0.18); border: 1px solid #111; width: 100%; height: 100%; overflow: hidden; position: relative; cursor: pointer; }
+.el-file-video video { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+.el-file-video .video-play-hint { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 44px; height: 44px; background: rgba(255,255,255,0.18); border-radius: 50%; pointer-events: none; backdrop-filter: blur(2px); }
+.el-file-video .video-play-hint::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-42%, -50%); width: 0; height: 0; border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 15px solid rgba(255,255,255,0.9); }
 
-/* LIGHTBOX VIDÉO */
-#video-lightbox-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.88);
-  z-index: 10001; display: none;
-  align-items: center; justify-content: center; flex-direction: column;
-}
+#video-lightbox-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 10001; display: none; align-items: center; justify-content: center; flex-direction: column; }
 #video-lightbox-overlay.show { display: flex; }
-#video-lightbox-overlay video {
-  max-width: 92vw; max-height: 82vh;
-  background: #000; display: block; border-radius: 0;
-  box-shadow: 0 8px 48px rgba(0,0,0,0.6);
-}
-.vlb-close {
-  position: fixed; top: 18px; right: 22px;
-  background: none; border: none; color: #fff; font-size: 28px;
-  cursor: pointer; line-height: 1; opacity: 0.7; z-index: 10002;
-  transition: opacity 0.15s;
-}
+#video-lightbox-overlay video { max-width: 92vw; max-height: 82vh; background: #000; display: block; border-radius: 0; box-shadow: 0 8px 48px rgba(0,0,0,0.6); }
+.vlb-close { position: fixed; top: 18px; right: 22px; background: none; border: none; color: #fff; font-size: 28px; cursor: pointer; line-height: 1; opacity: 0.7; z-index: 10002; transition: opacity 0.15s; }
 .vlb-close:hover { opacity: 1; }
 
-/* ===== RECTANGLE DE SÉLECTION ===== */
-#selection-rect {
-  position: absolute; border: 1px solid #687079;
-  background: rgba(223, 225, 225, 0.2); pointer-events: none;
-  display: none; z-index: 9000; border-radius: 0;
-}
-
-/* ===== GUIDES DE SNAP ===== */
-.snap-guide {
-  position: absolute; pointer-events: none; z-index: 0;
-  background: #ff3c00;
-  opacity: 0.5; /* Opacité réduite pour ressembler aux repères Illustrator */
-}
+#selection-rect { position: absolute; border: 1px solid #687079; background: rgba(223, 225, 225, 0.2); pointer-events: none; display: none; z-index: 9000; border-radius: 0; }
+.snap-guide { position: absolute; pointer-events: none; z-index: 0; background: #ff3c00; opacity: 0.5; }
 .snap-guide.h { height: 1px; left: 0; width: 8000px; }
 .snap-guide.v { width: 1px;  top:  0; height: 8000px; }
 
-/* ===== MODALES ===== */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.38);
-  z-index: 2000; display: flex; align-items: center; justify-content: center;
-  backdrop-filter: blur(4px);
-}
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.38); z-index: 2000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
 .modal-overlay.hidden { display: none; }
-.modal {
-  background: #fff; border-radius: 0;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.22); overflow: hidden;
-  display: flex; flex-direction: column;
-}
-.modal-header {
-  padding: 22px 26px 16px; border-bottom: 1px solid #f0f0f6;
-  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
-}
+.modal { background: #fff; border-radius: 0; box-shadow: 0 24px 64px rgba(0,0,0,0.22); overflow: hidden; display: flex; flex-direction: column; }
+.modal-header { padding: 22px 26px 16px; border-bottom: 1px solid #f0f0f6; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
 .modal-header h2 { font-size: 18px; font-weight: 700; color: #1a1a2e; }
-.modal-close {
-  background: none; border: none; cursor: pointer; font-size: 20px;
-  color: #bbb; padding: 4px; border-radius: 6px; transition: all 0.15s; line-height: 1;
-}
+.modal-close { background: none; border: none; cursor: pointer; font-size: 20px; color: #bbb; padding: 4px;   transition: all 0.15s; line-height: 1; }
 .modal-close:hover { background: #f5f5fb; color: #2d2d2d; }
 
-/* COULEUR */
 .color-picker-wrap { padding: 22px 26px; }
-.color-picker-wrap input[type="color"] {
-  width: 100%; height: 130px; border: none; border-radius: 0; cursor: pointer; padding: 0; display: block;
-}
+.color-picker-wrap input[type="color"] { width: 100%; height: 130px; border: none; border-radius: 0; cursor: pointer; padding: 0; display: block; }
 .hex-input-wrap { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
 .hex-input-wrap label { font-size: 13px; font-weight: 700; color: #666; }
-.hex-input {
-  flex: 1; padding: 9px 14px; border: 1px solid #eaeaf0; border-radius: 6px;
-  font-size: 15px; font-weight: 700; font-family: 'Courier New', monospace;
-  letter-spacing: 2px; outline: none; text-transform: uppercase; color: #2d2d2d;
-}
+.hex-input { flex: 1; padding: 9px 14px; border: 1px solid #eaeaf0;   font-size: 15px; font-weight: 700; font-family: 'Courier New', monospace; letter-spacing: 2px; outline: none; text-transform: uppercase; color: #2d2d2d; }
 .hex-input:focus { border-color: #ff3c00; }
 #hex-preview { width: 36px; height: 36px; border-radius: 0; flex-shrink: 0; border: 1px solid #eaeaf0; }
-.add-color-btn {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  width: 100%; padding: 13px; margin-top: 18px;
-  background: #ff3c00; color: #fff; border: none; border-radius: 6px;
-  cursor: pointer; font-size: 14px; font-weight: 700; transition: background 0.15s;
-}
+.add-color-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px; margin-top: 18px; background: #ff3c00; color: #fff; border: none;   cursor: pointer; font-size: 14px; font-weight: 700; transition: background 0.15s; }
 .add-color-btn:hover { background: #e03500; }
 
-/* FORMULAIRES */
 .form-wrap { padding: 22px 26px; display: flex; flex-direction: column; gap: 16px; }
 .form-group label { display: block; font-size: 11px; font-weight: 700; color: #999; margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.6px; }
-.form-input {
-  width: 100%; padding: 11px 14px; border: 1px solid #eaeaf0; border-radius: 6px;
-  font-size: 14px; outline: none; transition: border-color 0.15s; color: #2d2d2d; font-family: inherit;
-}
+.form-input { width: 100%; padding: 11px 14px; border: 1px solid #eaeaf0;   font-size: 14px; outline: none; transition: border-color 0.15s; color: #2d2d2d; font-family: inherit; }
 .form-input:focus { border-color: #ff3c00; }
-.form-submit {
-  padding: 12px; background: #ff3c00; color: #fff; border: none;
-  border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700;
-  transition: background 0.15s; font-family: inherit;
-}
+.form-submit { padding: 12px; background: #ff3c00; color: #fff; border: none;   cursor: pointer; font-size: 14px; font-weight: 700; transition: background 0.15s; font-family: inherit; }
 .form-submit:hover { background: #e03500; }
 
-/* VIDÉO TABS */
 .video-type-tabs { display: flex; gap: 8px; }
-.video-tab {
-  flex: 1; padding: 10px; border: 1px solid #eaeaf0; border-radius: 6px;
-  background: none; cursor: pointer; font-size: 13px; color: #666; font-weight: 500;
-  transition: all 0.15s; font-family: inherit;
-}
+.video-tab { flex: 1; padding: 10px; border: 1px solid #eaeaf0;   background: none; cursor: pointer; font-size: 13px; color: #666; font-weight: 500; transition: all 0.15s; font-family: inherit; }
 .video-tab.active { background: rgba(255,60,0,0.08); border-color: #ff3c00; color: #ff3c00; }
 
-/* CONTEXT MENU */
-#context-menu {
-  position: fixed; background: #fff; border-radius: 0;
-  box-shadow: 0 10px 32px rgba(0,0,0,0.16); border: 1px solid #eaeaf0;
-  padding: 6px; z-index: 5000; min-width: 168px; display: none;
-}
-.ctx-item {
-  padding: 9px 14px; border-radius: 6px; cursor: pointer;
-  font-size: 13px; color: #444; display: flex; align-items: center; gap: 9px;
-  transition: background 0.1s; font-weight: 500;
-}
+#context-menu { position: fixed; background: #fff; border-radius: 0; box-shadow: 0 10px 32px rgba(0,0,0,0.16); border: 1px solid #eaeaf0; padding: 6px; z-index: 5000; min-width: 168px; display: none; }
+.ctx-item { padding: 9px 14px;   cursor: pointer; font-size: 13px; color: #444; display: flex; align-items: center; gap: 9px; transition: background 0.1s; font-weight: 500; }
 .ctx-item:hover { background: #f5f5fb; }
 .ctx-item.danger { color: #ef4444; }
 .ctx-item.danger:hover { background: #fee2e2; }
 .ctx-divider { height: 1px; background: #f0f0f6; margin: 4px 0; }
 
-/* TOAST */
-#toast {
-  position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%);
-  background: #ff3c00; color: #fff; padding: 11px 22px; border-radius: 6px;
-  font-size: 13px; font-weight: 600; opacity: 0; transition: opacity 0.3s;
-  z-index: 9999; pointer-events: none; white-space: nowrap;
-  box-shadow: 0 4px 20px rgba(255,60,0,0.3);
-}
+#toast { position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%); background: #ff3c00; color: #fff; padding: 11px 22px;   font-size: 13px; font-weight: 600; opacity: 0; transition: opacity 0.3s; z-index: 9999; pointer-events: none; white-space: nowrap; box-shadow: 0 4px 20px rgba(255,60,0,0.3); }
 #toast.show { opacity: 1; }
 
-/* SCROLLBARS */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d4d4e0; border-radius: 3px; }
@@ -781,447 +478,287 @@ body.preview-mode #canvas-wrapper { position: fixed !important; inset: 0 !import
 
 .hidden { display: none !important; }
 
-/* ===== CAPTIONS ===== */
-.el-caption {
-  position: absolute;
-  background: #fff;
-  padding: 6px 8px;
-  font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 12px; color: #555; line-height: 1.5;
-  border: none;
-  word-wrap: break-word; overflow-wrap: break-word;
-  cursor: text; z-index: 5;
-  box-sizing: border-box;
-}
-.el-caption[contenteditable]:empty::before {
-  content: attr(data-placeholder);
-  color: #bbb;
-}
+.el-caption { position: absolute; background: #fff; padding: 6px 8px; font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px; color: #555; line-height: 1.5; border: none; word-wrap: break-word; overflow-wrap: break-word; cursor: text; z-index: 5; box-sizing: border-box; }
+.el-caption[contenteditable]:empty::before { content: attr(data-placeholder); color: #bbb; }
 
-/* ===== CONNEXIONS SVG ===== */
-.el-connection {
-  position: absolute; top: 0; left: 0;
-  width: 8000px; height: 8000px;
-  pointer-events: none; z-index: 1;
-  overflow: visible;
-}
-.el-connection line {
-  stroke: #1a1a2e; stroke-width: 1.5;
-  stroke-linecap: round;
-}
+.el-connection { position: absolute; top: 0; left: 0; width: 8000px; height: 8000px; pointer-events: none; z-index: 1; overflow: visible; }
+.el-connection line { stroke: #1a1a2e; stroke-width: 1.5; stroke-linecap: round; }
 
-/* ===== LIGHTBOX ===== */
-#lightbox-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.72);
-  z-index: 10000; display: none;
-  align-items: center; justify-content: center;
-  cursor: zoom-out;
-}
+#lightbox-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); z-index: 10000; display: none; align-items: center; justify-content: center; cursor: zoom-out; }
 #lightbox-overlay.show { display: flex; }
-#lightbox-overlay img {
-  max-width: 90vw; max-height: 90vh;
-  object-fit: contain; display: block;
-  border-radius: 0;
-}
+#lightbox-overlay img { max-width: 90vw; max-height: 90vh; object-fit: contain; display: block; border-radius: 0; }
 
-/* FORCER LE CURSEUR PENDANT LE DRAG */
-body.is-dragging-el, body.is-dragging-el * {
-  cursor: grabbing !important;
-}
-        /* Barre d'outils de groupe */
+body.is-dragging-el, body.is-dragging-el * { cursor: grabbing !important; }
 
-        #group-toolbar {
-
-            display: none;
-
-            position: absolute;
-
-            background: white;
-
-            padding: 8px;
-
-            border-radius: 4px;
-
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-
-            z-index: 1000;
-
-            top: -40px;
-
-            left: 0;
-
-        }
-
-        #group-toolbar button {
-
-            margin: 0 4px;
-
-            padding: 4px 8px;
-
-            background: none;
-
-            border: none;
-
-            cursor: pointer;
-
-        }
+#group-toolbar { display: none; position: absolute; background: white; padding: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); z-index: 1000; top: -40px; left: 0; }
+#group-toolbar button { margin: 0 4px; padding: 4px 8px; background: none; border: none; cursor: pointer; }
 </style>
 </head>
 <body>
-<div class="toolbar" id="toolbar">
-    <button id="tool-note" class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'note')" onclick="App.addNote()" title="Note — glisser pour poser">
-      <img src="note.png" alt="Note" draggable="false" style="pointer-events: none;">
-      <span class="tool-label">Note</span>
-    </button>
 
-    <button id="tool-color" class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'color')" onclick="App.addColorDirect()" title="Couleur — glisser pour poser">
-      <img src="couleur.png" alt="Couleur" draggable="false" style="pointer-events: none;">
-      <span class="tool-label">Couleur</span>
-    </button>
-
-    <button id="tool-link" class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'link')" onclick="App.openLinkModal()" title="Lien — glisser pour poser">
-      <img src="lien.png" alt="Lien" draggable="false" style="pointer-events: none;">
-      <span class="tool-label">Lien</span>
-    </button>
-
-    <button id="tool-file" class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'file')" onclick="App.addFile()" title="Fichier — glisser pour poser">
-      <img src="fichier.png" alt="Fichier" draggable="false" style="pointer-events: none;">
-      <span class="tool-label">Fichier</span>
-    </button>
-
-    <div class="toolbar-divider"></div>
-
-    <button id="tool-export" class="tool-btn" onclick="App.openExportModal()" title="Exporter">
-      <img src="exportation.png" alt="Exporter" draggable="false" style="pointer-events: none;">
-      <span class="tool-label">Exporter</span>
-    </button>
-  </div>
-<!-- ===== ÉCRAN D'ACCUEIL ===== -->
 <div id="home-screen">
   <h1 class="home-main-title">MOODBOARDS</h1>
   <div class="boards-container" id="boards-container">
     <div class="boards-canvas" id="boards-canvas"></div>
   </div>
-  <button id="new-board-btn" onclick="App.createBoard()" title="Nouveau Moodboard">+</button>
+  <button id="new-board-btn" title="Nouveau Moodboard">+</button>
 </div>
 
-<!-- ===== INTERFACE BOARD ===== -->
 <div id="board-screen">
-
-  <!-- HEADER BOARD (barre pleine largeur) -->
   <header id="board-header">
-    <button class="back-btn" id="back-btn" title="Retour à l'accueil" onclick="App.goHome()">&#8592;</button>
+    <button class="back-btn" id="back-btn" title="Retour à l'accueil">&#8592;</button>
     <div class="board-title-display" id="board-title-display">Moodboard</div>
   </header>
-  <!-- Boutons orange centrés sous le header -->
+  
   <div class="fit-btn-group">
-    <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue" onclick="App.fitElementsToScreen()">⊡</button>
-    <button id="preview-btn" class="preview-btn" title="Aperçu plein écran (Échap pour quitter)" onclick="App.togglePreviewMode()">⛶</button>
+    <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">⊡</button>
+    <button id="preview-btn" class="preview-btn" title="Aperçu plein écran (Échap pour quitter)">⛶</button>
   </div>
 
-  <!-- CORPS : toolbar + canvas + panneau -->
   <div class="board-body">
-
-  <!-- TOOLBAR GAUCHE (icônes PNG + labels) -->
-  <div class="toolbar" id="toolbar">
-    <button class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'note')" onclick="App.addNote()" title="Note — glisser pour poser">
-      <img src="note.png" alt="Note">
-      <span class="tool-label">Note</span>
-    </button>
-    <button class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'color')" onclick="App.addColorDirect()" title="Couleur — glisser pour poser">
-      <img src="couleur.png" alt="Couleur">
-      <span class="tool-label">Couleur</span>
-    </button>
-    <button class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'link')" onclick="App.openLinkModal()" title="Lien — glisser pour poser">
-      <img src="lien.png" alt="Lien">
-      <span class="tool-label">Lien</span>
-    </button>
-    <button class="tool-btn" draggable="true" ondragstart="App.toolDragStart(event,'file')" onclick="App.addFile()" title="Fichier — glisser pour poser">
-      <img src="fichier.png" alt="Fichier">
-      <span class="tool-label">Fichier</span>
-    </button>
-    <div class="toolbar-divider"></div>
-    <button class="tool-btn" onclick="App.openExportModal()" title="Exporter">
-      <img src="exportation.png" alt="Exporter">
-      <span class="tool-label">Exporter</span>
-    </button>
-  </div>
-
-  <!-- PANNEAU ÉDITION TEXTE (swap animé avec toolbar) -->
-  <div id="text-edit-panel">
-    <span class="text-panel-label">Police</span>
-    <button class="text-font-btn" id="tp-roman" onclick="App.applyTextFont('helvetica-roman')" title="Helvetica Roman">Roman</button>
-    <button class="text-font-btn" id="tp-bold"  onclick="App.applyTextFont('helvetica-bold')"  title="Helvetica Bold"><b>Bold</b></button>
-    <span class="text-panel-label">Taille</span>
-    <div class="text-size-row">
-      <button class="text-size-btn" onclick="App.applyTextSizeDelta(-1)">−</button>
-      <span class="text-size-val" id="text-size-val">14</span>
-      <button class="text-size-btn" onclick="App.applyTextSizeDelta(1)">+</button>
+    <div class="toolbar" id="toolbar">
+      <button id="tool-note" class="tool-btn" draggable="true" title="Note — glisser pour poser">
+        <img src="PNG/note.png" alt="Note" draggable="false" style="pointer-events: none;">
+        <span class="tool-label">Note</span>
+      </button>
+      <button id="tool-color" class="tool-btn" draggable="true" title="Couleur — glisser pour poser">
+        <img src="PNG/couleur.png" alt="Couleur" draggable="false" style="pointer-events: none;">
+        <span class="tool-label">Couleur</span>
+      </button>
+      <button id="tool-link" class="tool-btn" draggable="true" title="Lien — glisser pour poser">
+        <img src="PNG/lien.png" alt="Lien" draggable="false" style="pointer-events: none;">
+        <span class="tool-label">Lien</span>
+      </button>
+      <button id="tool-file" class="tool-btn" draggable="true" title="Fichier — glisser pour poser">
+        <img src="PNG/fichier.png" alt="Fichier" draggable="false" style="pointer-events: none;">
+        <span class="tool-label">Fichier</span>
+      </button>
+      <div class="toolbar-divider"></div>
+      <button id="tool-export" class="tool-btn" title="Exporter">
+        <img src="PNG/exportation.png" alt="Exporter" draggable="false" style="pointer-events: none;">
+        <span class="tool-label">Exporter</span>
+      </button>
     </div>
-    <span class="text-panel-label">Alignement</span>
-    <div class="text-align-btns">
-      <button class="text-align-btn" id="ta-left"   onclick="App.applyTextAlign('left')"   title="Gauche">⬅</button>
-      <button class="text-align-btn" id="ta-center" onclick="App.applyTextAlign('center')" title="Centre">☰</button>
-      <button class="text-align-btn" id="ta-right"  onclick="App.applyTextAlign('right')"  title="Droite">➡</button>
+
+    <div id="text-edit-panel">
+      <span class="text-panel-label">Police</span>
+      <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Roman</button>
+      <button class="text-font-btn" id="tp-bold" title="Helvetica Bold"><b>Bold</b></button>
+      <span class="text-panel-label">Taille</span>
+      <div class="text-size-row">
+        <button class="text-size-btn" id="text-size-minus">−</button>
+        <span class="text-size-val" id="text-size-val">14</span>
+        <button class="text-size-btn" id="text-size-plus">+</button>
+      </div>
+      <span class="text-panel-label">Alignement</span>
+      <div class="text-align-btns">
+        <button class="text-align-btn" id="ta-left" title="Gauche">⬅</button>
+        <button class="text-align-btn" id="ta-center" title="Centre">☰</button>
+        <button class="text-align-btn" id="ta-right" title="Droite">➡</button>
+      </div>
     </div>
-  </div>
 
-  <!-- CANVAS -->
-  <div class="canvas-wrapper" id="canvas-wrapper">
-    <div id="canvas"></div>
-    <!-- Rectangle de sélection -->
-    <div id="selection-rect"></div>
-    <!-- Handle de resize multi-sélection -->
-    <div id="multi-resize-handle"></div>
-    <!-- Rectangle de sélection du groupe -->
-    <div id="group-bounding-box"></div>
-    <!-- Toast zoom (vignette orange temporaire) -->
-    <div id="zoom-toast"></div>
-  </div>
+    <div class="canvas-wrapper" id="canvas-wrapper">
+      <div id="canvas"></div>
+      <div id="selection-rect"></div>
+      <div id="multi-resize-handle"></div>
+      <div id="group-bounding-box"></div>
+      <div id="zoom-toast"></div>
+    </div>
 
-  <!-- PANNEAU BIBLIOTHÈQUE DROITE -->
-  <div id="lib-panel">
-    <!-- Bouton toggle flèche -->
-    <button id="lib-toggle-btn" onclick="App.toggleLibPanel()" title="Bibliothèque d'images">
-      <!-- Chevron gauche (indique "ouvrir vers la gauche") -->
-      <svg viewBox="0 0 24 24">
-        <polyline points="15 18 9 12 15 6"></polyline>
-      </svg>
-    </button>
+    <div id="lib-panel">
+      <button id="lib-toggle-btn" title="Bibliothèque d'images">
+        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
 
-    <!-- Contenu (visible quand ouvert) -->
-    <div id="lib-panel-content">
-      <div class="lib-panel-header">
-        <button class="lib-add-btn" onclick="App.uploadImages()">
-          &#43; Ajouter plus d'images
-        </button>
+      <div id="lib-panel-inner">
+      <div id="lib-panel-content">
+        <div class="lib-panel-header">
+          <button id="lib-add-btn" class="lib-add-btn">&#43; Ajouter plus d'images</button>
+        </div>
+
+        <div class="lib-folders" id="lib-folders">
+          <!-- Chips générées dynamiquement par renderFolderChips() -->
+        </div>
+
+        <div class="lib-search-wrap">
+          <label for="lib-panel-search" style="display:none;">Rechercher</label>
+          <input class="lib-search-input" type="text" placeholder=" Rechercher..." id="lib-panel-search">
+        </div>
+
+        <div id="lib-panel-grid" class="lib-panel-grid"></div>
+
+        <div id="lib-panel-empty" class="lib-panel-empty hidden">
+          <div class="empty-icon">📁</div>
+          <p>Aucune image ici</p>
+          <small>Importez des images ou glissez-les dans ce panneau</small>
+        </div>
+
+        <div class="lib-panel-drop-overlay" id="lib-panel-drop-overlay">
+          <div style="font-size:36px;margin-bottom:10px">📥</div>
+          Déposez ici
+        </div>
       </div>
-
-      <!-- Chips dossiers -->
-      <div class="lib-folders">
-        <button class="lib-folder-chip active" data-folder="all" onclick="App.setPanelFolder('all',this)">Tout</button>
-        <button class="lib-folder-chip" data-folder="typographie" onclick="App.setPanelFolder('typographie',this)">Typo</button>
-        <button class="lib-folder-chip" data-folder="couleur" onclick="App.setPanelFolder('couleur',this)">Couleur</button>
-        <button class="lib-folder-chip" data-folder="logo" onclick="App.setPanelFolder('logo',this)">Logo</button>
-        <button class="lib-folder-chip" data-folder="image" onclick="App.setPanelFolder('image',this)">Image</button>
-      </div>
-
-      <!-- Recherche -->
-      <div class="lib-search-wrap">
-        <input class="lib-search-input" type="text" placeholder=" Rechercher..."
-          oninput="App.searchPanelLib(this.value)" id="lib-panel-search">
-      </div>
-
-      <!-- Grille images -->
-      <div id="lib-panel-grid" class="lib-panel-grid"></div>
-
-      <!-- État vide -->
-      <div id="lib-panel-empty" class="lib-panel-empty hidden">
-        <div class="empty-icon">📁</div>
-        <p>Aucune image ici</p>
-        <small>Importez des images ou glissez-les dans ce panneau</small>
-      </div>
-
-      <!-- Drop overlay -->
-      <div class="lib-panel-drop-overlay" id="lib-panel-drop-overlay">
-        <div style="font-size:36px;margin-bottom:10px">📥</div>
-        Déposez ici
       </div>
     </div>
   </div>
-
-  </div><!-- /board-body -->
-</div><!-- /board-screen -->
-
-
-<!-- Barre d'outils de groupe ajoutée -->
-
-<div id="group-toolbar">
-
-    <button id="duplicate-button">Dupliquer</button>
-
-    <button id="delete-button">Supprimer</button>
-
 </div>
 
+<div id="group-toolbar">
+    <button id="duplicate-button">Dupliquer</button>
+    <button id="delete-button">Supprimer</button>
+</div>
 
-<!-- INPUTS FICHIERS CACHÉS -->
-<input type="file" id="file-input-images" multiple accept="image/*" style="display:none" onchange="App.handleImageUpload(event)">
-<input type="file" id="file-input-file" multiple style="display:none" onchange="App.handleFileUpload(event)">
-<input type="file" id="file-input-video" accept="video/*" style="display:none" onchange="App.handleVideoUpload(event)">
+<input type="file" id="file-input-images" multiple accept="image/*" style="display:none">
+<input type="file" id="file-input-file" multiple style="display:none">
+<input type="file" id="file-input-video" accept="video/*" style="display:none">
 <input type="file" id="file-input-replace" accept="image/*" style="display:none">
 
-<!-- MODALE COULEUR -->
 <div class="modal-overlay hidden" id="color-modal">
   <div class="modal" style="width:370px">
     <div class="modal-header">
       <h2>🎨 Ajouter une couleur</h2>
-      <button class="modal-close" onclick="App.closeColorModal()">&#x2715;</button>
+      <button id="close-color-modal" class="modal-close">&#x2715;</button>
     </div>
     <div class="color-picker-wrap">
-      <input type="color" id="color-picker-input" value="#ff3c00" oninput="App.syncHex(this.value)">
+      <label for="color-picker-input" style="display:none;">Sélecteur couleur</label>
+      <input type="color" id="color-picker-input" value="#ff3c00">
       <div class="hex-input-wrap">
-        <label>#</label>
-        <input class="hex-input" type="text" id="hex-input" value="6C63FF" maxlength="6" oninput="App.syncColor(this.value)">
+        <label for="hex-input">#</label>
+        <input class="hex-input" type="text" id="hex-input" value="6C63FF" maxlength="6">
         <div id="hex-preview" style="background:#ff3c00"></div>
       </div>
-      <button class="add-color-btn" onclick="App.addColorElement()">＋ Ajouter au board</button>
+      <button id="add-color-btn" class="add-color-btn">＋ Ajouter au board</button>
     </div>
   </div>
 </div>
 
-<!-- MODALE LIEN -->
 <div class="modal-overlay hidden" id="link-modal">
   <div class="modal" style="width:460px">
     <div class="modal-header">
       <h2>🔗 Ajouter un lien</h2>
-      <button class="modal-close" onclick="App.closeLinkModal()">&#x2715;</button>
+      <button id="close-link-modal" class="modal-close">&#x2715;</button>
     </div>
     <div class="form-wrap">
       <div class="form-group">
-        <label>URL *</label>
+        <label for="link-url-input">URL *</label>
         <input class="form-input" type="url" id="link-url-input" placeholder="https://exemple.com">
       </div>
       <div class="form-group">
-        <label>Titre (optionnel)</label>
+        <label for="link-title-input">Titre (optionnel)</label>
         <input class="form-input" type="text" id="link-title-input" placeholder="Titre affiché">
       </div>
       <div class="form-group">
-        <label>Image d'aperçu (URL optionnel)</label>
+        <label for="link-img-input">Image d'aperçu (URL optionnel)</label>
         <input class="form-input" type="url" id="link-img-input" placeholder="https://exemple.com/image.jpg">
       </div>
-      <button class="form-submit" onclick="App.addLinkElement()">Ajouter le lien</button>
+      <button id="submit-link" class="form-submit">Ajouter le lien</button>
     </div>
   </div>
 </div>
 
-<!-- MODALE VIDÉO -->
 <div class="modal-overlay hidden" id="video-modal">
   <div class="modal" style="width:480px">
     <div class="modal-header">
       <h2>▶️ Ajouter une vidéo</h2>
-      <button class="modal-close" onclick="App.closeVideoModal()">&#x2715;</button>
+      <button id="close-video-modal" class="modal-close">&#x2715;</button>
     </div>
     <div class="form-wrap">
       <div class="video-type-tabs">
-        <button class="video-tab active" id="vt-url" onclick="App.switchVideoTab('url')">🌐 URL</button>
-        <button class="video-tab" id="vt-local" onclick="App.switchVideoTab('local')">📁 Fichier local</button>
+        <button class="video-tab active" id="vt-url">🌐 URL</button>
+        <button class="video-tab" id="vt-local">📁 Fichier local</button>
       </div>
       <div id="video-url-section">
         <div class="form-group">
-          <label>URL de la vidéo</label>
+          <label for="video-url-input">URL de la vidéo</label>
           <input class="form-input" type="url" id="video-url-input" placeholder="https://youtube.com/watch?v=...">
         </div>
-        <button class="form-submit" onclick="App.addVideoURL()">Ajouter</button>
+        <button id="submit-video-url" class="form-submit">Ajouter</button>
       </div>
       <div id="video-local-section" class="hidden">
-        <button class="form-submit" onclick="document.getElementById('file-input-video').click()">
-          📁 Choisir un fichier vidéo
-        </button>
+        <button id="submit-video-local" class="form-submit">📁 Choisir un fichier vidéo</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- MODALE RENAME -->
 <div class="modal-overlay hidden" id="rename-modal">
   <div class="modal" style="width:380px">
     <div class="modal-header">
       <h2>✏️ Renommer</h2>
-      <button class="modal-close" onclick="App.closeRenameModal()">&#x2715;</button>
+      <button id="close-rename-modal" class="modal-close">&#x2715;</button>
     </div>
     <div class="form-wrap">
       <div class="form-group">
-        <label>Nouveau nom</label>
+        <label for="rename-input">Nouveau nom</label>
         <input class="form-input" type="text" id="rename-input" placeholder="Nom du moodboard" maxlength="45">
        </div>
-       <button class="form-submit" onclick="App.confirmRename()">Renommer</button>
+       <button id="submit-rename" class="form-submit">Renommer</button>
     </div>
   </div>
 </div>
 
-<!-- MODALE CRÉATION MOODBOARD -->
 <div class="modal-overlay hidden" id="create-board-modal">
   <div class="modal" style="width:380px">
     <div class="modal-header">
       <h2>Nouveau moodboard</h2>
-      <button class="modal-close" onclick="App.closeCreateBoardModal()">&#x2715;</button>
+      <button id="close-create-board-modal" class="modal-close">&#x2715;</button>
     </div>
     <div class="form-wrap">
       <div class="form-group">
-        <label>Nom du moodboard</label>
-        <input class="form-input" type="text" id="create-board-input" placeholder="Mon moodboard" max lenght="45"
-          onkeydown="if(event.key==='Enter') App.confirmCreateBoard(); if(event.key==='Escape') App.closeCreateBoardModal()">
+        <label for="create-board-input">Nom du moodboard</label>
+        <input class="form-input" type="text" id="create-board-input" placeholder="Mon moodboard" maxlength="45">
       </div>
-      <button class="form-submit" onclick="App.confirmCreateBoard()">Créer</button>
+      <button id="submit-create-board" class="form-submit">Créer</button>
     </div>
   </div>
 </div>
 
-<!-- MODALE EXPORT -->
 <div class="modal-overlay hidden" id="export-modal">
   <div class="modal" style="width:320px">
     <div class="modal-header">
       <h2>Exporter</h2>
-      <button class="modal-close" onclick="App.closeExportModal()">&#x2715;</button>
+      <button id="close-export-modal" class="modal-close">&#x2715;</button>
     </div>
     <div style="padding:24px 26px;display:flex;flex-direction:column;gap:10px;">
-      <button class="form-submit" onclick="App.exportPNG();App.closeExportModal()">Exporter en PNG</button>
+      <button id="export-png-btn" class="form-submit">Exporter en PNG</button>
       <div style="border-top:1px solid #eaeaf0;margin:2px 0;"></div>
-      <button class="form-submit" style="background:#1a1a2e;" onclick="App.exportPDF(2);App.closeExportModal()">PDF — Haute résolution</button>
-      <button class="form-submit" style="background:#3a3a5e;" onclick="App.exportPDF(1);App.closeExportModal()">PDF — Basse résolution</button>
+      <button id="export-pdf-hr-btn" class="form-submit" style="background:#1a1a2e;">PDF — Haute résolution</button>
+      <button id="export-pdf-lr-btn" class="form-submit" style="background:#3a3a5e;">PDF — Basse résolution</button>
     </div>
   </div>
 </div>
 
-<!-- CONTEXT MENU -->
+
 <div id="context-menu">
-  <div class="ctx-item" onclick="App.ctxBringFront()">⬆️ Premier plan</div>
-  <div class="ctx-item" onclick="App.ctxBringFront()">
-  ⬆️ Premier plan
-</div>
-
-<div class="ctx-item" onclick="App.ctxSendBack()">
-  ⬇️ Arrière-plan
-</div>
-
-<div class="ctx-divider"></div>
-
-<div class="ctx-item" onclick="App.ctxDuplicate()">
-  <img src="dupliquer.png" style="width:16px;height:16px;object-fit:contain;flex-shrink:0; margin-right:6px;">
-  Dupliquer
-</div>
-  <!-- Options spécifiques aux images -->
-  <div class="ctx-divider" id="ctx-img-divider" style="display:none"></div>
-  <div class="ctx-item" id="ctx-img-download" style="display:none" onclick="App.ctxDownloadImage()">⬇️ Télécharger</div>
-  <div class="ctx-item" id="ctx-img-replace" style="display:none" onclick="App.ctxReplaceImage()">🔄 Remplacer</div>
-  <div class="ctx-item" id="ctx-img-caption" style="display:none" onclick="App.ctxAddCaption()">💬 Commentaire</div>
-  <!-- Connexion multi-sélection -->
-  <div class="ctx-divider" id="ctx-connect-divider" style="display:none"></div>
-  <div class="ctx-item" id="ctx-connect" style="display:none" onclick="App.ctxConnect()">— Connecter</div>
+  <div class="ctx-item" id="ctx-bring-front">⬆️ Premier plan</div>
+  <div class="ctx-item" id="ctx-send-back">⬇️ Arrière-plan</div>
   <div class="ctx-divider"></div>
-  <div class="ctx-item danger" onclick="App.ctxDelete()">
-  <img src="supprimer.png" style="width:16px;height:16px;object-fit:contain;flex-shrink:0; margin-right:6px;">
-  Supprimer
+  <div class="ctx-item" id="ctx-duplicate">
+    <img src="PNG/dupliquer.png" alt="" style="width:16px;height:16px;object-fit:contain;flex-shrink:0; margin-right:6px;"> Dupliquer
+  </div>
+  <div class="ctx-divider" id="ctx-img-divider" style="display:none"></div>
+  <div class="ctx-item" id="ctx-img-download" style="display:none">⬇️ Télécharger</div>
+  <div class="ctx-item" id="ctx-img-replace" style="display:none">🔄 Remplacer</div>
+  <div class="ctx-item" id="ctx-img-caption" style="display:none">💬 Commentaire</div>
+  <div class="ctx-divider" id="ctx-connect-divider" style="display:none"></div>
+  <div class="ctx-item" id="ctx-connect" style="display:none">— Connecter</div>
+  <div class="ctx-divider"></div>
+  <div class="ctx-item danger" id="ctx-delete">
+    <img src="PNG/supprimer.png" alt="" style="width:16px;height:16px;object-fit:contain;flex-shrink:0; margin-right:6px;"> Supprimer
+  </div>
 </div>
-</div> <div id="toast"></div>
-
-<!-- TOAST -->
 <div id="toast"></div>
 
-<!-- LIGHTBOX IMAGE -->
 <div id="lightbox-overlay">
   <img id="lightbox-img" src="" alt="">
 </div>
 
-<!-- LIGHTBOX VIDÉO -->
 <div id="video-lightbox-overlay">
-  <button class="vlb-close" onclick="App.closeVideoLightbox()">✕</button>
+  <button id="vlb-close-btn" class="vlb-close">✕</button>
   <video id="vlb-video" controls preload="metadata"></video>
 </div>
 
-
-<!-- Toast mode aperçu (position:fixed, non masqué par la règle preview-mode) -->
 <div id="preview-toast"></div>
 </body>
 </html>

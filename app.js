@@ -229,6 +229,12 @@ const App = (function () {
 
   // ── INIT ─────────────────────────────────────────────────────────────────
   async function init() {
+    // Détection mode partage : ?board=ID
+    const _sharedId = new URLSearchParams(window.location.search).get('board');
+    if (_sharedId) {
+      await _loadSharedBoard(_sharedId);
+      return;
+    }
     await loadBoardsFromStorage();
 
     if (!boards.length) addBoard('Mon premier moodboard', false);
@@ -2706,6 +2712,38 @@ const App = (function () {
       el.dataset.id = s.id;
     }
     return el;
+  }
+
+  // ── SHARED BOARD (lecture seule) ────────────────────────────────────────
+  async function _loadSharedBoard(id) {
+    const errPage = (msg) => {
+      document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;background:#f4f4f6;"><div style="font-family:'HelveticaBold',sans-serif;font-size:26px;color:#ff3c00">MOODBOARDS</div><div style="font-size:15px;color:#888">' + msg + '</div></div>';
+    };
+    if (!window._fbDb) { errPage('Firebase non disponible.'); return; }
+    try {
+      const snap = await window._fbDb.ref('boards/' + id).get();
+      if (!snap.exists()) { errPage('Ce moodboard n'existe pas ou a été supprimé.'); return; }
+      const boardData = snap.val();
+      document.body.classList.add('readonly-mode');
+      document.getElementById('board-screen').style.display = 'flex';
+      document.getElementById('board-title-display').textContent = boardData.name || 'Moodboard';
+      document.getElementById('canvas').innerHTML = '';
+      zoomLevel = 1; panX = 0; panY = 0; nextZ = 100;
+      applyTransform();
+      if (boardData.elements && boardData.elements.length) {
+        boardData.elements.forEach(e => {
+          if (e.type === 'caption') {
+            const cap = restoreElement(e);
+            if (cap) cap.contentEditable = 'false';
+          } else {
+            restoreElement(e);
+          }
+        });
+        setTimeout(() => fitElementsToScreen(), 150);
+      }
+    } catch(e) {
+      errPage('Erreur de chargement.');
+    }
   }
 
   // ── IMAGE ─────────────────────────────────────────────────────────────────

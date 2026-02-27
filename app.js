@@ -320,8 +320,9 @@ const App = (function () {
       if (!currentBoardId || !window._fbDb) { toast('Firebase non disponible'); return; }
       saveCurrentBoard();
       const url = window.location.origin + window.location.pathname + '?board=' + currentBoardId;
-      navigator.clipboard.writeText(url).catch(() => {});
-      toast('Lien copié dans le presse-papier');
+      navigator.clipboard.writeText(url)
+        .then(() => toast('Lien copié dans le presse-papier'))
+        .catch(() => toast('Lien : ' + url));
     });
 
     // Toolbar — outils (clic + drag)

@@ -323,7 +323,8 @@ const App = (function () {
         return;
       }
       saveCurrentBoard();
-      const url = window.location.origin + window.location.pathname + '?board=' + currentBoardId;
+      // Remplace "ton-site" par le vrai nom que Netlify t'a donné (ou te donnera)
+const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       navigator.clipboard
         .writeText(url)
         .then(() => toast('Lien copié dans le presse-papier'))

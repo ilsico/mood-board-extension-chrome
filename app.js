@@ -312,16 +312,9 @@ const App = (function () {
     addEvt('share-btn', 'click', () => {
       if (!currentBoardId || !window._fbDb) { toast('Firebase non disponible'); return; }
       saveCurrentBoard();
-      const board = boards.find(b => b.id === currentBoardId);
-      if (!board) return;
       const url = window.location.origin + window.location.pathname + '?board=' + currentBoardId;
-      window._fbDb.ref('boards/' + currentBoardId)
-        .set({ name: board.name, elements: board.elements, savedAt: board.savedAt })
-        .then(() => {
-          navigator.clipboard.writeText(url).catch(() => {});
-          toast('Lien copié dans le presse-papier');
-        })
-        .catch(() => toast('Erreur cloud — lien non disponible'));
+      navigator.clipboard.writeText(url).catch(() => {});
+      toast('Lien copié dans le presse-papier');
     });
 
     // Toolbar — outils (clic + drag)
@@ -780,7 +773,7 @@ const App = (function () {
     loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
     document.getElementById('board-title-display').textContent = board.name;
     const shareBtn = document.getElementById('share-btn');
-    if (shareBtn && window._fbDb) shareBtn.style.display = '';
+    if (shareBtn && window._fbDb && !document.body.classList.contains('readonly-mode')) shareBtn.style.display = '';
     document.getElementById('home-screen').style.display = 'none';
     document.getElementById('board-screen').style.display = 'flex';
     // Réattacher les listeners pinch maintenant que canvas-wrapper est visible

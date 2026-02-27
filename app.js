@@ -82,13 +82,19 @@ const App = (function() {
     ['typographie','couleur','logo','image'].forEach(f => { if (!library[f]) library[f] = []; });
   }
 
-  function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveCurrentBoard, 800); }
+  function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveCurrentBoard, 800); scheduleThumbnail(); }
 
   // Miniatures désactivées (cartes accueil sans aperçu)
+  let wheelRaf     = null;
   let thumbTimer = null;
-   function scheduleThumbnail() {
+  function scheduleThumbnail() {
     clearTimeout(thumbTimer);
-    thumbTimer = setTimeout(() => {
+    thumbTimer = setTimeout(function doCapture() {
+      if (isPanning || isTouchPanning || wheelRaf !== null) {
+        clearTimeout(thumbTimer);
+        thumbTimer = setTimeout(doCapture, 7000);
+        return;
+      }
       if (typeof html2canvas === 'undefined') return;
       captureBoardThumbnail()
         .then(({ dataUrl }) => {
@@ -114,7 +120,7 @@ const App = (function() {
           img2.src = dataUrl;
         })
         .catch(() => {});
-    }, 3000);
+    }, 7000);
   }
 
 
@@ -154,7 +160,6 @@ const App = (function() {
     board.elements = elements;
     board.savedAt = Date.now();
     saveBoards();
-    scheduleThumbnail(); // mise à jour miniature en temps réel
   }
 
   /// ── CHARGEMENT INITIAL DES BOARDS ────────────────────────────────────────
@@ -627,6 +632,7 @@ const App = (function() {
   function openBoard(id) {
     const board = boards.find(b => b.id === id);
     if (!board) return;
+    clearTimeout(thumbTimer);
     currentBoardId = id;
     loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
     document.getElementById('board-title-display').textContent = board.name;
@@ -743,6 +749,7 @@ const App = (function() {
       h.style.transform = `scale(${invScale})`;
     });
     updateMultiResizeHandle();
+    scheduleThumbnail();
   }
   let zoomToastTimer;
   function updateZoomDisplay() {
@@ -848,7 +855,6 @@ const App = (function() {
 
   let wheelTargetX = null;
   let wheelTargetY = null;
-  let wheelRaf = null;
 
   // Alt+molette = zoom, molette seule = pan
   // Alt+molette OU Pavé tactile (pinch) = zoom, molette seule = pan

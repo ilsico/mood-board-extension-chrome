@@ -190,9 +190,10 @@ const App = (function () {
     saveBoards();
     // Sync Firebase (fire-and-forget, silencieux)
     if (window._fbDb) {
-      window._fbDb.ref('boards/' + currentBoardId)
+      window._fbDb
+        .ref('boards/' + currentBoardId)
         .set({ name: board.name, elements: board.elements, savedAt: board.savedAt })
-        .catch(e => console.warn('Firebase sync error:', e));
+        .catch((e) => console.warn('Firebase sync error:', e));
     }
   }
 
@@ -317,10 +318,14 @@ const App = (function () {
     addEvt('fit-screen-btn', 'click', () => fitElementsToScreen());
     addEvt('preview-btn', 'click', () => togglePreviewMode());
     addEvt('share-btn', 'click', () => {
-      if (!currentBoardId || !window._fbDb) { toast('Firebase non disponible'); return; }
+      if (!currentBoardId || !window._fbDb) {
+        toast('Firebase non disponible');
+        return;
+      }
       saveCurrentBoard();
       const url = window.location.origin + window.location.pathname + '?board=' + currentBoardId;
-      navigator.clipboard.writeText(url)
+      navigator.clipboard
+        .writeText(url)
         .then(() => toast('Lien copié dans le presse-papier'))
         .catch(() => toast('Lien : ' + url));
     });
@@ -781,7 +786,8 @@ const App = (function () {
     loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
     document.getElementById('board-title-display').textContent = board.name;
     const shareBtn = document.getElementById('share-btn');
-    if (shareBtn && window._fbDb && !document.body.classList.contains('readonly-mode')) shareBtn.style.display = '';
+    if (shareBtn && window._fbDb && !document.body.classList.contains('readonly-mode'))
+      shareBtn.style.display = '';
     document.getElementById('home-screen').style.display = 'none';
     document.getElementById('board-screen').style.display = 'flex';
     // Réattacher les listeners pinch maintenant que canvas-wrapper est visible
@@ -2721,19 +2727,28 @@ const App = (function () {
     const errPage = (msg) => {
       document.body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;background:#f4f4f6;"><div style="font-family:'HelveticaBold',sans-serif;font-size:26px;color:#ff3c00">MOODBOARDS</div><div style="font-size:15px;color:#888">${msg}</div></div>`;
     };
-    if (!window._fbDb) { errPage('Firebase non disponible.'); return; }
+    if (!window._fbDb) {
+      errPage('Firebase non disponible.');
+      return;
+    }
     try {
       const snap = await window._fbDb.ref('boards/' + id).get();
-      if (!snap.exists()) { errPage('Ce moodboard n'existe pas ou a été supprimé.'); return; }
+      if (!snap.exists()) {
+        errPage("Ce moodboard n'existe pas ou a été supprimé.");
+        return;
+      }
       const boardData = snap.val();
       document.body.classList.add('readonly-mode');
       document.getElementById('board-screen').style.display = 'flex';
       document.getElementById('board-title-display').textContent = boardData.name || 'Moodboard';
       document.getElementById('canvas').innerHTML = '';
-      zoomLevel = 1; panX = 0; panY = 0; nextZ = 100;
+      zoomLevel = 1;
+      panX = 0;
+      panY = 0;
+      nextZ = 100;
       applyTransform();
       if (boardData.elements && boardData.elements.length) {
-        boardData.elements.forEach(e => {
+        boardData.elements.forEach((e) => {
           if (e.type === 'caption') {
             const cap = restoreElement(e);
             if (cap) cap.contentEditable = 'false';
@@ -2743,7 +2758,7 @@ const App = (function () {
         });
         setTimeout(() => fitElementsToScreen(), 150);
       }
-    } catch(e) {
+    } catch (e) {
       errPage('Erreur de chargement.');
     }
   }

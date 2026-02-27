@@ -12,6 +12,7 @@ const App = (function () {
   let pendingToolDropPos = null;
   let pinchTouchSetupDone = false; // guard pour les listeners touch pinch (ne s'enregistrent qu'une fois)
   let isPanning = false;
+  let isTouchPanning = false;
   let isPanningMode = false;
   let panStart = { x: 0, y: 0 };
   let history = [];
@@ -2717,7 +2718,7 @@ const App = (function () {
   // ── SHARED BOARD (lecture seule) ────────────────────────────────────────
   async function _loadSharedBoard(id) {
     const errPage = (msg) => {
-      document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;background:#f4f4f6;"><div style="font-family:'HelveticaBold',sans-serif;font-size:26px;color:#ff3c00">MOODBOARDS</div><div style="font-size:15px;color:#888">' + msg + '</div></div>';
+      document.body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;background:#f4f4f6;"><div style="font-family:'HelveticaBold',sans-serif;font-size:26px;color:#ff3c00">MOODBOARDS</div><div style="font-size:15px;color:#888">${msg}</div></div>`;
     };
     if (!window._fbDb) { errPage('Firebase non disponible.'); return; }
     try {

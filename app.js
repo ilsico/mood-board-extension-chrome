@@ -1317,6 +1317,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     wrapper.addEventListener('dragover', (e) => e.preventDefault());
     wrapper.addEventListener('drop', (e) => {
       e.preventDefault();
+      if (document.body.classList.contains('readonly-mode')) return;
       const src = e.dataTransfer.getData('text/plain');
       // Drop depuis la toolbar gauche (tool:note, tool:color, tool:link, tool:file)
       if (src && src.startsWith('tool:')) {
@@ -2372,6 +2373,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (document.body.classList.contains('readonly-mode')) return;
       // Si l'élément fait partie d'une multi-sélection, ne pas désélectionner
       if (!e.shiftKey && !multiSelected.has(el)) selectEl(el);
       // Ajouter l'élément à la multi-sélection si pas encore dedans
@@ -2388,6 +2390,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       rh.addEventListener('mousedown', (e) => {
         e.stopPropagation();
         e.preventDefault();
+        if (document.body.classList.contains('readonly-mode')) return;
         isResizing = true;
         resizeEl = el;
         resizeStartW = parseFloat(el.style.width) || el.offsetWidth;

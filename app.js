@@ -1738,12 +1738,14 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           openVideoLightbox(d.src);
           return;
         }
+        if (document.body.classList.contains('readonly-mode')) return;
         fileReplaceTarget = el;
         document.getElementById('file-input-file').click();
       });
     } else if (wrap) {
       wrap.addEventListener('dblclick', (e) => {
         e.stopPropagation();
+        if (document.body.classList.contains('readonly-mode')) return;
         fileReplaceTarget = el;
         document.getElementById('file-input-file').click();
       });
@@ -3509,6 +3511,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         openVideoLightbox(src, false);
         return;
       }
+      if (document.body.classList.contains('readonly-mode')) return;
       fileReplaceTarget = el;
       document.getElementById('file-input-file').click();
     });

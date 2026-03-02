@@ -1476,24 +1476,27 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         isPanningMode = true;
         document.getElementById('canvas-wrapper').style.cursor = 'grab';
       }
-      if (
-        !isTyping(e) &&
-        (e.ctrlKey || e.metaKey) &&
-        e.shiftKey &&
-        (e.key === 'Z' || e.key === 'z')
-      ) {
-        e.preventDefault();
-        redo();
-      } else if (
-        !isTyping(e) &&
-        (e.ctrlKey || e.metaKey) &&
-        !e.shiftKey &&
-        (e.key === 'z' || e.key === 'Z')
-      ) {
-        e.preventDefault();
-        undo();
+      if (!document.body.classList.contains('readonly-mode')) {
+        if (
+          !isTyping(e) &&
+          (e.ctrlKey || e.metaKey) &&
+          e.shiftKey &&
+          (e.key === 'Z' || e.key === 'z')
+        ) {
+          e.preventDefault();
+          redo();
+        } else if (
+          !isTyping(e) &&
+          (e.ctrlKey || e.metaKey) &&
+          !e.shiftKey &&
+          (e.key === 'z' || e.key === 'Z')
+        ) {
+          e.preventDefault();
+          undo();
+        }
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isTyping(e)) {
+        if (document.body.classList.contains('readonly-mode')) return;
         e.preventDefault();
         deleteSelected();
       }
@@ -1526,6 +1529,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     // ── COLLER IMAGE (paste natif, sans demande de permission) ───────────────
     document.addEventListener('paste', (e) => {
       if (isTyping(e)) return;
+      if (document.body.classList.contains('readonly-mode')) return;
       const items = e.clipboardData && e.clipboardData.items;
       if (!items) return;
       for (const item of items) {

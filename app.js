@@ -1649,6 +1649,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       ta.value = el.dataset.savedata;
     let _noteValueOnFocus = '';
     function activateNoteEdit(e) {
+      if (document.body.classList.contains('readonly-mode')) return;
       e.stopPropagation();
       e.preventDefault();
       ta.style.pointerEvents = 'auto';
@@ -2870,6 +2871,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     let _noteValueOnFocus = '';
     // Double-clic sur le wrapper ou le textarea : activer l'édition + panneau texte
     function activateNoteEdit(e) {
+      if (document.body.classList.contains('readonly-mode')) return;
       e.stopPropagation();
       e.preventDefault();
       ta.style.pointerEvents = 'auto';

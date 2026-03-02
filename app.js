@@ -230,7 +230,15 @@ const App = (function () {
   }
 
   // ── INIT ─────────────────────────────────────────────────────────────────
+  function preloadLoaderFrames() {
+    for (let i = 1; i <= 9; i++) {
+      const img = new Image();
+      img.src = `loading/frame${i}.png`;
+    }
+  }
+
   async function init() {
+    preloadLoaderFrames();
     // ── Initialisations partagées (mode normal ET lecture seule) ──
     setupCanvasEvents();
     setupKeyboard();
@@ -789,35 +797,44 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   function openBoard(id) {
     const board = boards.find((b) => b.id === id);
     if (!board) return;
-    clearTimeout(thumbTimer);
-    currentBoardId = id;
-    loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
-    document.getElementById('board-title-display').textContent = board.name;
-    const shareBtn = document.getElementById('share-btn');
-    if (shareBtn && window._fbDb && !document.body.classList.contains('readonly-mode'))
-      shareBtn.style.display = '';
-    document.getElementById('home-screen').style.display = 'none';
-    document.getElementById('board-screen').style.display = 'flex';
-    // Réattacher les listeners pinch maintenant que canvas-wrapper est visible
-    if (window._reattachPinch) window._reattachPinch();
-    document.getElementById('canvas').innerHTML = '';
-    zoomLevel = 1;
-    panX = 0;
-    panY = 0;
-    nextZ = 100;
-    history = [];
-    historyIndex = -1;
-    selectedEl = null;
-    multiSelected.clear();
-    applyTransform();
-    updateZoomDisplay();
-    if (board.elements && board.elements.length) {
-      board.elements.forEach((e) => restoreElement(e));
-      // Attendre le rendu (les images sont asynchrones), puis centrer
-      setTimeout(() => fitElementsToScreen(), 120);
-    }
-    pushHistory();
-    renderPanelLib();
+    const loaderOverlay = document.getElementById('loader-overlay');
+    const loaderFrame = loaderOverlay.querySelector('.loader-frame');
+    loaderFrame.style.animation = 'none';
+    void loaderFrame.offsetWidth;
+    loaderFrame.style.animation = '';
+    loaderOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => setTimeout(() => { // setTimeout(0) : laisse le navigateur peindre le loader avant le code lourd
+      clearTimeout(thumbTimer);
+      currentBoardId = id;
+      loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
+      document.getElementById('board-title-display').textContent = board.name;
+      const shareBtn = document.getElementById('share-btn');
+      if (shareBtn && window._fbDb && !document.body.classList.contains('readonly-mode'))
+        shareBtn.style.display = '';
+      document.getElementById('home-screen').style.display = 'none';
+      document.getElementById('board-screen').style.display = 'flex';
+      // Réattacher les listeners pinch maintenant que canvas-wrapper est visible
+      if (window._reattachPinch) window._reattachPinch();
+      document.getElementById('canvas').innerHTML = '';
+      zoomLevel = 1;
+      panX = 0;
+      panY = 0;
+      nextZ = 100;
+      history = [];
+      historyIndex = -1;
+      selectedEl = null;
+      multiSelected.clear();
+      applyTransform();
+      updateZoomDisplay();
+      if (board.elements && board.elements.length) {
+        board.elements.forEach((e) => restoreElement(e));
+        // Attendre le rendu (les images sont asynchrones), puis centrer
+        setTimeout(() => fitElementsToScreen(), 120);
+      }
+      pushHistory();
+      renderPanelLib();
+      setTimeout(() => loaderOverlay.classList.add('hidden'), 2000);
+    }, 0));
   }
 
   function goHome() {
@@ -942,6 +959,28 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   }
 
   // ── CANVAS / ZOOM / PAN ──────────────────────────────────────────────────
+  function clampPan() {
+    const wrapper = document.getElementById('canvas-wrapper');
+    const vw = wrapper ? wrapper.offsetWidth : window.innerWidth;
+    const vh = wrapper ? wrapper.offsetHeight : window.innerHeight;
+    const els = Array.from(document.querySelectorAll('#canvas .board-element'));
+    let minX, minY, maxX, maxY;
+    if (els.length) {
+      minX = Math.min(...els.map((e) => parseFloat(e.style.left) || 0));
+      minY = Math.min(...els.map((e) => parseFloat(e.style.top) || 0));
+      maxX = Math.max(...els.map((e) => (parseFloat(e.style.left) || 0) + (parseFloat(e.style.width) || 0)));
+      maxY = Math.max(...els.map((e) => (parseFloat(e.style.top) || 0) + (parseFloat(e.style.height) || 0)));
+    } else {
+      minX = 0; minY = 0; maxX = vw / zoomLevel; maxY = vh / zoomLevel;
+    }
+    const W = (maxX - minX) * zoomLevel;
+    const H = (maxY - minY) * zoomLevel;
+    const marginX = Math.max(0.5 * W, 200);
+    const marginY = Math.max(0.5 * H, 200);
+    panX = Math.min(Math.max(panX, -marginX - maxX * zoomLevel), vw + marginX - minX * zoomLevel);
+    panY = Math.min(Math.max(panY, -marginY - maxY * zoomLevel), vh + marginY - minY * zoomLevel);
+  }
+
   function applyTransform() {
     // Le bloc de restriction à 0.15 a été retiré pour supprimer le glitch
     document.getElementById('canvas').style.transform =
@@ -1119,6 +1158,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           // Navigation (pan) classique à 2 doigts sans lissage
           panX -= e.deltaX;
           panY -= e.deltaY;
+          clampPan();
           applyTransform();
         }
       },
@@ -1182,6 +1222,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           // Pan
           panX = initialPanX + (currentX - touchStartX);
           panY = initialPanY + (currentY - touchStartY);
+          clampPan();
 
           // Pinch-to-zoom
           if (initialPinchDist > 0) {
@@ -1279,6 +1320,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       if (isPanning) {
         panX = e.clientX - panStart.x;
         panY = e.clientY - panStart.y;
+        clampPan();
         applyTransform();
       }
       if (isResizing && resizeEl) handleResizeMouse(e);

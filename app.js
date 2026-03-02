@@ -231,29 +231,7 @@ const App = (function () {
 
   // ── INIT ─────────────────────────────────────────────────────────────────
   async function init() {
-    // Détection mode partage : ?board=ID
-    const _sharedId = new URLSearchParams(window.location.search).get('board');
-    if (_sharedId) {
-      await _loadSharedBoard(_sharedId);
-      return;
-    }
-    await loadBoardsFromStorage();
-
-    if (!boards.length) addBoard('Mon premier moodboard', false);
-    // Migration : si une bibliothèque globale (mb_library) existe, la copier dans le premier board
-    const legacyLib = localStorage.getItem('mb_library');
-    if (legacyLib && boards.length) {
-      try {
-        const parsed = JSON.parse(legacyLib);
-        const hasContent = Object.values(parsed).some((arr) => arr && arr.length > 0);
-        if (hasContent && !boards[0].library) {
-          boards[0].library = parsed;
-          saveBoards();
-        }
-      } catch (_) {}
-      localStorage.removeItem('mb_library');
-    }
-    renderHome();
+    // ── Initialisations partagées (mode normal ET lecture seule) ──
     setupCanvasEvents();
     setupKeyboard();
     setupMultiResizeHandle();
@@ -299,6 +277,35 @@ const App = (function () {
       }
     });
 
+    // ── Détection mode partage : ?board=ID ──
+    const _sharedId = new URLSearchParams(window.location.search).get('board');
+    if (_sharedId) {
+      // Boutons de vue nécessaires en lecture seule
+      const _ae = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+      _ae('fit-screen-btn', () => fitElementsToScreen());
+      _ae('preview-btn', () => togglePreviewMode());
+      await _loadSharedBoard(_sharedId);
+      return;
+    }
+
+    // ── Mode normal uniquement ──
+    await loadBoardsFromStorage();
+
+    if (!boards.length) addBoard('Mon premier moodboard', false);
+    // Migration : si une bibliothèque globale (mb_library) existe, la copier dans le premier board
+    const legacyLib = localStorage.getItem('mb_library');
+    if (legacyLib && boards.length) {
+      try {
+        const parsed = JSON.parse(legacyLib);
+        const hasContent = Object.values(parsed).some((arr) => arr && arr.length > 0);
+        if (hasContent && !boards[0].library) {
+          boards[0].library = parsed;
+          saveBoards();
+        }
+      } catch (_) {}
+      localStorage.removeItem('mb_library');
+    }
+    renderHome();
     setupUIEvents(); // <-- APPEL DE LA FONCTION (très important)
   } // <--- ACCOLADE MANQUANTE POUR FERMER LA FONCTION init()
 

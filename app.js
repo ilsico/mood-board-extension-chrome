@@ -1220,6 +1220,13 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         return;
       }
 
+      if (document.body.classList.contains('readonly-mode')) {
+        isPanning = true;
+        panStart = { x: e.clientX - panX, y: e.clientY - panY };
+        wrapper.style.cursor = 'grabbing';
+        return;
+      }
+
       // Rectangle de sélection
       hideContextMenu();
       if (!e.shiftKey) {

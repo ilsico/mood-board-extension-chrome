@@ -1124,6 +1124,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     let touchStartY = 0;
     let initialPanX = 0;
     let initialPanY = 0;
+    let initialPinchDist = 0;
+    let initialZoomForPinch = 1;
 
     wrapper.addEventListener(
       'touchstart',
@@ -1148,6 +1150,11 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
             cancelAnimationFrame(wheelRaf);
             wheelRaf = null;
           }
+
+          const dx = e.touches[1].clientX - e.touches[0].clientX;
+          const dy = e.touches[1].clientY - e.touches[0].clientY;
+          initialPinchDist = Math.sqrt(dx * dx + dy * dy);
+          initialZoomForPinch = zoomLevel;
         }
       },
       { passive: false }
@@ -1161,13 +1168,31 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         if (isTouchPanning && e.touches.length === 2) {
           e.preventDefault();
 
-          // Nouveau point central
+          // Point central courant
           const currentX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
           const currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
 
-          // Déplacement totalement libre en diagonale (aucun verrouillage d'axe)
+          // Pan
           panX = initialPanX + (currentX - touchStartX);
           panY = initialPanY + (currentY - touchStartY);
+
+          // Pinch-to-zoom
+          if (initialPinchDist > 0) {
+            const dx = e.touches[1].clientX - e.touches[0].clientX;
+            const dy = e.touches[1].clientY - e.touches[0].clientY;
+            const newDist = Math.sqrt(dx * dx + dy * dy);
+            const ratio = newDist / initialPinchDist;
+            const newZ = Math.min(Math.max(initialZoomForPinch * ratio, 0.15), 4);
+
+            if (Math.abs(newZ - zoomLevel) > 0.001) {
+              const rect = wrapper.getBoundingClientRect();
+              const mx = currentX - rect.left;
+              const my = currentY - rect.top;
+              panX = mx - (mx - panX) * (newZ / zoomLevel);
+              panY = my - (my - panY) * (newZ / zoomLevel);
+              zoomLevel = newZ;
+            }
+          }
 
           applyTransform();
         }

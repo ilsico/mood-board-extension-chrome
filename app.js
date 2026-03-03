@@ -4432,6 +4432,13 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       // Ignorer si le drag vient du panneau lui-même (évite la duplication)
       if (isDraggingFromPanel) {
         isDraggingFromPanel = false;
+        const _pv = document.getElementById('drag-custom-preview');
+        if (_pv._docDragOver) {
+          document.removeEventListener('dragover', _pv._docDragOver);
+          _pv._docDragOver = null;
+        }
+        _pv.style.display = 'none';
+        _pv._inCanvas = false;
         return;
       }
       const files = Array.from(e.dataTransfer.files).filter(isImageFile);

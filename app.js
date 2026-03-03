@@ -4276,6 +4276,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         preview._thumbH = thumbRect.height || 120;
 
         // Taille pleine : calculer via Image() asynchrone
+        preview._fullW = 220;
+        preview._fullH = 170;
         const sizeCalc = new Image();
         sizeCalc.onload = () => {
           const wrapEl = document.getElementById('canvas-wrapper');

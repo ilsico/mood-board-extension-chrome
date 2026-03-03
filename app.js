@@ -2291,10 +2291,14 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         if (el.dataset.type === 'image' && _imgStore.has(el.dataset.id))
           _imgStore.set(copy.dataset.id, _imgStore.get(el.dataset.id));
         copy.style.zIndex = ++nextZ;
-        copy.style.left = dragEl.style.left;
-        copy.style.top = dragEl.style.top;
+        // Position copy at current visual position (curX/curY), not frozen style.left/top
+        copy.style.left = curX + 'px';
+        copy.style.top  = curY + 'px';
+        copy.style.transform = '';
+        // Restore original element to its pre-drag position and clear its transform
         el.style.left = origLeft + 'px';
-        el.style.top = origTop + 'px';
+        el.style.top  = origTop + 'px';
+        el.style.transform = '';
         document.getElementById('canvas').appendChild(copy);
         attachElementEvents(copy);
         if (copy.dataset.type === 'color') reattachColorEvents(copy);
@@ -2303,8 +2307,9 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         dragEl = copy;
         selectEl(dragEl);
         excludeSet.add(dragEl);
-        startLeft = parseFloat(copy.style.left) || 0;
-        startTop = parseFloat(copy.style.top) || 0;
+        // startLeft/startTop reset to current position so translate3d offset starts at 0
+        startLeft = curX;
+        startTop  = curY;
       }
 
       if (isAltDown) doDuplicate();

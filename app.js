@@ -1401,6 +1401,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         _pvEl._docDragOver = null;
       }
       _pvEl._inCanvas = false;
+      const _pvW = (_pvEl._fullW || 220) / (zoomLevel || 1);
+      const _pvH = (_pvEl._fullH || 170) / (zoomLevel || 1);
       if (document.body.classList.contains('readonly-mode')) return;
       const src = e.dataTransfer.getData('text/plain');
       // Drop depuis la toolbar gauche (tool:note, tool:color, tool:link, tool:file)
@@ -1430,49 +1432,27 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       // Drop multiple depuis le panneau bibliothèque
       if (src === 'multi-lib' && draggedLibItems.length > 0) {
         const rect = wrapper.getBoundingClientRect();
+        const w = _pvW;
+        const h = _pvH;
         draggedLibItems.forEach((libItem, i) => {
-          const tmpImg = new Image();
-          tmpImg.onload = () => {
-            const w = tmpImg.naturalWidth || 220;
-            const h = tmpImg.naturalHeight || 170;
-            const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
-            const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 30;
-            applyDropSnap(createImageElement(libItem.src, x, y, w, h));
-            pushHistory();
-            scheduleSave();
-          };
-          tmpImg.onerror = () => {
-            const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 30;
-            const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 30;
-            applyDropSnap(createImageElement(libItem.src, x, y, 220, 170));
-            pushHistory();
-            scheduleSave();
-          };
-          tmpImg.src = libItem.src;
+          const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
+          const y = (e.clientY - rect.top  - panY) / zoomLevel - h / 2 + i * 30;
+          createImageElement(libItem.src, x, y, w, h);
+          pushHistory();
+          scheduleSave();
         });
         draggedLibItems = [];
         return;
       }
       if (src && src.startsWith('data:')) {
         const rect = wrapper.getBoundingClientRect();
-        const tmpImg = new Image();
-        tmpImg.onload = () => {
-          const w = tmpImg.naturalWidth || 220;
-          const h = tmpImg.naturalHeight || 170;
-          const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2;
-          const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2;
-          applyDropSnap(createImageElement(src, x, y, w, h));
-          pushHistory();
-          scheduleSave();
-        };
-        tmpImg.onerror = () => {
-          const x = (e.clientX - rect.left - panX) / zoomLevel - 110;
-          const y = (e.clientY - rect.top - panY) / zoomLevel - 85;
-          applyDropSnap(createImageElement(src, x, y, 220, 170));
-          pushHistory();
-          scheduleSave();
-        };
-        tmpImg.src = src;
+        const w = _pvW;
+        const h = _pvH;
+        const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2;
+        const y = (e.clientY - rect.top  - panY) / zoomLevel - h / 2;
+        createImageElement(src, x, y, w, h);
+        pushHistory();
+        scheduleSave();
         return;
       }
       // Fichiers images droppés directement

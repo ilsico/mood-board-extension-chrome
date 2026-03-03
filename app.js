@@ -1390,16 +1390,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     // Drop depuis panneau lib
     wrapper.addEventListener('dragover', (e) => {
       e.preventDefault();
-      if (isDraggingFromPanel) {
-        const preview = document.getElementById('drag-custom-preview');
-        preview.style.left = e.clientX + 'px';
-        preview.style.top = e.clientY + 'px';
-        if (preview.style.display !== 'block') preview.style.display = 'block';
-      }
-    });
-    wrapper.addEventListener('dragleave', () => {
-      if (isDraggingFromPanel)
-        document.getElementById('drag-custom-preview').style.display = 'none';
+      // position et affichage gérés par le listener document (dragstart lib item)
     });
     wrapper.addEventListener('drop', (e) => {
       e.preventDefault();
@@ -4303,6 +4294,41 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         preview.style.height = preview._thumbH + 'px';
         preview.classList.remove('preview-active-snap');
         preview._inCanvas = false;
+        // Listener document pour détection zone canvas vs panel
+        const onDocDragOver = (ev) => {
+          if (!isDraggingFromPanel) return;
+          const p = document.getElementById('drag-custom-preview');
+          p.style.left = ev.clientX + 'px';
+          p.style.top  = ev.clientY + 'px';
+          if (p.style.display !== 'block') p.style.display = 'block';
+
+          if (ev.target.closest('#canvas-wrapper')) {
+            // ZONE CANVAS : passer en taille pleine + jouer le snap (une seule fois)
+            if (!p._inCanvas) {
+              const fw = p._fullW || 220;
+              const fh = p._fullH || 170;
+              p.style.width  = fw + 'px';
+              p.style.height = fh + 'px';
+              p.classList.remove('preview-active-snap');
+              void p.offsetWidth; // force reflow pour relancer l'animation CSS
+              p.classList.add('preview-active-snap');
+              p._inCanvas = true;
+            }
+          } else {
+            // ZONE PANEL ou autre : revenir en taille thumbnail
+            if (p._inCanvas) {
+              p.style.width  = (p._thumbW || 132) + 'px';
+              p.style.height = (p._thumbH || 120) + 'px';
+              p.classList.remove('preview-active-snap');
+              p._inCanvas = false;
+            }
+          }
+        };
+        document.addEventListener('dragover', onDocDragOver);
+
+        // Stocker la ref pour cleanup dans dragend
+        preview._docDragOver = onDocDragOver;
+
         // Ghost natif invisible (1×1 transparent) pour masquer le fantôme navigateur
         const emptyImg = document.createElement('img');
         emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
@@ -4313,7 +4339,14 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       div.addEventListener('dragend', () => {
         isDraggingFromPanel = false;
         draggedLibItemId = null;
-        document.getElementById('drag-custom-preview').style.display = 'none';
+        const p = document.getElementById('drag-custom-preview');
+        if (p._docDragOver) {
+          document.removeEventListener('dragover', p._docDragOver);
+          p._docDragOver = null;
+        }
+        p._inCanvas = false;
+        p.classList.remove('preview-active-snap');
+        p.style.display = 'none';
       });
 
       div.appendChild(indicator);

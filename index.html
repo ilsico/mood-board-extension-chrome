@@ -1551,6 +1551,35 @@
         display: none !important;
       }
 
+      /* ===== ANIMATIONS ÉLÉMENTS ===== */
+      @keyframes dropSnap {
+        0%   { transform: scale(0.95); }
+        50%  { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
+      .element-drop-snap {
+        transform-origin: center center;
+        animation: dropSnap 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+      }
+      #drag-custom-preview {
+        display: none;
+        position: fixed;
+        z-index: 9998;
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        object-fit: cover;
+        opacity: 1;
+        transition: width 0.2s ease-out, height 0.2s ease-out;
+      }
+      @keyframes previewSnap {
+        0%   { transform: translate(-50%, -50%) scale(0.9); }
+        50%  { transform: translate(-50%, -50%) scale(1.05); }
+        100% { transform: translate(-50%, -50%) scale(1); }
+      }
+      .preview-active-snap {
+        animation: previewSnap 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+      }
+
       /* ===== LOADER OVERLAY ===== */
       @keyframes playFrames {
         0%   { background-image: url('loading/frame1.png'); }
@@ -1700,6 +1729,7 @@
     </style>
   </head>
   <body>
+    <img id="drag-custom-preview" src="" alt="">
     <div id="loader-overlay" class="hidden">
       <div class="loader-frame"></div>
     </div>

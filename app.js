@@ -2282,6 +2282,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       const excludeSet = new Set([el]);
       let startLeft = parseFloat(dragEl.style.left) || 0;
       let startTop = parseFloat(dragEl.style.top) || 0;
+      let curX = startLeft, curY = startTop;
 
       function doDuplicate() {
         if (duplicated) return;
@@ -2319,8 +2320,6 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
 
       let targetX = startLeft,
         targetY = startTop;
-      let curX = startLeft,
-        curY = startTop;
       let rafId = null;
       let dragActive = true;
       let shiftAxisX = null;
@@ -2542,9 +2541,11 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       // Positions courantes avant duplication
       const curPositions = new Map();
       activeGroup.forEach((el) => {
+        const s = starts.get(el);
+        if (!s) return;
         curPositions.set(el, {
-          left: parseFloat(el.style.left) || 0,
-          top: parseFloat(el.style.top) || 0,
+          left: s.left + curDX,
+          top: s.top + curDY,
         });
       });
       activeGroup.forEach((el) => {
@@ -2655,10 +2656,12 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           const s = starts.get(pivotEl);
           if (s) {
             const snapRect = {
-              left: s.left + dx,
-              top: s.top + dy,
-              width: pivotEl.offsetWidth,
-              height: pivotEl.offsetHeight,
+              l: s.left + dx,
+              t: s.top + dy,
+              r: s.left + dx + pivotEl.offsetWidth,
+              b: s.top + dy + pivotEl.offsetHeight,
+              w: pivotEl.offsetWidth,
+              h: pivotEl.offsetHeight,
             };
             const { dx: sdx, dy: sdy, guidesH, guidesV } = computeSnap(snapRect, others);
             clearSnapGuides();

@@ -1394,7 +1394,13 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     });
     wrapper.addEventListener('drop', (e) => {
       e.preventDefault();
-      document.getElementById('drag-custom-preview').style.display = 'none';
+      const _pvEl = document.getElementById('drag-custom-preview');
+      _pvEl.style.display = 'none';
+      if (_pvEl._docDragOver) {
+        document.removeEventListener('dragover', _pvEl._docDragOver);
+        _pvEl._docDragOver = null;
+      }
+      _pvEl._inCanvas = false;
       if (document.body.classList.contains('readonly-mode')) return;
       const src = e.dataTransfer.getData('text/plain');
       // Drop depuis la toolbar gauche (tool:note, tool:color, tool:link, tool:file)

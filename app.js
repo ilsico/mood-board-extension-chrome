@@ -2324,6 +2324,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       let rafId = null;
       let dragActive = true;
       let shiftAxisX = null;
+      let _frameCount = 0;
 
       const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -2336,15 +2337,36 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
 
         const hasMoved = Math.abs(curX - prevX) > 0.05 || Math.abs(curY - prevY) > 0.05;
         if (hasMoved) {
-          dragEl.style.left = curX + 'px';
-          dragEl.style.top = curY + 'px';
+          // Visual offset from frozen style.left/top
+          let vx = curX - startLeft;
+          let vy = curY - startTop;
 
+          // Snap: compute visual pull without touching style.left/top or targetX/targetY
           if (ctrlSnap) {
-            applySnap(dragEl, excludeSet);
+            const others = getAllElements(excludeSet);
+            if (others.length) {
+              const snapRect = {
+                l: curX, t: curY,
+                r: curX + dragEl.offsetWidth, b: curY + dragEl.offsetHeight,
+                w: dragEl.offsetWidth, h: dragEl.offsetHeight,
+              };
+              const { dx: sdx, dy: sdy, guidesH, guidesV } = computeSnap(snapRect, others);
+              clearSnapGuides();
+              if (sdx) vx += sdx;
+              if (sdy) vy += sdy;
+              guidesH.forEach((pos) => showSnapGuide(true, pos));
+              guidesV.forEach((pos) => showSnapGuide(false, pos));
+            }
           } else {
             clearSnapGuides();
           }
-          updateConnectionsForEl(dragEl);
+
+          dragEl.style.transform = `translate3d(${vx}px,${vy}px,0)`;
+
+          // Throttle: update connections every other frame
+          if (++_frameCount % 2 === 0) {
+            updateConnectionsForEl(dragEl);
+          }
 
           const _elId = dragEl.dataset.id;
           if (_elId) {
@@ -2364,10 +2386,6 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           doDuplicate();
           currentStartMX = (ev.clientX - canvasRect.left) / zoomLevel;
           currentStartMY = (ev.clientY - canvasRect.top) / zoomLevel;
-          startLeft = parseFloat(dragEl.style.left) || 0;
-          startTop = parseFloat(dragEl.style.top) || 0;
-          curX = startLeft;
-          curY = startTop;
           targetX = startLeft;
           targetY = startTop;
           shiftAxisX = prevAxis;

@@ -1964,9 +1964,17 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   function getRect(el) {
     const l = parseFloat(el.style.left) || 0;
     const t = parseFloat(el.style.top) || 0;
+    let tx = 0, ty = 0;
+    const tr = el.style.transform;
+    if (tr) {
+      const m = tr.match(/translate3d\(\s*([-\d.]+)px,\s*([-\d.]+)px/);
+      if (m) { tx = parseFloat(m[1]); ty = parseFloat(m[2]); }
+    }
+    const left = l + tx;
+    const top  = t + ty;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
-    return { l, t, r: l + w, b: t + h, cx: l + w / 2, cy: t + h / 2, w, h };
+    return { l: left, t: top, r: left + w, b: top + h, cx: left + w / 2, cy: top + h / 2, w, h };
   }
 
   function clearSnapGuides() {
@@ -3787,9 +3795,17 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   }
   // ── CONNEXIONS ────────────────────────────────────────────────────────────
   function getElCenter(el) {
+    const l = parseFloat(el.style.left) || 0;
+    const t = parseFloat(el.style.top) || 0;
+    let tx = 0, ty = 0;
+    const tr = el.style.transform;
+    if (tr) {
+      const m = tr.match(/translate3d\(\s*([-\d.]+)px,\s*([-\d.]+)px/);
+      if (m) { tx = parseFloat(m[1]); ty = parseFloat(m[2]); }
+    }
     return {
-      x: (parseFloat(el.style.left) || 0) + el.offsetWidth / 2,
-      y: (parseFloat(el.style.top) || 0) + el.offsetHeight / 2,
+      x: l + tx + el.offsetWidth / 2,
+      y: t + ty + el.offsetHeight / 2,
     };
   }
 

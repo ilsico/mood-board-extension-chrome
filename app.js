@@ -1388,9 +1388,22 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     });
 
     // Drop depuis panneau lib
-    wrapper.addEventListener('dragover', (e) => e.preventDefault());
+    wrapper.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (isDraggingFromPanel) {
+        const preview = document.getElementById('drag-custom-preview');
+        preview.style.left = e.clientX + 'px';
+        preview.style.top = e.clientY + 'px';
+        if (preview.style.display !== 'block') preview.style.display = 'block';
+      }
+    });
+    wrapper.addEventListener('dragleave', () => {
+      if (isDraggingFromPanel)
+        document.getElementById('drag-custom-preview').style.display = 'none';
+    });
     wrapper.addEventListener('drop', (e) => {
       e.preventDefault();
+      document.getElementById('drag-custom-preview').style.display = 'none';
       if (document.body.classList.contains('readonly-mode')) return;
       const src = e.dataTransfer.getData('text/plain');
       // Drop depuis la toolbar gauche (tool:note, tool:color, tool:link, tool:file)
@@ -1427,14 +1440,14 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
             const h = tmpImg.naturalHeight || 170;
             const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
             const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 30;
-            createImageElement(libItem.src, x, y, w, h);
+            applyDropSnap(createImageElement(libItem.src, x, y, w, h));
             pushHistory();
             scheduleSave();
           };
           tmpImg.onerror = () => {
             const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 30;
             const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 30;
-            createImageElement(libItem.src, x, y, 220, 170);
+            applyDropSnap(createImageElement(libItem.src, x, y, 220, 170));
             pushHistory();
             scheduleSave();
           };
@@ -1451,14 +1464,14 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           const h = tmpImg.naturalHeight || 170;
           const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2;
           const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2;
-          createImageElement(src, x, y, w, h);
+          applyDropSnap(createImageElement(src, x, y, w, h));
           pushHistory();
           scheduleSave();
         };
         tmpImg.onerror = () => {
           const x = (e.clientX - rect.left - panX) / zoomLevel - 110;
           const y = (e.clientY - rect.top - panY) / zoomLevel - 85;
-          createImageElement(src, x, y, 220, 170);
+          applyDropSnap(createImageElement(src, x, y, 220, 170));
           pushHistory();
           scheduleSave();
         };
@@ -1480,14 +1493,14 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
                 const h = tmpImg.naturalHeight || 170;
                 const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 24;
                 const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 24;
-                createImageElement(src, x, y, w, h);
+                applyDropSnap(createImageElement(src, x, y, w, h));
                 pushHistory();
                 scheduleSave();
               };
               tmpImg.onerror = () => {
                 const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 24;
                 const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 24;
-                createImageElement(src, x, y, 220, 170);
+                applyDropSnap(createImageElement(src, x, y, 220, 170));
                 pushHistory();
                 scheduleSave();
               };
@@ -1916,28 +1929,42 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     });
   }
 
+  function applyDropSnap(el) {
+    if (!el) return;
+    el.classList.add('element-drop-snap');
+    setTimeout(() => el.classList.remove('element-drop-snap'), 400);
+  }
+
+  function animateRemove(el, onDone) {
+    el.style.pointerEvents = 'none';
+    el.style.transition = 'transform 0.18s ease-in, opacity 0.18s ease-in';
+    el.style.transformOrigin = 'center center';
+    el.style.transform = 'scale(0)';
+    el.style.opacity = '0';
+    setTimeout(() => { el.remove(); if (onDone) onDone(); }, 180);
+  }
+
   function deleteSelected() {
-    let count = 0;
-    // Supprimer la multi-sélection
+    const toDelete = [];
     multiSelected.forEach((el) => {
       removeConnectionsForEl(el);
       removeCaptionsForEl(el);
-      el.remove();
-      count++;
+      toDelete.push(el);
     });
     multiSelected.clear();
     if (selectedEl) {
       removeConnectionsForEl(selectedEl);
       removeCaptionsForEl(selectedEl);
-      selectedEl.remove();
+      toDelete.push(selectedEl);
       selectedEl = null;
-      count++;
     }
-    if (count > 0) {
-      pushHistory();
-      scheduleSave();
-      toast(count > 1 ? count + ' éléments supprimés' : 'Supprimé');
-    } else toast('Aucun élément sélectionné');
+    if (!toDelete.length) { toast('Aucun élément sélectionné'); return; }
+    toast(toDelete.length > 1 ? toDelete.length + ' éléments supprimés' : 'Supprimé');
+    let done = 0;
+    toDelete.forEach((el) => animateRemove(el, () => {
+      done++;
+      if (done === toDelete.length) { pushHistory(); scheduleSave(); }
+    }));
   }
 
   function clearBoard() {
@@ -3654,25 +3681,23 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     const el = btn.closest('.board-element');
     if (!el) return;
     if (multiSelected.has(el) && multiSelected.size > 0) {
-      // Supprimer toute la sélection
       const toDelete = [...multiSelected];
       if (selectedEl && !multiSelected.has(selectedEl)) toDelete.push(selectedEl);
+      multiSelected.clear();
+      selectedEl = null;
+      let done = 0;
       toDelete.forEach((e) => {
         removeConnectionsForEl(e);
         removeCaptionsForEl(e);
-        e.remove();
+        animateRemove(e, () => { done++; if (done === toDelete.length) { pushHistory(); scheduleSave(); } });
       });
-      multiSelected.clear();
-      selectedEl = null;
       toast(toDelete.length + ' éléments supprimés');
     } else {
       removeConnectionsForEl(el);
       removeCaptionsForEl(el);
-      el.remove();
       selectedEl = null;
+      animateRemove(el, () => { pushHistory(); scheduleSave(); });
     }
-    pushHistory();
-    scheduleSave();
   }
   function duplicateEl(btn) {
     const el = btn.closest('.board-element');
@@ -3722,11 +3747,15 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.getElementById('ctx-img-caption').style.display = isImage ? '' : 'none';
     document.getElementById('ctx-connect-divider').style.display = canConnect ? '' : 'none';
     document.getElementById('ctx-connect').style.display = canConnect ? '' : 'none';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
     menu.style.display = 'block';
-    const mw = 180,
-      mh = 180;
-    menu.style.left = (x + mw > window.innerWidth ? x - mw : x) + 'px';
-    menu.style.top = (y + mh > window.innerHeight ? y - mh : y) + 'px';
+    const mw = menu.offsetWidth;
+    const mh = menu.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    menu.style.left = (x + mw > vw ? Math.max(0, x - mw) : x) + 'px';
+    menu.style.top = (y + mh > vh ? Math.max(0, y - mh) : y) + 'px';
   }
 
   function ctxDownloadImage() {
@@ -4046,12 +4075,12 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   }
   function ctxDelete() {
     if (ctxTargetEl) {
-      removeConnectionsForEl(ctxTargetEl);
-      removeCaptionsForEl(ctxTargetEl);
-      ctxTargetEl.remove();
+      const el = ctxTargetEl;
+      ctxTargetEl = null;
       selectedEl = null;
-      pushHistory();
-      scheduleSave();
+      removeConnectionsForEl(el);
+      removeCaptionsForEl(el);
+      animateRemove(el, () => { pushHistory(); scheduleSave(); });
     }
     hideContextMenu();
   }
@@ -4236,20 +4265,53 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           e.dataTransfer.setData('text/plain', item.src);
         }
         isDraggingFromPanel = true;
-        // Ghost = image seule sous le curseur
-        const ghost = new Image();
-        ghost.src = item.src;
-        ghost.style.cssText =
-          'position:fixed;top:-200px;left:-200px;max-width:80px;max-height:80px;pointer-events:none;';
-        document.body.appendChild(ghost);
-        e.dataTransfer.setDragImage(ghost, 40, 40);
-        setTimeout(() => {
-          if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
-        }, 0);
+        // Preview custom : suit le curseur, vignette → taille pleine selon zone
+        const preview = document.getElementById('drag-custom-preview');
+        preview.src = item.src;
+
+        // Taille thumbnail : lire la taille rendue de l'img dans le panel
+        const itemImg = div.querySelector('img');
+        const thumbRect = itemImg.getBoundingClientRect();
+        preview._thumbW = thumbRect.width  || 132;
+        preview._thumbH = thumbRect.height || 120;
+
+        // Taille pleine : calculer via Image() asynchrone
+        const sizeCalc = new Image();
+        sizeCalc.onload = () => {
+          const wrapEl = document.getElementById('canvas-wrapper');
+          const vw = (wrapEl ? wrapEl.clientWidth : window.innerWidth) / (zoomLevel || 1);
+          const vh = (wrapEl ? wrapEl.clientHeight : window.innerHeight) / (zoomLevel || 1);
+          const maxDim = Math.max(vw, vh) * 0.2;
+          let fw = sizeCalc.naturalWidth || 220;
+          let fh = sizeCalc.naturalHeight || 170;
+          if (fw > maxDim) { fh = Math.round(fh * maxDim / fw); fw = Math.round(maxDim); }
+          if (fh > maxDim) { fw = Math.round(fw * maxDim / fh); fh = Math.round(maxDim); }
+          // Stocker en pixels écran (zoomLevel déjà appliqué) — ne pas appliquer directement
+          preview._fullW = Math.round(fw * (zoomLevel || 1));
+          preview._fullH = Math.round(fh * (zoomLevel || 1));
+        };
+        sizeCalc.onerror = () => {
+          preview._fullW = 220;
+          preview._fullH = 170;
+        };
+        sizeCalc.src = item.src;
+
+        // Appliquer immédiatement la taille thumbnail (curseur encore sur le panel)
+        preview.style.width  = preview._thumbW + 'px';
+        preview.style.height = preview._thumbH + 'px';
+        preview.classList.remove('preview-active-snap');
+        preview._inCanvas = false;
+        // Ghost natif invisible (1×1 transparent) pour masquer le fantôme navigateur
+        const emptyImg = document.createElement('img');
+        emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+        document.body.appendChild(emptyImg);
+        e.dataTransfer.setDragImage(emptyImg, 0, 0);
+        setTimeout(() => emptyImg.remove(), 0);
       });
       div.addEventListener('dragend', () => {
         isDraggingFromPanel = false;
         draggedLibItemId = null;
+        document.getElementById('drag-custom-preview').style.display = 'none';
       });
 
       div.appendChild(indicator);

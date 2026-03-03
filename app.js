@@ -2589,6 +2589,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     let groupDragActive = true;
     let groupRafId = null;
     const lerpFactor = 0.12;
+    let _gFrameCount = 0;
 
     function groupDragRAF() {
       if (!groupDragActive) return;
@@ -2602,10 +2603,13 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         activeGroup.forEach((el) => {
           const s = starts.get(el);
           if (!s) return;
-          el.style.left = s.left + curDX + 'px';
-          el.style.top = s.top + curDY + 'px';
+          // s.left/s.top stay frozen; movement via transform
+          el.style.transform = `translate3d(${curDX}px,${curDY}px,0)`;
         });
-        activeGroup.forEach((el) => updateConnectionsForEl(el));
+        // Throttle: update connections every other frame
+        if (++_gFrameCount % 2 === 0) {
+          activeGroup.forEach((el) => updateConnectionsForEl(el));
+        }
         updateMultiResizeHandle();
       }
       groupRafId = requestAnimationFrame(groupDragRAF);
@@ -2685,6 +2689,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         if (!s) return;
         el.style.left = s.left + targetDX + 'px';
         el.style.top = s.top + targetDY + 'px';
+        el.style.transform = '';
       });
       activeGroup.forEach((el) => updateConnectionsForEl(el));
       updateMultiResizeHandle();

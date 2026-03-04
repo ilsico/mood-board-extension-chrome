@@ -1412,7 +1412,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         const x = (e.clientX - rect.left - panX) / zoomLevel;
         const y = (e.clientY - rect.top - panY) / zoomLevel;
         if (type === 'note') {
-          createNoteElement('', x - 115, y - 80, 230, 160);
+          createNoteElement('', x - 115, y - 80, 290, 75);
           pushHistory();
           scheduleSave();
         } else if (type === 'color') {

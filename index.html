@@ -193,6 +193,143 @@
         color: #ef4444;
       }
 
+      /* ── Cover placeholder ── */
+      .board-cover-placeholder {
+        width: 180px;
+        height: 135px;
+        background: #ff3c00;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        cursor: pointer;
+      }
+      .board-cover-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #fff;
+        font-size: 52px;
+        line-height: 1;
+        font-weight: 300;
+        padding: 0;
+        transition: transform 0.15s;
+        pointer-events: none;
+      }
+      .board-cover-placeholder:hover .board-cover-btn {
+        transform: scale(1.1);
+      }
+
+      /* ── Home context menu ── */
+      .home-ctx-menu {
+        display: none;
+        position: fixed;
+        z-index: 9999;
+        background: #fff;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+        padding: 4px 0;
+        min-width: 180px;
+      }
+      .home-ctx-menu button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        padding: 9px 16px;
+        font-size: 13px;
+        cursor: pointer;
+        color: #1a1a2e;
+        font-family: inherit;
+      }
+      .home-ctx-menu button:hover {
+        background: #f5f5fb;
+      }
+      .home-ctx-menu .ctx-sep {
+        border-top: 1px solid #eaeaf0;
+        margin: 4px 0;
+      }
+      .home-ctx-menu .ctx-danger {
+        color: #ef4444;
+      }
+      .home-ctx-menu .ctx-danger:hover {
+        background: #fee2e2;
+      }
+
+      /* ── Cover editor modal ── */
+      #cover-workspace {
+        position: relative;
+        width: 300px;
+        height: 200px;
+        background: #111;
+        margin: 0 auto;
+        overflow: hidden;
+        cursor: grab;
+        flex-shrink: 0;
+      }
+      #cover-workspace.dragging {
+        cursor: grabbing;
+      }
+      #cover-img-dim {
+        position: absolute;
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      #cover-mask {
+        position: absolute;
+        left: 105px;
+        top: 66.25px;
+        width: 90px;
+        height: 67.5px;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      #cover-img-bright {
+        position: absolute;
+        pointer-events: none;
+      }
+      #cover-mask-border {
+        position: absolute;
+        left: 105px;
+        top: 66.25px;
+        width: 90px;
+        height: 67.5px;
+        border: 1.5px solid rgba(255, 255, 255, 0.9);
+        pointer-events: none;
+        box-sizing: border-box;
+      }
+      #cover-drag-layer {
+        position: absolute;
+        inset: 0;
+      }
+      .cover-zoom-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+      .cover-zoom-row input[type='range'] {
+        flex: 1;
+      }
+      #cover-gallery {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        max-height: 120px;
+        overflow-y: auto;
+      }
+      #cover-gallery img {
+        width: 56px;
+        height: 42px;
+        object-fit: cover;
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: border-color 0.15s;
+      }
+      #cover-gallery img:hover {
+        border-color: #ff3c00;
+      }
+
       #new-board-btn {
         position: fixed;
         bottom: 36px;
@@ -2117,5 +2254,49 @@
     </div>
 
     <div id="preview-toast"></div>
+
+    <!-- Cover editor modal -->
+    <div class="modal-overlay hidden" id="cover-editor-modal">
+      <div class="modal" style="width: 420px">
+        <div class="modal-header">
+          <h2>choisir une photo</h2>
+          <button id="close-cover-modal" class="modal-close">&#x2715;</button>
+        </div>
+        <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 14px">
+          <div>
+            <button id="cover-file-btn" class="form-submit" style="width: 100%">
+              📁 Depuis votre appareil (JPEG, PNG, SVG)
+            </button>
+            <input id="cover-file-input" type="file" accept=".jpg,.jpeg,.png,.svg,image/svg+xml" hidden />
+          </div>
+          <div id="cover-workspace">
+            <img id="cover-img-dim" draggable="false" />
+            <div id="cover-mask">
+              <img id="cover-img-bright" draggable="false" />
+            </div>
+            <div id="cover-mask-border"></div>
+            <div id="cover-drag-layer"></div>
+          </div>
+          <div class="cover-zoom-row" id="cover-zoom-row" style="display: none">
+            <span>🔍</span>
+            <input type="range" id="cover-zoom-slider" min="0" max="1" step="0.001" value="0" />
+            <span style="font-size:18px; line-height:1">+</span>
+          </div>
+          <div id="cover-gallery-wrap" style="display: none">
+            <div style="font-size: 11px; color: #888; margin-bottom: 6px">Depuis ce moodboard</div>
+            <div id="cover-gallery"></div>
+          </div>
+          <button id="cover-save-btn" class="form-submit" disabled>Enregistrer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Home right-click context menu -->
+    <div id="home-ctx-menu" class="home-ctx-menu">
+      <button data-action="edit-cover">Modifier la couverture</button>
+      <button data-action="rename">Renommer</button>
+      <div class="ctx-sep"></div>
+      <button data-action="delete" class="ctx-danger">Supprimer</button>
+    </div>
   </body>
 </html>

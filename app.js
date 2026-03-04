@@ -152,42 +152,7 @@ const App = (function () {
   function triggerManualSync() {
     if (!currentBoardId) return;
     saveCurrentBoard();
-    if (typeof html2canvas === 'undefined') {
-      toast('Moodboard synchronized!');
-      return;
-    }
-    captureBoardThumbnail()
-      .then(({ dataUrl }) => {
-        const tc = document.createElement('canvas');
-        tc.width = 300;
-        tc.height = 225;
-        const ctx2 = tc.getContext('2d');
-        ctx2.fillStyle = '#ffffff';
-        ctx2.fillRect(0, 0, 300, 225);
-        const img2 = new Image();
-        img2.onload = () => {
-          const margin = 0.1;
-          const maxW = 300 * (1 - 2 * margin);
-          const maxH = 225 * (1 - 2 * margin);
-          const scale = Math.min(maxW / img2.width, maxH / img2.height);
-          const dw = img2.width * scale,
-            dh = img2.height * scale;
-          const dx = (300 - dw) / 2,
-            dy = (225 - dh) / 2;
-          ctx2.drawImage(img2, dx, dy, dw, dh);
-          const thumb = tc.toDataURL('image/jpeg', 0.7);
-          const board = boards.find((b) => b.id === currentBoardId);
-          if (board) {
-            board.thumbnail = thumb;
-            saveBoards();
-          }
-          toast('Moodboard synchronized!');
-        };
-        img2.src = dataUrl;
-      })
-      .catch(() => {
-        toast('Moodboard synchronized!');
-      });
+    toast('Moodboard synchronized!');
   }
 
   /// ── CHARGEMENT INITIAL DES BOARDS ────────────────────────────────────────
@@ -482,6 +447,78 @@ const App = (function () {
 
     // Lightbox vidéo
     addEvt('vlb-close-btn', 'click', () => closeVideoLightbox());
+
+    // ── Cover editor ──
+    addEvt('close-cover-modal', 'click', () => closeModal('cover-editor-modal'));
+    addEvt('cover-file-btn', 'click', () => {
+      const input = document.getElementById('cover-file-input');
+      if (input) input.click();
+    });
+    addEvt('cover-file-input', 'change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => loadCoverImage(ev.target.result);
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    });
+    addEvt('cover-zoom-slider', 'input', (e) => {
+      const t = parseFloat(e.target.value); // 0..1
+      _coverScale = _coverMinScale * (1 + t * 2); // minScale → minScale×3
+      clampCoverOffset();
+      updateCropView();
+    });
+    addEvt('cover-save-btn', 'click', () => saveCoverCrop());
+
+    // Drag on cover workspace
+    const dragLayer = document.getElementById('cover-drag-layer');
+    if (dragLayer) {
+      dragLayer.addEventListener('mousedown', (e) => {
+        if (!_coverNatW) return;
+        _coverDragging = true;
+        _coverDragSX   = e.clientX;
+        _coverDragSY   = e.clientY;
+        _coverDragOX   = _coverOffsetX;
+        _coverDragOY   = _coverOffsetY;
+        const ws = document.getElementById('cover-workspace');
+        if (ws) ws.classList.add('dragging');
+        e.preventDefault();
+      });
+    }
+    window.addEventListener('mousemove', (e) => {
+      if (!_coverDragging) return;
+      _coverOffsetX = _coverDragOX + (e.clientX - _coverDragSX);
+      _coverOffsetY = _coverDragOY + (e.clientY - _coverDragSY);
+      clampCoverOffset();
+      updateCropView();
+    });
+    window.addEventListener('mouseup', () => {
+      if (!_coverDragging) return;
+      _coverDragging = false;
+      const ws = document.getElementById('cover-workspace');
+      if (ws) ws.classList.remove('dragging');
+    });
+
+    // ── Home context menu ──
+    const homeCtxMenu = document.getElementById('home-ctx-menu');
+    if (homeCtxMenu) {
+      homeCtxMenu.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn || !_ctxMenuBoardId) return;
+        hideHomeCtxMenu();
+        const id = _ctxMenuBoardId;
+        if (btn.dataset.action === 'edit-cover') openCoverEditor(id);
+        if (btn.dataset.action === 'rename')     App.renameBoardPrompt(id);
+        if (btn.dataset.action === 'delete')     App.deleteBoard(id);
+      });
+    }
+    document.addEventListener('mousedown', (e) => {
+      const menu = document.getElementById('home-ctx-menu');
+      if (menu && !menu.contains(e.target)) hideHomeCtxMenu();
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') hideHomeCtxMenu();
+    });
   }
   // ── BOARDS ───────────────────────────────────────────────────────────────
   function createBoard() {
@@ -553,33 +590,33 @@ const App = (function () {
 
       const saved = formatSavedAt(b.savedAt);
       card.innerHTML = `
-        ${b.thumbnail ? `<img class="board-thumb" src="${b.thumbnail}" alt="">` : ''}
-
+        ${b.thumbnail
+          ? `<img class="board-thumb" src="${b.thumbnail}" alt="" draggable="false">`
+          : `<div class="board-thumb board-cover-placeholder"><button class="board-cover-btn" title="Choisir une couverture">+</button></div>`
+        }
         <div class="board-info">
           <div class="board-name">${escHtml(b.name)}</div>
-                    ${saved.date ? `<div class="board-save-date"><span>${saved.date}</span><span>${saved.time}</span></div>` : ''}
-
+          ${saved.date ? `<div class="board-save-date"><span>${saved.date}</span><span>${saved.time}</span></div>` : ''}
         </div>
-        <div class="board-actions">
-                   <button class="board-action-btn btn-rename"><img src="PNG/renommer.png" style="width:14px;height:14px;pointer-events:none;"></button>
-          <button class="board-action-btn delete btn-delete"><img src="PNG/supprimer.png" style="width:14px;height:14px;pointer-events:none;"></button>
-        </div>
-      </div>
       `;
 
-      card.querySelector('.btn-rename').addEventListener('click', (e) => {
-        e.stopPropagation();
-        App.renameBoardPrompt(b.id);
-      });
-      card.querySelector('.btn-delete').addEventListener('click', (e) => {
-        e.stopPropagation();
-        App.deleteBoard(b.id);
+      const coverBtn = card.querySelector('.board-cover-btn');
+      if (coverBtn) {
+        coverBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openCoverEditor(b.id);
+        });
+      }
+
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showHomeCtxMenu(e, b.id);
       });
 
       // Drag pour déplacer la carte — simple clic+drag, double-clic pour ouvrir
       card.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
-        if (e.target.closest('.board-action-btn')) return;
+        if (e.target.closest('.board-cover-btn')) return;
         e.preventDefault();
         const startX = e.clientX - (b.x || 0);
         const startY = e.clientY - (b.y || 0);
@@ -623,7 +660,7 @@ const App = (function () {
             saveBoards();
           } else {
             // Pas de déplacement = clic simple → ouvrir le board
-            if (!ev.target.closest('.board-action-btn')) openBoard(b.id);
+            if (!ev.target.closest('.board-cover-btn')) openBoard(b.id);
           }
           if (rafId) {
             cancelAnimationFrame(rafId);
@@ -876,83 +913,6 @@ const App = (function () {
     renderHome();
   }
 
-  function captureBoardThumbnail() {
-    return new Promise((resolve, reject) => {
-      const canvasEl = document.getElementById('canvas');
-      const els = canvasEl.querySelectorAll('.board-element');
-      if (!els.length) {
-        reject();
-        return;
-      }
-
-      // Bounding box — même logique que fitElementsToScreen
-      let minL = Infinity,
-        minT = Infinity,
-        maxR = -Infinity,
-        maxB = -Infinity;
-      els.forEach((el) => {
-        const l = parseFloat(el.style.left) || 0;
-        const t = parseFloat(el.style.top) || 0;
-        const r = l + el.offsetWidth;
-        const b = t + el.offsetHeight;
-        if (l < minL) minL = l;
-        if (t < minT) minT = t;
-        if (r > maxR) maxR = r;
-        if (b > maxB) maxB = b;
-      });
-      const contentW = maxR - minL;
-      const contentH = maxB - minT;
-      if (contentW <= 0 || contentH <= 0) {
-        reject();
-        return;
-      }
-
-      // Marge proportionnelle de 7% autour du bounding box (entre les 5-10% de fitElementsToScreen)
-      const marginX = contentW * 0.07;
-      const marginY = contentH * 0.07;
-      const cropX = minL - marginX;
-      const cropY = minT - marginY;
-      const cropW = contentW + marginX * 2;
-      const cropH = contentH + marginY * 2;
-
-      // Cloner le canvas dans un conteneur caché à scale(1) — le DOM visible n'est pas touché
-      const ghost = canvasEl.cloneNode(true);
-      ghost.style.position = 'fixed';
-      ghost.style.left = '-99999px';
-      ghost.style.top = '0px';
-      ghost.style.transform = 'translate(0px,0px) scale(1)';
-      ghost.style.pointerEvents = 'none';
-      ghost.style.visibility = 'hidden';
-      // Marquer les images crossOrigin pour que useCORS fonctionne correctement
-      ghost.querySelectorAll('img').forEach((img) => {
-        img.crossOrigin = 'anonymous';
-      });
-      document.body.appendChild(ghost);
-      // Forcer le reflow pour que offsetWidth/offsetHeight soient corrects sur le ghost
-      ghost.getBoundingClientRect();
-
-      html2canvas(ghost, {
-        scale: 1,
-        useCORS: true,
-        allowTaint: true,
-        x: cropX,
-        y: cropY,
-        width: cropW,
-        height: cropH,
-        scrollX: 0,
-        scrollY: 0,
-      })
-        .then((c) => {
-          ghost.remove();
-          resolve({ dataUrl: c.toDataURL('image/png'), cropW, cropH });
-        })
-        .catch((err) => {
-          ghost.remove();
-          reject(err);
-        });
-    });
-  }
-
   function deleteBoard(id) {
     if (!confirm('Supprimer ce moodboard ?')) return;
     boards = boards.filter((b) => b.id !== id);
@@ -982,6 +942,153 @@ const App = (function () {
   }
   function closeRenameModal() {
     closeModal('rename-modal');
+  }
+
+  // ── COVER EDITOR ──────────────────────────────────────────────────────────
+  const COVER_MASK_W    = 90;
+  const COVER_MASK_H    = 67.5;
+  const COVER_WS_W      = 300;
+  const COVER_WS_H      = 200;
+  const COVER_MASK_LEFT = (COVER_WS_W - COVER_MASK_W) / 2; // 105
+  const COVER_MASK_TOP  = (COVER_WS_H - COVER_MASK_H) / 2; // 66.25
+
+  let _coverBoardId  = null;
+  let _coverOffsetX  = 0;
+  let _coverOffsetY  = 0;
+  let _coverScale    = 1;
+  let _coverMinScale = 1;
+  let _coverNatW     = 0;
+  let _coverNatH     = 0;
+  let _coverDragging = false;
+  let _coverDragSX   = 0;
+  let _coverDragSY   = 0;
+  let _coverDragOX   = 0;
+  let _coverDragOY   = 0;
+
+  function openCoverEditor(boardId) {
+    _coverBoardId = boardId;
+    _coverOffsetX = _coverOffsetY = 0;
+    _coverScale = 1;
+    _coverNatW = _coverNatH = 0;
+    document.getElementById('cover-save-btn').disabled = true;
+    ['cover-img-dim', 'cover-img-bright'].forEach((id) => {
+      const el = document.getElementById(id);
+      el.src = '';
+      el.style.display = 'none';
+    });
+    document.getElementById('cover-zoom-row').style.display = 'none';
+    document.getElementById('cover-zoom-slider').value = 0;
+    populateCoverGallery(boardId);
+    const board = boards.find((b) => b.id === boardId);
+    if (board && board.thumbnail) loadCoverImage(board.thumbnail);
+    openModal('cover-editor-modal');
+  }
+
+  function populateCoverGallery(boardId) {
+    const gallery = document.getElementById('cover-gallery');
+    const wrap    = document.getElementById('cover-gallery-wrap');
+    gallery.innerHTML = '';
+    const board = boards.find((b) => b.id === boardId);
+    if (!board) { wrap.style.display = 'none'; return; }
+    const imgs = (board.elements || []).filter((e) => e.type === 'image' && e.src);
+    if (!imgs.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    imgs.forEach((e) => {
+      const thumb = document.createElement('img');
+      thumb.src = e.src;
+      thumb.title = 'Utiliser cette image';
+      thumb.addEventListener('click', () => loadCoverImage(e.src));
+      gallery.appendChild(thumb);
+    });
+  }
+
+  function loadCoverImage(src) {
+    const dimImg    = document.getElementById('cover-img-dim');
+    const brightImg = document.getElementById('cover-img-bright');
+    const img = new Image();
+    img.onload = () => {
+      _coverNatW = img.naturalWidth;
+      _coverNatH = img.naturalHeight;
+      _coverMinScale = Math.max(COVER_MASK_W / _coverNatW, COVER_MASK_H / _coverNatH);
+      _coverScale    = _coverMinScale;
+      const scaledW  = _coverNatW * _coverScale;
+      const scaledH  = _coverNatH * _coverScale;
+      _coverOffsetX  = (COVER_MASK_W - scaledW) / 2;
+      _coverOffsetY  = (COVER_MASK_H - scaledH) / 2;
+      clampCoverOffset();
+      dimImg.src    = src;
+      brightImg.src = src;
+      dimImg.style.display    = '';
+      brightImg.style.display = '';
+      updateCropView();
+      document.getElementById('cover-zoom-slider').value = 0;
+      document.getElementById('cover-zoom-row').style.display = 'flex';
+      document.getElementById('cover-save-btn').disabled = false;
+    };
+    img.src = src;
+  }
+
+  function updateCropView() {
+    const w = _coverNatW * _coverScale;
+    const h = _coverNatH * _coverScale;
+    const dimImg = document.getElementById('cover-img-dim');
+    dimImg.style.left   = (COVER_MASK_LEFT + _coverOffsetX) + 'px';
+    dimImg.style.top    = (COVER_MASK_TOP  + _coverOffsetY) + 'px';
+    dimImg.style.width  = w + 'px';
+    dimImg.style.height = h + 'px';
+    const brightImg = document.getElementById('cover-img-bright');
+    brightImg.style.left   = _coverOffsetX + 'px';
+    brightImg.style.top    = _coverOffsetY + 'px';
+    brightImg.style.width  = w + 'px';
+    brightImg.style.height = h + 'px';
+  }
+
+  function clampCoverOffset() {
+    const w = _coverNatW * _coverScale;
+    const h = _coverNatH * _coverScale;
+    _coverOffsetX = Math.min(0, Math.max(COVER_MASK_W - w, _coverOffsetX));
+    _coverOffsetY = Math.min(0, Math.max(COVER_MASK_H - h, _coverOffsetY));
+  }
+
+  function saveCoverCrop() {
+    const board = boards.find((b) => b.id === _coverBoardId);
+    if (!board || !_coverNatW) return;
+    const OUT_W = 180, OUT_H = 135;
+    const ratio = OUT_W / COVER_MASK_W; // 2
+    const cvs = document.createElement('canvas');
+    cvs.width  = OUT_W;
+    cvs.height = OUT_H;
+    const ctx = cvs.getContext('2d');
+    const img = document.getElementById('cover-img-dim');
+    ctx.drawImage(
+      img,
+      _coverOffsetX * ratio,
+      _coverOffsetY * ratio,
+      _coverNatW * _coverScale * ratio,
+      _coverNatH * _coverScale * ratio
+    );
+    board.thumbnail = cvs.toDataURL('image/jpeg', 0.85);
+    saveBoards();
+    renderHome();
+    closeModal('cover-editor-modal');
+  }
+
+  // ── HOME CONTEXT MENU ─────────────────────────────────────────────────────
+  let _ctxMenuBoardId = null;
+
+  function showHomeCtxMenu(e, boardId) {
+    _ctxMenuBoardId = boardId;
+    const menu = document.getElementById('home-ctx-menu');
+    menu.style.display = 'block';
+    const mx = Math.min(e.clientX, window.innerWidth - menu.offsetWidth - 8);
+    const my = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 8);
+    menu.style.left = mx + 'px';
+    menu.style.top  = my + 'px';
+  }
+
+  function hideHomeCtxMenu() {
+    const menu = document.getElementById('home-ctx-menu');
+    if (menu) menu.style.display = 'none';
   }
 
   // ── CANVAS / ZOOM / PAN ──────────────────────────────────────────────────

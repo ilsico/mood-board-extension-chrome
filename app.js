@@ -2969,7 +2969,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   // ── NOTE ──────────────────────────────────────────────────────────────────
   function addNote() {
     const c = getCenter();
-    createNoteElement('', c.x - 110, c.y - 75, 230, 160);
+    createNoteElement('', c.x - 110, c.y - 75, 290, 75);
     pushHistory();
     scheduleSave();
   }

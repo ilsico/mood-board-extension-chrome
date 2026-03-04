@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(git add app.js)",
+      "Bash(git commit:*)",
+      "Bash(git add docs/plans/2026-02-27-firebase-sharing-design.md)",
+      "Bash(git add docs/plans/2026-02-27-firebase-sharing-plan.md)",
+      "Bash(git add index.html)",
+      "Bash(node --check app.js)",
+      "Bash(git add app.js background.js)",
+      "Bash(git push origin master)",
+      "Bash(curl -L -o firebase-app-compat.js \"https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js\")",
+      "Bash(curl -L -o firebase-database-compat.js \"https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js\")",
+      "Bash(git add firebase-app-compat.js firebase-database-compat.js firebase-init.js index.html)",
+      "Bash(git -C \"C:/Users/flore/Desktop/MOODBOARD/Extension Moodboard\" log --oneline -10)",
+      "Bash(git -C \"C:/Users/flore/Desktop/MOODBOARD/Extension Moodboard\" diff b9ccb20..f8efa60 -- app.js)",
+      "Bash(git -C \"C:/Users/flore/Desktop/MOODBOARD/Extension Moodboard\" diff b9ccb20..f8efa60 -- index.html)",
+      "Bash(git pull --no-rebase origin master)"
+    ]
+  }
+}

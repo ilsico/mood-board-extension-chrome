@@ -906,7 +906,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       ghost.getBoundingClientRect();
 
       html2canvas(ghost, {
-        scale: 1.5,
+        scale: 1,
         useCORS: true,
         allowTaint: true,
         x: cropX,

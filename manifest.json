@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Moodboard Injector",
+  "name": "Moodboard",
   "version": "1.0",
   "description": "Clic droit sur n'importe quelle image pour l'ajouter directement à un board Moodboard.",
 
@@ -14,8 +14,15 @@
 
   "host_permissions": ["<all_urls>"],
 
+  "icons": {
+    "16": "icon extension/icon16.png",
+    "48": "icon extension/icon48.png",
+    "128": "icon extension/icon128.png"
+  },
+
   "action": {
-    "default_title": "Ouvrir mon Moodboard"
+    "default_title": "Ouvrir mon Moodboard",
+    "default_icon": "icon extension/icon48.png"
   },
 
   "background": {

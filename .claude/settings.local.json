@@ -17,7 +17,9 @@
       "Bash(git -C \"C:/Users/flore/Desktop/MOODBOARD/Extension Moodboard\" log --oneline -10)",
       "Bash(git -C \"C:/Users/flore/Desktop/MOODBOARD/Extension Moodboard\" diff b9ccb20..f8efa60 -- app.js)",
       "Bash(git -C \"C:/Users/flore/Desktop/MOODBOARD/Extension Moodboard\" diff b9ccb20..f8efa60 -- index.html)",
-      "Bash(git pull --no-rebase origin master)"
+      "Bash(git pull --no-rebase origin master)",
+      "Bash(ls -lah '/c/Users/flore/Desktop/MOODBOARD/Extension Moodboard/'*.css)",
+      "Bash(perl -i -0pe 's/\\\\n[ \\\\t]+scheduleSave\\\\\\(\\\\\\);//g; s/ scheduleSave\\\\\\(\\\\\\);//g' app.js)"
     ]
   }
 }

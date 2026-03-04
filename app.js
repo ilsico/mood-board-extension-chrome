@@ -34,7 +34,7 @@ const App = (function () {
   let ctxTargetEl = null;
   let videoTabMode = 'url';
   let nextZ = 100;
-  let saveTimer = null;
+  let _syncIntervalId = null;
   // Stockage hors-DOM des données base64 des images (évite des attributs HTML massifs)
   const _imgStore = new Map(); // id -> base64 src
   // Rectangle de sélection
@@ -94,56 +94,8 @@ const App = (function () {
     });
   }
 
-  function scheduleSave() {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveCurrentBoard, 800);
-    scheduleThumbnail();
-  }
-
   // Miniatures désactivées (cartes accueil sans aperçu)
   let wheelRaf = null;
-  let thumbTimer = null;
-  function scheduleThumbnail() {
-    clearTimeout(thumbTimer);
-    thumbTimer = setTimeout(function doCapture() {
-      if (isPanning || isTouchPanning || wheelRaf !== null) {
-        clearTimeout(thumbTimer);
-        thumbTimer = setTimeout(doCapture, 7000);
-        return;
-      }
-      if (typeof html2canvas === 'undefined') return;
-      captureBoardThumbnail()
-        .then(({ dataUrl }) => {
-          // Recadrer en 300×225 (format 4:3) avec 10% de marge blanche
-          const tc = document.createElement('canvas');
-          tc.width = 300;
-          tc.height = 225;
-          const ctx2 = tc.getContext('2d');
-          ctx2.fillStyle = '#ffffff';
-          ctx2.fillRect(0, 0, 300, 225);
-          const img2 = new Image();
-          img2.onload = () => {
-            const margin = 0.1;
-            const maxW = 300 * (1 - 2 * margin); // 240
-            const maxH = 225 * (1 - 2 * margin); // 180
-            const scale = Math.min(maxW / img2.width, maxH / img2.height);
-            const dw = img2.width * scale,
-              dh = img2.height * scale;
-            const dx = (300 - dw) / 2,
-              dy = (225 - dh) / 2;
-            ctx2.drawImage(img2, dx, dy, dw, dh);
-            const thumb = tc.toDataURL('image/jpeg', 0.7);
-            const board = boards.find((b) => b.id === currentBoardId);
-            if (board) {
-              board.thumbnail = thumb;
-              saveBoards();
-            }
-          };
-          img2.src = dataUrl;
-        })
-        .catch(() => {});
-    }, 7000);
-  }
 
   function saveCurrentBoard() {
     if (!currentBoardId) return;
@@ -197,6 +149,42 @@ const App = (function () {
     }
   }
 
+  function triggerManualSync() {
+    if (!currentBoardId) return;
+    saveCurrentBoard();
+    toast('Moodboard synchronized!');
+    if (typeof html2canvas === 'undefined') return;
+    captureBoardThumbnail()
+      .then(({ dataUrl }) => {
+        const tc = document.createElement('canvas');
+        tc.width = 300;
+        tc.height = 225;
+        const ctx2 = tc.getContext('2d');
+        ctx2.fillStyle = '#ffffff';
+        ctx2.fillRect(0, 0, 300, 225);
+        const img2 = new Image();
+        img2.onload = () => {
+          const margin = 0.1;
+          const maxW = 300 * (1 - 2 * margin);
+          const maxH = 225 * (1 - 2 * margin);
+          const scale = Math.min(maxW / img2.width, maxH / img2.height);
+          const dw = img2.width * scale,
+            dh = img2.height * scale;
+          const dx = (300 - dw) / 2,
+            dy = (225 - dh) / 2;
+          ctx2.drawImage(img2, dx, dy, dw, dh);
+          const thumb = tc.toDataURL('image/jpeg', 0.7);
+          const board = boards.find((b) => b.id === currentBoardId);
+          if (board) {
+            board.thumbnail = thumb;
+            saveBoards();
+          }
+        };
+        img2.src = dataUrl;
+      })
+      .catch(() => {});
+  }
+
   /// ── CHARGEMENT INITIAL DES BOARDS ────────────────────────────────────────
   async function loadBoardsFromStorage() {
     // 1. Tenter de charger depuis IndexedDB (nouveau stockage illimité)
@@ -248,7 +236,11 @@ const App = (function () {
         if (e.target === ov) ov.classList.add('hidden');
       });
     });
-    document.addEventListener('click', () => hideContextMenu());
+    document.addEventListener('click', (e) => {
+      hideContextMenu();
+      const am = document.getElementById('autosave-menu');
+      if (am && e.target.id !== 'refresh-save-btn') am.style.display = 'none';
+    });
     // Fermer le panneau texte au clic en dehors d'une note en édition
     document.addEventListener(
       'mousedown',
@@ -332,6 +324,27 @@ const App = (function () {
     addEvt('back-btn', 'click', () => goHome());
     addEvt('fit-screen-btn', 'click', () => fitElementsToScreen());
     addEvt('preview-btn', 'click', () => togglePreviewMode());
+    addEvt('refresh-save-btn', 'click', () => triggerManualSync());
+
+    const refreshSaveBtn = document.getElementById('refresh-save-btn');
+    const autosaveMenu = document.getElementById('autosave-menu');
+    if (refreshSaveBtn && autosaveMenu) {
+      refreshSaveBtn.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        const rect = this.getBoundingClientRect();
+        autosaveMenu.style.left = rect.left + 'px';
+        autosaveMenu.style.top = rect.bottom + 4 + 'px';
+        autosaveMenu.style.display = 'block';
+      });
+      autosaveMenu.querySelectorAll('.ctx-item[data-interval]').forEach((item) => {
+        item.addEventListener('click', () => {
+          const ms = parseInt(item.dataset.interval, 10);
+          clearInterval(_syncIntervalId);
+          _syncIntervalId = setInterval(triggerManualSync, ms);
+          autosaveMenu.style.display = 'none';
+        });
+      });
+    }
     addEvt('share-btn', 'click', () => {
       if (!currentBoardId || !window._fbDb) {
         toast('Firebase non disponible');
@@ -804,7 +817,6 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     loaderFrame.style.animation = '';
     loaderOverlay.classList.remove('hidden');
     requestAnimationFrame(() => setTimeout(() => { // setTimeout(0) : laisse le navigateur peindre le loader avant le code lourd
-      clearTimeout(thumbTimer);
       currentBoardId = id;
       loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
       document.getElementById('board-title-display').textContent = board.name;
@@ -843,7 +855,6 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     } catch (e) {
       console.warn('Erreur sauvegarde:', e);
     }
-    clearTimeout(thumbTimer);
     document.getElementById('board-screen').style.display = 'none';
     document.getElementById('home-screen').style.display = 'flex';
     const shareBtn = document.getElementById('share-btn');
@@ -992,7 +1003,6 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       h.style.transform = `scale(${invScale})`;
     });
     updateMultiResizeHandle();
-    scheduleThumbnail();
   }
   let zoomToastTimer;
   function updateZoomDisplay() {
@@ -1348,8 +1358,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         isResizing = false;
         resizeEl = null;
         clearSnapGuides();
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       }
       if (isSelecting) {
         isSelecting = false;
@@ -1413,12 +1422,10 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         const y = (e.clientY - rect.top - panY) / zoomLevel;
         if (type === 'note') {
           createNoteElement('', x - 115, y - 80, 290, 75);
-          pushHistory();
-          scheduleSave();
+          pushHistory();
         } else if (type === 'color') {
           createColorElement('#000000', x - 65, y - 70, 130, 140);
-          pushHistory();
-          scheduleSave();
+          pushHistory();
         } else if (type === 'link') {
           // Stocker la position pour après la saisie de l'URL
           pendingToolDropPos = { x: x - 135, y: y - 110 };
@@ -1438,8 +1445,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
           const y = (e.clientY - rect.top  - panY) / zoomLevel - h / 2 + i * 30;
           createImageElement(libItem.src, x, y, w, h);
-          pushHistory();
-          scheduleSave();
+          pushHistory();
         });
         draggedLibItems = [];
         return;
@@ -1451,8 +1457,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2;
         const y = (e.clientY - rect.top  - panY) / zoomLevel - h / 2;
         createImageElement(src, x, y, w, h);
-        pushHistory();
-        scheduleSave();
+        pushHistory();
         return;
       }
       // Fichiers images droppés directement
@@ -1471,15 +1476,13 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
                 const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 24;
                 const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 24;
                 applyDropSnap(createImageElement(src, x, y, w, h));
-                pushHistory();
-                scheduleSave();
+                pushHistory();
               };
               tmpImg.onerror = () => {
                 const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 24;
                 const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 24;
                 applyDropSnap(createImageElement(src, x, y, 220, 170));
-                pushHistory();
-                scheduleSave();
+                pushHistory();
               };
               tmpImg.src = src;
             };
@@ -1539,6 +1542,11 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         e.preventDefault();
         isPanningMode = true;
         document.getElementById('canvas-wrapper').style.cursor = 'grab';
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (!document.body.classList.contains('readonly-mode')) triggerManualSync();
+        return;
       }
       if (!document.body.classList.contains('readonly-mode')) {
         if (
@@ -1610,13 +1618,11 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
               const w = tmpImg.naturalWidth || 220;
               const h = tmpImg.naturalHeight || 170;
               createImageElement(src, c.x - w / 2, c.y - h / 2, w, h);
-              pushHistory();
-              scheduleSave();
+              pushHistory();
             };
             tmpImg.onerror = () => {
               createImageElement(src, c.x - 110, c.y - 85, 220, 170);
-              pushHistory();
-              scheduleSave();
+              pushHistory();
             };
             tmpImg.src = src;
             // Ajouter aussi à la bibliothèque
@@ -1677,8 +1683,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
     selectedEl = null;
-    multiSelected.clear();
-    scheduleSave();
+    multiSelected.clear();
     toast('Annulé');
   }
   function redo() {
@@ -1690,8 +1695,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
     selectedEl = null;
-    multiSelected.clear();
-    scheduleSave();
+    multiSelected.clear();
     toast('Rétabli');
   }
   function reattachAllEvents() {
@@ -1733,8 +1737,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       if (ta.style.pointerEvents === 'auto') e.stopPropagation();
     });
     ta.addEventListener('input', () => {
-      el.dataset.savedata = ta.value;
-      scheduleSave();
+      el.dataset.savedata = ta.value;
     });
     ta.addEventListener('blur', (e) => {
       const panel = document.getElementById('text-edit-panel');
@@ -1748,11 +1751,9 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       } else if (ta.value !== _noteValueOnFocus) {
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       }
     });
   }
@@ -1815,8 +1816,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         swatch.style.background = v;
         el.dataset.savedata = v;
         hexInput.value = v;
-        pushHistory();
-        scheduleSave();
+        pushHistory();
         return true;
       }
       return false;
@@ -1940,7 +1940,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     let done = 0;
     toDelete.forEach((el) => animateRemove(el, () => {
       done++;
-      if (done === toDelete.length) { pushHistory(); scheduleSave(); }
+      if (done === toDelete.length) { pushHistory(); }
     }));
   }
 
@@ -1949,8 +1949,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.getElementById('canvas').innerHTML = '';
     selectedEl = null;
     multiSelected.clear();
-    pushHistory();
-    scheduleSave();
+    pushHistory();
     toast('Board vidé');
   }
 
@@ -2196,8 +2195,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       const onUp = () => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       };
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
@@ -2455,8 +2453,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         if (moved || duplicated) {
-          pushHistory();
-          scheduleSave();
+          pushHistory();
 
           dragEl.dataset.justDragged = '1';
           setTimeout(() => delete dragEl.dataset.justDragged, 150);
@@ -2704,8 +2701,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       window.removeEventListener('mouseup', onUp);
       clearSnapGuides();
       if (moved || duplicated) {
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       }
     };
     window.addEventListener('mousemove', onMove);
@@ -2954,14 +2950,12 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         h = 350;
       }
       createImageElement(src, c.x - w / 2, c.y - h / 2, w, h);
-      pushHistory();
-      scheduleSave();
+      pushHistory();
     };
     tmpImg.onerror = () => {
       const c = getCenter();
       createImageElement(src, c.x - 110, c.y - 85, 220, 170);
-      pushHistory();
-      scheduleSave();
+      pushHistory();
     };
     tmpImg.src = src;
   }
@@ -2970,8 +2964,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   function addNote() {
     const c = getCenter();
     createNoteElement('', c.x - 110, c.y - 75, 290, 75);
-    pushHistory();
-    scheduleSave();
+    pushHistory();
   }
   function createNoteElement(content, x, y, w, h) {
     w = w || 230;
@@ -2987,8 +2980,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     ta.style.pointerEvents = 'none';
     ta.style.cursor = 'move';
     ta.addEventListener('input', () => {
-      el.dataset.savedata = ta.value;
-      scheduleSave();
+      el.dataset.savedata = ta.value;
     });
     // Valeur au moment de l'entrée en édition — pour détecter un changement au blur
     let _noteValueOnFocus = '';
@@ -3025,12 +3017,10 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       } else if (ta.value !== _noteValueOnFocus) {
         // Le texte a changé pendant l'édition → créer un état historique
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       }
     });
     wrap.appendChild(ta);
@@ -3042,8 +3032,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   function addColorDirect() {
     const c = getCenter();
     createColorElement('#000000', c.x - 65, c.y - 70, 130, 140);
-    pushHistory();
-    scheduleSave();
+    pushHistory();
   }
   function openColorPicker() {
     openModal('color-modal');
@@ -3066,8 +3055,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       '#' + document.getElementById('hex-input').value.trim().toUpperCase().replace('#', '');
     const c = getCenter();
     createColorElement(hex, c.x - 65, c.y - 70, 130, 140);
-    pushHistory();
-    scheduleSave();
+    pushHistory();
     closeColorModal();
   }
   function createColorElement(hex, x, y, w, h) {
@@ -3103,8 +3091,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         swatch.style.background = v;
         el.dataset.savedata = v;
         hexInput.value = v;
-        pushHistory();
-        scheduleSave();
+        pushHistory();
         return true;
       }
       return false;
@@ -3167,8 +3154,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
-          pushHistory();
-          scheduleSave();
+          pushHistory();
         })
         .catch(() => {}); // annulé par l'utilisateur
       return;
@@ -3215,8 +3201,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
-          pushHistory();
-          scheduleSave();
+          pushHistory();
         })
         .catch(() => {
           canvasDiv.style.transform = savedTf;
@@ -3263,8 +3248,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       ly = c.y - 90;
     }
     createLinkElement(url, title, img, lx, ly);
-    pushHistory();
-    scheduleSave();
+    pushHistory();
     closeLinkModal();
     ['link-url-input', 'link-title-input', 'link-img-input'].forEach(
       (id) => (document.getElementById(id).value = '')
@@ -3330,8 +3314,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     }
     const c = getCenter();
     createVideoElement(embed, isEmbed, c.x - 180, c.y - 101, 360, 202);
-    pushHistory();
-    scheduleSave();
+    pushHistory();
     closeVideoModal();
     document.getElementById('video-url-input').value = '';
   }
@@ -3342,8 +3325,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     reader.onload = (ev) => {
       const c = getCenter();
       createVideoElement(ev.target.result, false, c.x - 180, c.y - 101, 360, 202);
-      pushHistory();
-      scheduleSave();
+      pushHistory();
       closeVideoModal();
     };
     reader.readAsDataURL(file);
@@ -3454,8 +3436,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           newEl.style.zIndex = target.style.zIndex;
           target.replaceWith(newEl);
           selectEl(newEl);
-          pushHistory();
-          scheduleSave();
+          pushHistory();
         });
       } else {
         const icns = {
@@ -3479,8 +3460,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         if (h) newEl.style.height = h + 'px';
         target.replaceWith(newEl);
         selectEl(newEl);
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       }
       e.target.value = '';
       return;
@@ -3508,8 +3488,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       if (VIDEO_EXTS.has(ext)) {
         readFileAsBase64(file).then((b64) => {
           createVideoFileElement(file.name, size, b64, baseX, baseY);
-          pushHistory();
-          scheduleSave();
+          pushHistory();
         });
       } else {
         const icns = {
@@ -3531,8 +3510,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       }
     });
     pendingToolDropPos = null;
-    pushHistory();
-    scheduleSave();
+    pushHistory();
     e.target.value = '';
   }
 
@@ -3705,14 +3683,14 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       toDelete.forEach((e) => {
         removeConnectionsForEl(e);
         removeCaptionsForEl(e);
-        animateRemove(e, () => { done++; if (done === toDelete.length) { pushHistory(); scheduleSave(); } });
+        animateRemove(e, () => { done++; if (done === toDelete.length) { pushHistory(); } });
       });
       toast(toDelete.length + ' éléments supprimés');
     } else {
       removeConnectionsForEl(el);
       removeCaptionsForEl(el);
       selectedEl = null;
-      animateRemove(el, () => { pushHistory(); scheduleSave(); });
+      animateRemove(el, () => { pushHistory(); });
     }
   }
   function duplicateEl(btn) {
@@ -3731,8 +3709,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         };
         restoreElement(s);
       });
-      pushHistory();
-      scheduleSave();
+      pushHistory();
       return;
     }
     const s = {
@@ -3746,8 +3723,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     const newEl = restoreElement(s);
     if (newEl) {
       selectEl(newEl);
-      pushHistory();
-      scheduleSave();
+      pushHistory();
     }
   }
 
@@ -3813,8 +3789,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
             replaceTargetEl.style.width = currentW + 'px';
             replaceTargetEl.style.height = newH + 'px';
             replaceTargetEl.dataset.ratio = ratio.toFixed(6);
-            pushHistory();
-            scheduleSave();
+            pushHistory();
           };
           tmpImg.src = src;
         }
@@ -3851,8 +3826,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     for (let i = 0; i < ids.length - 1; i++) {
       createConnection(ids[i], ids[i + 1]);
     }
-    pushHistory();
-    scheduleSave();
+    pushHistory();
   }
 
   function createConnection(fromId, toId) {
@@ -3928,8 +3902,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
     document.getElementById('canvas').appendChild(cap);
     cap.focus();
-    pushHistory();
-    scheduleSave();
+    pushHistory();
   }
 
   function hideContextMenu() {
@@ -3987,8 +3960,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     // Si le commentaire est vide après l'édition, on le supprime
     if (!cap.textContent.trim()) {
       cap.remove();
-      pushHistory();
-      scheduleSave();
+      pushHistory();
     }
   }
   function applyTextFont(val) {
@@ -4016,8 +3988,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.querySelectorAll('.text-font-btn').forEach((b) => b.classList.remove('active'));
     const activeBtn = document.getElementById(val === 'helvetica-bold' ? 'tp-bold' : 'tp-roman');
     if (activeBtn) activeBtn.classList.add('active');
-
-    scheduleSave();
+
   }
   function applyTextSizeDelta(delta) {
     if (!textEditTarget) return;
@@ -4027,8 +3998,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     const next = Math.min(Math.max(current + delta, 8), 72);
     ta.style.fontSize = next + 'px';
     const sizeVal = document.getElementById('text-size-val');
-    if (sizeVal) sizeVal.textContent = next;
-    scheduleSave();
+    if (sizeVal) sizeVal.textContent = next;
   }
   function applyTextAlign(align) {
     if (!textEditTarget) return;
@@ -4037,21 +4007,18 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.querySelectorAll('.text-align-btn').forEach((b) => b.classList.remove('active'));
     const id = { left: 'ta-left', center: 'ta-center', right: 'ta-right' }[align];
     const btn = document.getElementById(id);
-    if (btn) btn.classList.add('active');
-    scheduleSave();
+    if (btn) btn.classList.add('active');
   }
 
   function ctxBringFront() {
     if (ctxTargetEl) {
-      ctxTargetEl.style.zIndex = ++nextZ;
-      scheduleSave();
+      ctxTargetEl.style.zIndex = ++nextZ;
     }
     hideContextMenu();
   }
   function ctxSendBack() {
     if (ctxTargetEl) {
-      ctxTargetEl.style.zIndex = 1;
-      scheduleSave();
+      ctxTargetEl.style.zIndex = 1;
     }
     hideContextMenu();
   }
@@ -4076,8 +4043,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         if (newEl) copies.push(newEl);
       });
       if (copies.length) {
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       }
     } else {
       const s = {
@@ -4091,8 +4057,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       const el = restoreElement(s);
       if (el) {
         selectEl(el);
-        pushHistory();
-        scheduleSave();
+        pushHistory();
       }
     }
     hideContextMenu();
@@ -4104,7 +4069,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       selectedEl = null;
       removeConnectionsForEl(el);
       removeCaptionsForEl(el);
-      animateRemove(el, () => { pushHistory(); scheduleSave(); });
+      animateRemove(el, () => { pushHistory(); });
     }
     hideContextMenu();
   }

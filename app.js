@@ -152,8 +152,10 @@ const App = (function () {
   function triggerManualSync() {
     if (!currentBoardId) return;
     saveCurrentBoard();
-    toast('Moodboard synchronized!');
-    if (typeof html2canvas === 'undefined') return;
+    if (typeof html2canvas === 'undefined') {
+      toast('Moodboard synchronized!');
+      return;
+    }
     captureBoardThumbnail()
       .then(({ dataUrl }) => {
         const tc = document.createElement('canvas');
@@ -179,10 +181,13 @@ const App = (function () {
             board.thumbnail = thumb;
             saveBoards();
           }
+          toast('Moodboard synchronized!');
         };
         img2.src = dataUrl;
       })
-      .catch(() => {});
+      .catch(() => {
+        toast('Moodboard synchronized!');
+      });
   }
 
   /// ── CHARGEMENT INITIAL DES BOARDS ────────────────────────────────────────
@@ -281,7 +286,10 @@ const App = (function () {
     const _sharedId = new URLSearchParams(window.location.search).get('board');
     if (_sharedId) {
       // Boutons de vue nécessaires en lecture seule
-      const _ae = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+      const _ae = (id, fn) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', fn);
+      };
       _ae('fit-screen-btn', () => fitElementsToScreen());
       _ae('preview-btn', () => togglePreviewMode());
       await _loadSharedBoard(_sharedId);
@@ -352,7 +360,7 @@ const App = (function () {
       }
       saveCurrentBoard();
       // Remplace "ton-site" par le vrai nom que Netlify t'a donné (ou te donnera)
-const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
+      const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       navigator.clipboard
         .writeText(url)
         .then(() => toast('Lien copié dans le presse-papier'))
@@ -816,37 +824,40 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     void loaderFrame.offsetWidth;
     loaderFrame.style.animation = '';
     loaderOverlay.classList.remove('hidden');
-    requestAnimationFrame(() => setTimeout(() => { // setTimeout(0) : laisse le navigateur peindre le loader avant le code lourd
-      currentBoardId = id;
-      loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
-      document.getElementById('board-title-display').textContent = board.name;
-      const shareBtn = document.getElementById('share-btn');
-      if (shareBtn && window._fbDb && !document.body.classList.contains('readonly-mode'))
-        shareBtn.style.display = '';
-      document.getElementById('home-screen').style.display = 'none';
-      document.getElementById('board-screen').style.display = 'flex';
-      // Réattacher les listeners pinch maintenant que canvas-wrapper est visible
-      if (window._reattachPinch) window._reattachPinch();
-      document.getElementById('canvas').innerHTML = '';
-      zoomLevel = 1;
-      panX = 0;
-      panY = 0;
-      nextZ = 100;
-      history = [];
-      historyIndex = -1;
-      selectedEl = null;
-      multiSelected.clear();
-      applyTransform();
-      updateZoomDisplay();
-      if (board.elements && board.elements.length) {
-        board.elements.forEach((e) => restoreElement(e));
-        // Attendre le rendu (les images sont asynchrones), puis centrer
-        setTimeout(() => fitElementsToScreen(), 120);
-      }
-      pushHistory();
-      renderPanelLib();
-      setTimeout(() => loaderOverlay.classList.add('hidden'), 2000);
-    }, 0));
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        // setTimeout(0) : laisse le navigateur peindre le loader avant le code lourd
+        currentBoardId = id;
+        loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
+        document.getElementById('board-title-display').textContent = board.name;
+        const shareBtn = document.getElementById('share-btn');
+        if (shareBtn && window._fbDb && !document.body.classList.contains('readonly-mode'))
+          shareBtn.style.display = '';
+        document.getElementById('home-screen').style.display = 'none';
+        document.getElementById('board-screen').style.display = 'flex';
+        // Réattacher les listeners pinch maintenant que canvas-wrapper est visible
+        if (window._reattachPinch) window._reattachPinch();
+        document.getElementById('canvas').innerHTML = '';
+        zoomLevel = 1;
+        panX = 0;
+        panY = 0;
+        nextZ = 100;
+        history = [];
+        historyIndex = -1;
+        selectedEl = null;
+        multiSelected.clear();
+        applyTransform();
+        updateZoomDisplay();
+        if (board.elements && board.elements.length) {
+          board.elements.forEach((e) => restoreElement(e));
+          // Attendre le rendu (les images sont asynchrones), puis centrer
+          setTimeout(() => fitElementsToScreen(), 120);
+        }
+        pushHistory();
+        renderPanelLib();
+        setTimeout(() => loaderOverlay.classList.add('hidden'), 2000);
+      }, 0)
+    );
   }
 
   function goHome() {
@@ -911,7 +922,11 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       ghost.style.top = '0px';
       ghost.style.transform = 'translate(0px,0px) scale(1)';
       ghost.style.pointerEvents = 'none';
-      ghost.style.zIndex = '-1';
+      ghost.style.visibility = 'hidden';
+      // Marquer les images crossOrigin pour que useCORS fonctionne correctement
+      ghost.querySelectorAll('img').forEach((img) => {
+        img.crossOrigin = 'anonymous';
+      });
       document.body.appendChild(ghost);
       // Forcer le reflow pour que offsetWidth/offsetHeight soient corrects sur le ghost
       ghost.getBoundingClientRect();
@@ -979,10 +994,17 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     if (els.length) {
       minX = Math.min(...els.map((e) => parseFloat(e.style.left) || 0));
       minY = Math.min(...els.map((e) => parseFloat(e.style.top) || 0));
-      maxX = Math.max(...els.map((e) => (parseFloat(e.style.left) || 0) + (parseFloat(e.style.width) || 0)));
-      maxY = Math.max(...els.map((e) => (parseFloat(e.style.top) || 0) + (parseFloat(e.style.height) || 0)));
+      maxX = Math.max(
+        ...els.map((e) => (parseFloat(e.style.left) || 0) + (parseFloat(e.style.width) || 0))
+      );
+      maxY = Math.max(
+        ...els.map((e) => (parseFloat(e.style.top) || 0) + (parseFloat(e.style.height) || 0))
+      );
     } else {
-      minX = 0; minY = 0; maxX = vw / zoomLevel; maxY = vh / zoomLevel;
+      minX = 0;
+      minY = 0;
+      maxX = vw / zoomLevel;
+      maxY = vh / zoomLevel;
     }
     const W = (maxX - minX) * zoomLevel;
     const H = (maxY - minY) * zoomLevel;
@@ -1358,7 +1380,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         isResizing = false;
         resizeEl = null;
         clearSnapGuides();
-        pushHistory();
+        pushHistory();
       }
       if (isSelecting) {
         isSelecting = false;
@@ -1422,10 +1444,10 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         const y = (e.clientY - rect.top - panY) / zoomLevel;
         if (type === 'note') {
           createNoteElement('', x - 115, y - 80, 290, 75);
-          pushHistory();
+          pushHistory();
         } else if (type === 'color') {
           createColorElement('#000000', x - 65, y - 70, 130, 140);
-          pushHistory();
+          pushHistory();
         } else if (type === 'link') {
           // Stocker la position pour après la saisie de l'URL
           pendingToolDropPos = { x: x - 135, y: y - 110 };
@@ -1443,9 +1465,9 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         const h = _pvH;
         draggedLibItems.forEach((libItem, i) => {
           const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
-          const y = (e.clientY - rect.top  - panY) / zoomLevel - h / 2 + i * 30;
+          const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 30;
           createImageElement(libItem.src, x, y, w, h);
-          pushHistory();
+          pushHistory();
         });
         draggedLibItems = [];
         return;
@@ -1455,9 +1477,10 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         const w = _pvW;
         const h = _pvH;
         const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2;
-        const y = (e.clientY - rect.top  - panY) / zoomLevel - h / 2;
+        const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2;
         createImageElement(src, x, y, w, h);
-        pushHistory();
+        pushHistory();
+
         return;
       }
       // Fichiers images droppés directement
@@ -1476,13 +1499,13 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
                 const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 24;
                 const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 24;
                 applyDropSnap(createImageElement(src, x, y, w, h));
-                pushHistory();
+                pushHistory();
               };
               tmpImg.onerror = () => {
                 const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 24;
                 const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 24;
                 applyDropSnap(createImageElement(src, x, y, 220, 170));
-                pushHistory();
+                pushHistory();
               };
               tmpImg.src = src;
             };
@@ -1618,11 +1641,11 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
               const w = tmpImg.naturalWidth || 220;
               const h = tmpImg.naturalHeight || 170;
               createImageElement(src, c.x - w / 2, c.y - h / 2, w, h);
-              pushHistory();
+              pushHistory();
             };
             tmpImg.onerror = () => {
               createImageElement(src, c.x - 110, c.y - 85, 220, 170);
-              pushHistory();
+              pushHistory();
             };
             tmpImg.src = src;
             // Ajouter aussi à la bibliothèque
@@ -1683,7 +1706,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
     selectedEl = null;
-    multiSelected.clear();
+    multiSelected.clear();
+
     toast('Annulé');
   }
   function redo() {
@@ -1695,7 +1719,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
     selectedEl = null;
-    multiSelected.clear();
+    multiSelected.clear();
+
     toast('Rétabli');
   }
   function reattachAllEvents() {
@@ -1737,7 +1762,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       if (ta.style.pointerEvents === 'auto') e.stopPropagation();
     });
     ta.addEventListener('input', () => {
-      el.dataset.savedata = ta.value;
+      el.dataset.savedata = ta.value;
     });
     ta.addEventListener('blur', (e) => {
       const panel = document.getElementById('text-edit-panel');
@@ -1751,9 +1776,9 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
-        pushHistory();
+        pushHistory();
       } else if (ta.value !== _noteValueOnFocus) {
-        pushHistory();
+        pushHistory();
       }
     });
   }
@@ -1816,7 +1841,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         swatch.style.background = v;
         el.dataset.savedata = v;
         hexInput.value = v;
-        pushHistory();
+        pushHistory();
+
         return true;
       }
       return false;
@@ -1918,7 +1944,10 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     el.style.transformOrigin = 'center center';
     el.style.transform = 'scale(0)';
     el.style.opacity = '0';
-    setTimeout(() => { el.remove(); if (onDone) onDone(); }, 180);
+    setTimeout(() => {
+      el.remove();
+      if (onDone) onDone();
+    }, 180);
   }
 
   function deleteSelected() {
@@ -1935,13 +1964,20 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       toDelete.push(selectedEl);
       selectedEl = null;
     }
-    if (!toDelete.length) { toast('Aucun élément sélectionné'); return; }
+    if (!toDelete.length) {
+      toast('Aucun élément sélectionné');
+      return;
+    }
     toast(toDelete.length > 1 ? toDelete.length + ' éléments supprimés' : 'Supprimé');
     let done = 0;
-    toDelete.forEach((el) => animateRemove(el, () => {
-      done++;
-      if (done === toDelete.length) { pushHistory(); }
-    }));
+    toDelete.forEach((el) =>
+      animateRemove(el, () => {
+        done++;
+        if (done === toDelete.length) {
+          pushHistory();
+        }
+      })
+    );
   }
 
   function clearBoard() {
@@ -1949,7 +1985,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.getElementById('canvas').innerHTML = '';
     selectedEl = null;
     multiSelected.clear();
-    pushHistory();
+    pushHistory();
+
     toast('Board vidé');
   }
 
@@ -1963,14 +2000,18 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   function getRect(el) {
     const l = parseFloat(el.style.left) || 0;
     const t = parseFloat(el.style.top) || 0;
-    let tx = 0, ty = 0;
+    let tx = 0,
+      ty = 0;
     const tr = el.style.transform;
     if (tr) {
       const m = tr.match(/translate3d\(\s*([-\d.]+)px,\s*([-\d.]+)px/);
-      if (m) { tx = parseFloat(m[1]); ty = parseFloat(m[2]); }
+      if (m) {
+        tx = parseFloat(m[1]);
+        ty = parseFloat(m[2]);
+      }
     }
     const left = l + tx;
-    const top  = t + ty;
+    const top = t + ty;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
     return { l: left, t: top, r: left + w, b: top + h, cx: left + w / 2, cy: top + h / 2, w, h };
@@ -2195,7 +2236,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       const onUp = () => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
-        pushHistory();
+        pushHistory();
       };
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
@@ -2280,7 +2321,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       const excludeSet = new Set([el]);
       let startLeft = parseFloat(dragEl.style.left) || 0;
       let startTop = parseFloat(dragEl.style.top) || 0;
-      let curX = startLeft, curY = startTop;
+      let curX = startLeft,
+        curY = startTop;
 
       function doDuplicate() {
         if (duplicated) return;
@@ -2292,11 +2334,11 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         copy.style.zIndex = ++nextZ;
         // Position copy at current visual position (curX/curY), not frozen style.left/top
         copy.style.left = curX + 'px';
-        copy.style.top  = curY + 'px';
+        copy.style.top = curY + 'px';
         copy.style.transform = '';
         // Restore original element to its pre-drag position and clear its transform
         el.style.left = origLeft + 'px';
-        el.style.top  = origTop + 'px';
+        el.style.top = origTop + 'px';
         el.style.transform = '';
         document.getElementById('canvas').appendChild(copy);
         attachElementEvents(copy);
@@ -2308,7 +2350,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         excludeSet.add(dragEl);
         // startLeft/startTop reset to current position so translate3d offset starts at 0
         startLeft = curX;
-        startTop  = curY;
+        startTop = curY;
       }
 
       if (isAltDown) doDuplicate();
@@ -2343,9 +2385,12 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
             const others = getAllElements(excludeSet);
             if (others.length) {
               const snapRect = {
-                l: curX, t: curY,
-                r: curX + dragEl.offsetWidth, b: curY + dragEl.offsetHeight,
-                w: dragEl.offsetWidth, h: dragEl.offsetHeight,
+                l: curX,
+                t: curY,
+                r: curX + dragEl.offsetWidth,
+                b: curY + dragEl.offsetHeight,
+                w: dragEl.offsetWidth,
+                h: dragEl.offsetHeight,
               };
               const { dx: sdx, dy: sdy, guidesH, guidesV } = computeSnap(snapRect, others);
               clearSnapGuides();
@@ -2453,7 +2498,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         if (moved || duplicated) {
-          pushHistory();
+          pushHistory();
 
           dragEl.dataset.justDragged = '1';
           setTimeout(() => delete dragEl.dataset.justDragged, 150);
@@ -2701,7 +2746,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       window.removeEventListener('mouseup', onUp);
       clearSnapGuides();
       if (moved || duplicated) {
-        pushHistory();
+        pushHistory();
       }
     };
     window.addEventListener('mousemove', onMove);
@@ -2950,12 +2995,12 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         h = 350;
       }
       createImageElement(src, c.x - w / 2, c.y - h / 2, w, h);
-      pushHistory();
+      pushHistory();
     };
     tmpImg.onerror = () => {
       const c = getCenter();
       createImageElement(src, c.x - 110, c.y - 85, 220, 170);
-      pushHistory();
+      pushHistory();
     };
     tmpImg.src = src;
   }
@@ -2964,7 +3009,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   function addNote() {
     const c = getCenter();
     createNoteElement('', c.x - 110, c.y - 75, 290, 75);
-    pushHistory();
+    pushHistory();
   }
   function createNoteElement(content, x, y, w, h) {
     w = w || 230;
@@ -2980,7 +3025,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     ta.style.pointerEvents = 'none';
     ta.style.cursor = 'move';
     ta.addEventListener('input', () => {
-      el.dataset.savedata = ta.value;
+      el.dataset.savedata = ta.value;
     });
     // Valeur au moment de l'entrée en édition — pour détecter un changement au blur
     let _noteValueOnFocus = '';
@@ -3017,10 +3062,10 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
-        pushHistory();
+        pushHistory();
       } else if (ta.value !== _noteValueOnFocus) {
         // Le texte a changé pendant l'édition → créer un état historique
-        pushHistory();
+        pushHistory();
       }
     });
     wrap.appendChild(ta);
@@ -3032,7 +3077,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   function addColorDirect() {
     const c = getCenter();
     createColorElement('#000000', c.x - 65, c.y - 70, 130, 140);
-    pushHistory();
+    pushHistory();
   }
   function openColorPicker() {
     openModal('color-modal');
@@ -3055,7 +3100,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       '#' + document.getElementById('hex-input').value.trim().toUpperCase().replace('#', '');
     const c = getCenter();
     createColorElement(hex, c.x - 65, c.y - 70, 130, 140);
-    pushHistory();
+    pushHistory();
+
     closeColorModal();
   }
   function createColorElement(hex, x, y, w, h) {
@@ -3091,7 +3137,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         swatch.style.background = v;
         el.dataset.savedata = v;
         hexInput.value = v;
-        pushHistory();
+        pushHistory();
+
         return true;
       }
       return false;
@@ -3154,7 +3201,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
-          pushHistory();
+          pushHistory();
         })
         .catch(() => {}); // annulé par l'utilisateur
       return;
@@ -3201,7 +3248,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
-          pushHistory();
+          pushHistory();
         })
         .catch(() => {
           canvasDiv.style.transform = savedTf;
@@ -3248,7 +3295,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       ly = c.y - 90;
     }
     createLinkElement(url, title, img, lx, ly);
-    pushHistory();
+    pushHistory();
+
     closeLinkModal();
     ['link-url-input', 'link-title-input', 'link-img-input'].forEach(
       (id) => (document.getElementById(id).value = '')
@@ -3314,7 +3362,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     }
     const c = getCenter();
     createVideoElement(embed, isEmbed, c.x - 180, c.y - 101, 360, 202);
-    pushHistory();
+    pushHistory();
+
     closeVideoModal();
     document.getElementById('video-url-input').value = '';
   }
@@ -3325,7 +3374,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     reader.onload = (ev) => {
       const c = getCenter();
       createVideoElement(ev.target.result, false, c.x - 180, c.y - 101, 360, 202);
-      pushHistory();
+      pushHistory();
+
       closeVideoModal();
     };
     reader.readAsDataURL(file);
@@ -3436,7 +3486,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           newEl.style.zIndex = target.style.zIndex;
           target.replaceWith(newEl);
           selectEl(newEl);
-          pushHistory();
+          pushHistory();
         });
       } else {
         const icns = {
@@ -3460,7 +3510,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         if (h) newEl.style.height = h + 'px';
         target.replaceWith(newEl);
         selectEl(newEl);
-        pushHistory();
+        pushHistory();
       }
       e.target.value = '';
       return;
@@ -3488,7 +3538,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       if (VIDEO_EXTS.has(ext)) {
         readFileAsBase64(file).then((b64) => {
           createVideoFileElement(file.name, size, b64, baseX, baseY);
-          pushHistory();
+          pushHistory();
         });
       } else {
         const icns = {
@@ -3510,7 +3560,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       }
     });
     pendingToolDropPos = null;
-    pushHistory();
+    pushHistory();
+
     e.target.value = '';
   }
 
@@ -3683,14 +3734,21 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       toDelete.forEach((e) => {
         removeConnectionsForEl(e);
         removeCaptionsForEl(e);
-        animateRemove(e, () => { done++; if (done === toDelete.length) { pushHistory(); } });
+        animateRemove(e, () => {
+          done++;
+          if (done === toDelete.length) {
+            pushHistory();
+          }
+        });
       });
       toast(toDelete.length + ' éléments supprimés');
     } else {
       removeConnectionsForEl(el);
       removeCaptionsForEl(el);
       selectedEl = null;
-      animateRemove(el, () => { pushHistory(); });
+      animateRemove(el, () => {
+        pushHistory();
+      });
     }
   }
   function duplicateEl(btn) {
@@ -3709,7 +3767,8 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         };
         restoreElement(s);
       });
-      pushHistory();
+      pushHistory();
+
       return;
     }
     const s = {
@@ -3723,7 +3782,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     const newEl = restoreElement(s);
     if (newEl) {
       selectEl(newEl);
-      pushHistory();
+      pushHistory();
     }
   }
 
@@ -3789,7 +3848,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
             replaceTargetEl.style.width = currentW + 'px';
             replaceTargetEl.style.height = newH + 'px';
             replaceTargetEl.dataset.ratio = ratio.toFixed(6);
-            pushHistory();
+            pushHistory();
           };
           tmpImg.src = src;
         }
@@ -3803,11 +3862,15 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
   function getElCenter(el) {
     const l = parseFloat(el.style.left) || 0;
     const t = parseFloat(el.style.top) || 0;
-    let tx = 0, ty = 0;
+    let tx = 0,
+      ty = 0;
     const tr = el.style.transform;
     if (tr) {
       const m = tr.match(/translate3d\(\s*([-\d.]+)px,\s*([-\d.]+)px/);
-      if (m) { tx = parseFloat(m[1]); ty = parseFloat(m[2]); }
+      if (m) {
+        tx = parseFloat(m[1]);
+        ty = parseFloat(m[2]);
+      }
     }
     return {
       x: l + tx + el.offsetWidth / 2,
@@ -3826,7 +3889,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     for (let i = 0; i < ids.length - 1; i++) {
       createConnection(ids[i], ids[i + 1]);
     }
-    pushHistory();
+    pushHistory();
   }
 
   function createConnection(fromId, toId) {
@@ -3902,7 +3965,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
     document.getElementById('canvas').appendChild(cap);
     cap.focus();
-    pushHistory();
+    pushHistory();
   }
 
   function hideContextMenu() {
@@ -3960,7 +4023,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     // Si le commentaire est vide après l'édition, on le supprime
     if (!cap.textContent.trim()) {
       cap.remove();
-      pushHistory();
+      pushHistory();
     }
   }
   function applyTextFont(val) {
@@ -3988,7 +4051,6 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.querySelectorAll('.text-font-btn').forEach((b) => b.classList.remove('active'));
     const activeBtn = document.getElementById(val === 'helvetica-bold' ? 'tp-bold' : 'tp-roman');
     if (activeBtn) activeBtn.classList.add('active');
-
   }
   function applyTextSizeDelta(delta) {
     if (!textEditTarget) return;
@@ -3998,7 +4060,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     const next = Math.min(Math.max(current + delta, 8), 72);
     ta.style.fontSize = next + 'px';
     const sizeVal = document.getElementById('text-size-val');
-    if (sizeVal) sizeVal.textContent = next;
+    if (sizeVal) sizeVal.textContent = next;
   }
   function applyTextAlign(align) {
     if (!textEditTarget) return;
@@ -4007,18 +4069,18 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
     document.querySelectorAll('.text-align-btn').forEach((b) => b.classList.remove('active'));
     const id = { left: 'ta-left', center: 'ta-center', right: 'ta-right' }[align];
     const btn = document.getElementById(id);
-    if (btn) btn.classList.add('active');
+    if (btn) btn.classList.add('active');
   }
 
   function ctxBringFront() {
     if (ctxTargetEl) {
-      ctxTargetEl.style.zIndex = ++nextZ;
+      ctxTargetEl.style.zIndex = ++nextZ;
     }
     hideContextMenu();
   }
   function ctxSendBack() {
     if (ctxTargetEl) {
-      ctxTargetEl.style.zIndex = 1;
+      ctxTargetEl.style.zIndex = 1;
     }
     hideContextMenu();
   }
@@ -4043,7 +4105,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         if (newEl) copies.push(newEl);
       });
       if (copies.length) {
-        pushHistory();
+        pushHistory();
       }
     } else {
       const s = {
@@ -4057,7 +4119,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       const el = restoreElement(s);
       if (el) {
         selectEl(el);
-        pushHistory();
+        pushHistory();
       }
     }
     hideContextMenu();
@@ -4069,7 +4131,9 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
       selectedEl = null;
       removeConnectionsForEl(el);
       removeCaptionsForEl(el);
-      animateRemove(el, () => { pushHistory(); });
+      animateRemove(el, () => {
+        pushHistory();
+      });
     }
     hideContextMenu();
   }
@@ -4261,7 +4325,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         // Taille thumbnail : lire la taille rendue de l'img dans le panel
         const itemImg = div.querySelector('img');
         const thumbRect = itemImg.getBoundingClientRect();
-        preview._thumbW = thumbRect.width  || 132;
+        preview._thumbW = thumbRect.width || 132;
         preview._thumbH = thumbRect.height || 120;
 
         // Taille pleine : calculer via Image() asynchrone
@@ -4275,8 +4339,14 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           const maxDim = Math.max(vw, vh) * 0.2;
           let fw = sizeCalc.naturalWidth || 220;
           let fh = sizeCalc.naturalHeight || 170;
-          if (fw > maxDim) { fh = Math.round(fh * maxDim / fw); fw = Math.round(maxDim); }
-          if (fh > maxDim) { fw = Math.round(fw * maxDim / fh); fh = Math.round(maxDim); }
+          if (fw > maxDim) {
+            fh = Math.round((fh * maxDim) / fw);
+            fw = Math.round(maxDim);
+          }
+          if (fh > maxDim) {
+            fw = Math.round((fw * maxDim) / fh);
+            fh = Math.round(maxDim);
+          }
           // Stocker en pixels écran (zoomLevel déjà appliqué) — ne pas appliquer directement
           preview._fullW = Math.round(fw * (zoomLevel || 1));
           preview._fullH = Math.round(fh * (zoomLevel || 1));
@@ -4288,7 +4358,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
         sizeCalc.src = item.src;
 
         // Appliquer immédiatement la taille thumbnail (curseur encore sur le panel)
-        preview.style.width  = preview._thumbW + 'px';
+        preview.style.width = preview._thumbW + 'px';
         preview.style.height = preview._thumbH + 'px';
         preview.classList.remove('preview-active-snap');
         preview._inCanvas = false;
@@ -4297,7 +4367,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           if (!isDraggingFromPanel) return;
           const p = document.getElementById('drag-custom-preview');
           p.style.left = ev.clientX + 'px';
-          p.style.top  = ev.clientY + 'px';
+          p.style.top = ev.clientY + 'px';
           if (p.style.display !== 'block') p.style.display = 'block';
 
           if (ev.target.closest('#canvas-wrapper')) {
@@ -4305,7 +4375,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
             if (!p._inCanvas) {
               const fw = p._fullW || 220;
               const fh = p._fullH || 170;
-              p.style.width  = fw + 'px';
+              p.style.width = fw + 'px';
               p.style.height = fh + 'px';
               p.classList.remove('preview-active-snap');
               void p.offsetWidth; // force reflow pour relancer l'animation CSS
@@ -4315,7 +4385,7 @@ const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
           } else {
             // ZONE PANEL ou autre : revenir en taille thumbnail
             if (p._inCanvas) {
-              p.style.width  = (p._thumbW || 132) + 'px';
+              p.style.width = (p._thumbW || 132) + 'px';
               p.style.height = (p._thumbH || 120) + 'px';
               p.classList.remove('preview-active-snap');
               p._inCanvas = false;

@@ -19,7 +19,7 @@ const App = (function () {
   let historyIndex = -1;
   let selectedEl = null; // élément unique sélectionné
   let multiSelected = new Set(); // sélection multiple
-  let libSelectedIds = new Set(); // <--- LIGNE À AJOUTER POUR CORRIGER L'ERREUR
+  let libSelectedIds = new Set(); 
   let isResizing = false;
   let resizeEl = null;
   let resizeStartW = 0,
@@ -99,6 +99,8 @@ const App = (function () {
 
   function saveCurrentBoard() {
     if (!currentBoardId) return;
+    // En mode collab, seul le owner sauvegarde localement
+    if (typeof Collab !== 'undefined' && Collab.isActive() && !Collab.isOwner()) return;
     const board = boards.find((b) => b.id === currentBoardId);
     if (!board) return;
     const elements = [];
@@ -152,7 +154,42 @@ const App = (function () {
   function triggerManualSync() {
     if (!currentBoardId) return;
     saveCurrentBoard();
-    toast('Moodboard synchronized!');
+    if (typeof html2canvas === 'undefined') {
+      toast('Moodboard synchronized!');
+      return;
+    }
+    captureBoardThumbnail()
+      .then(({ dataUrl }) => {
+        const tc = document.createElement('canvas');
+        tc.width = 300;
+        tc.height = 225;
+        const ctx2 = tc.getContext('2d');
+        ctx2.fillStyle = '#ffffff';
+        ctx2.fillRect(0, 0, 300, 225);
+        const img2 = new Image();
+        img2.onload = () => {
+          const margin = 0.1;
+          const maxW = 300 * (1 - 2 * margin);
+          const maxH = 225 * (1 - 2 * margin);
+          const scale = Math.min(maxW / img2.width, maxH / img2.height);
+          const dw = img2.width * scale,
+            dh = img2.height * scale;
+          const dx = (300 - dw) / 2,
+            dy = (225 - dh) / 2;
+          ctx2.drawImage(img2, dx, dy, dw, dh);
+          const thumb = tc.toDataURL('image/jpeg', 0.7);
+          const board = boards.find((b) => b.id === currentBoardId);
+          if (board) {
+            board.thumbnail = thumb;
+            saveBoards();
+          }
+          toast('Moodboard synchronized!');
+        };
+        img2.src = dataUrl;
+      })
+      .catch(() => {
+        toast('Moodboard synchronized!');
+      });
   }
 
   /// ── CHARGEMENT INITIAL DES BOARDS ────────────────────────────────────────
@@ -247,6 +284,21 @@ const App = (function () {
       }
     });
 
+    // ── Détection mode collaboration : ?collab=ID ──
+    const _collabId = new URLSearchParams(window.location.search).get('collab');
+    if (_collabId && typeof Collab !== 'undefined') {
+      const _ae = (id, fn) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', fn);
+      };
+      _ae('fit-screen-btn', () => fitElementsToScreen());
+      _ae('preview-btn', () => togglePreviewMode());
+      _ae('refresh-save-btn', () => triggerManualSync());
+      // Charger le board depuis Firebase et rejoindre en tant que guest
+      await _loadCollabBoard(_collabId);
+      return;
+    }
+
     // ── Détection mode partage : ?board=ID ──
     const _sharedId = new URLSearchParams(window.location.search).get('board');
     if (_sharedId) {
@@ -330,6 +382,37 @@ const App = (function () {
         .writeText(url)
         .then(() => toast('Lien copié dans le presse-papier'))
         .catch(() => toast('Lien : ' + url));
+    });
+
+    // Bouton Collaborer
+    addEvt('collab-btn', 'click', async () => {
+      if (typeof Collab === 'undefined') { toast('Module collab non chargé'); return; }
+      if (!currentBoardId || !window._fbDb) { toast('Firebase non disponible'); return; }
+
+      if (Collab.isActive()) {
+        // Arrêter la collaboration
+        Collab.endSession();
+        const btn = document.getElementById('collab-btn');
+        if (btn) { btn.textContent = 'Collaborer'; btn.classList.remove('active'); }
+        toast('Session collaborative terminée');
+        return;
+      }
+
+      // Démarrer la collaboration
+      saveCurrentBoard();
+      const elements = _collabGetBoardElements();
+      const ok = await Collab.startSession(currentBoardId, true, { elements: elements });
+      if (!ok) { toast('Impossible de démarrer la session'); return; }
+
+      const btn = document.getElementById('collab-btn');
+      if (btn) { btn.textContent = 'Arrêter collab'; btn.classList.add('active'); }
+
+      // Copier le lien de collaboration
+      const url = 'https://soft-zabaione-8a5fbc.netlify.app/?collab=' + currentBoardId;
+      navigator.clipboard
+        .writeText(url)
+        .then(() => toast('Lien de collaboration copié !'))
+        .catch(() => toast('Lien collab : ' + url));
     });
 
     // Toolbar — outils (clic + drag)
@@ -447,78 +530,6 @@ const App = (function () {
 
     // Lightbox vidéo
     addEvt('vlb-close-btn', 'click', () => closeVideoLightbox());
-
-    // ── Cover editor ──
-    addEvt('close-cover-modal', 'click', () => closeModal('cover-editor-modal'));
-    addEvt('cover-file-btn', 'click', () => {
-      const input = document.getElementById('cover-file-input');
-      if (input) input.click();
-    });
-    addEvt('cover-file-input', 'change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => loadCoverImage(ev.target.result);
-      reader.readAsDataURL(file);
-      e.target.value = '';
-    });
-    addEvt('cover-zoom-slider', 'input', (e) => {
-      const t = parseFloat(e.target.value); // 0..1
-      _coverScale = _coverMinScale * (1 + t * 2); // minScale → minScale×3
-      clampCoverOffset();
-      updateCropView();
-    });
-    addEvt('cover-save-btn', 'click', () => saveCoverCrop());
-
-    // Drag on cover workspace
-    const dragLayer = document.getElementById('cover-drag-layer');
-    if (dragLayer) {
-      dragLayer.addEventListener('mousedown', (e) => {
-        if (!_coverNatW) return;
-        _coverDragging = true;
-        _coverDragSX   = e.clientX;
-        _coverDragSY   = e.clientY;
-        _coverDragOX   = _coverOffsetX;
-        _coverDragOY   = _coverOffsetY;
-        const ws = document.getElementById('cover-workspace');
-        if (ws) ws.classList.add('dragging');
-        e.preventDefault();
-      });
-    }
-    window.addEventListener('mousemove', (e) => {
-      if (!_coverDragging) return;
-      _coverOffsetX = _coverDragOX + (e.clientX - _coverDragSX);
-      _coverOffsetY = _coverDragOY + (e.clientY - _coverDragSY);
-      clampCoverOffset();
-      updateCropView();
-    });
-    window.addEventListener('mouseup', () => {
-      if (!_coverDragging) return;
-      _coverDragging = false;
-      const ws = document.getElementById('cover-workspace');
-      if (ws) ws.classList.remove('dragging');
-    });
-
-    // ── Home context menu ──
-    const homeCtxMenu = document.getElementById('home-ctx-menu');
-    if (homeCtxMenu) {
-      homeCtxMenu.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action]');
-        if (!btn || !_ctxMenuBoardId) return;
-        hideHomeCtxMenu();
-        const id = _ctxMenuBoardId;
-        if (btn.dataset.action === 'edit-cover') openCoverEditor(id);
-        if (btn.dataset.action === 'rename')     App.renameBoardPrompt(id);
-        if (btn.dataset.action === 'delete')     App.deleteBoard(id);
-      });
-    }
-    document.addEventListener('mousedown', (e) => {
-      const menu = document.getElementById('home-ctx-menu');
-      if (menu && !menu.contains(e.target)) hideHomeCtxMenu();
-    }, true);
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') hideHomeCtxMenu();
-    });
   }
   // ── BOARDS ───────────────────────────────────────────────────────────────
   function createBoard() {
@@ -590,33 +601,33 @@ const App = (function () {
 
       const saved = formatSavedAt(b.savedAt);
       card.innerHTML = `
-        ${b.thumbnail
-          ? `<img class="board-thumb" src="${b.thumbnail}" alt="" draggable="false">`
-          : `<div class="board-thumb board-cover-placeholder"><button class="board-cover-btn" title="Choisir une couverture">+</button></div>`
-        }
+        ${b.thumbnail ? `<img class="board-thumb" src="${b.thumbnail}" alt="">` : ''}
+
         <div class="board-info">
           <div class="board-name">${escHtml(b.name)}</div>
-          ${saved.date ? `<div class="board-save-date"><span>${saved.date}</span><span>${saved.time}</span></div>` : ''}
+                    ${saved.date ? `<div class="board-save-date"><span>${saved.date}</span><span>${saved.time}</span></div>` : ''}
+
         </div>
+        <div class="board-actions">
+                   <button class="board-action-btn btn-rename"><img src="PNG/renommer.png" style="width:14px;height:14px;pointer-events:none;"></button>
+          <button class="board-action-btn delete btn-delete"><img src="PNG/supprimer.png" style="width:14px;height:14px;pointer-events:none;"></button>
+        </div>
+      </div>
       `;
 
-      const coverBtn = card.querySelector('.board-cover-btn');
-      if (coverBtn) {
-        coverBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openCoverEditor(b.id);
-        });
-      }
-
-      card.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        showHomeCtxMenu(e, b.id);
+      card.querySelector('.btn-rename').addEventListener('click', (e) => {
+        e.stopPropagation();
+        App.renameBoardPrompt(b.id);
+      });
+      card.querySelector('.btn-delete').addEventListener('click', (e) => {
+        e.stopPropagation();
+        App.deleteBoard(b.id);
       });
 
       // Drag pour déplacer la carte — simple clic+drag, double-clic pour ouvrir
       card.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
-        if (e.target.closest('.board-cover-btn')) return;
+        if (e.target.closest('.board-action-btn')) return;
         e.preventDefault();
         const startX = e.clientX - (b.x || 0);
         const startY = e.clientY - (b.y || 0);
@@ -660,7 +671,7 @@ const App = (function () {
             saveBoards();
           } else {
             // Pas de déplacement = clic simple → ouvrir le board
-            if (!ev.target.closest('.board-cover-btn')) openBoard(b.id);
+            if (!ev.target.closest('.board-action-btn')) openBoard(b.id);
           }
           if (rafId) {
             cancelAnimationFrame(rafId);
@@ -898,6 +909,10 @@ const App = (function () {
   }
 
   function goHome() {
+    // Fermer la session collaborative si active
+    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+      Collab.endSession();
+    }
     try {
       saveCurrentBoard();
     } catch (e) {
@@ -911,6 +926,83 @@ const App = (function () {
     selectedEl = null;
     multiSelected.clear();
     renderHome();
+  }
+
+  function captureBoardThumbnail() {
+    return new Promise((resolve, reject) => {
+      const canvasEl = document.getElementById('canvas');
+      const els = canvasEl.querySelectorAll('.board-element');
+      if (!els.length) {
+        reject();
+        return;
+      }
+
+      // Bounding box — même logique que fitElementsToScreen
+      let minL = Infinity,
+        minT = Infinity,
+        maxR = -Infinity,
+        maxB = -Infinity;
+      els.forEach((el) => {
+        const l = parseFloat(el.style.left) || 0;
+        const t = parseFloat(el.style.top) || 0;
+        const r = l + el.offsetWidth;
+        const b = t + el.offsetHeight;
+        if (l < minL) minL = l;
+        if (t < minT) minT = t;
+        if (r > maxR) maxR = r;
+        if (b > maxB) maxB = b;
+      });
+      const contentW = maxR - minL;
+      const contentH = maxB - minT;
+      if (contentW <= 0 || contentH <= 0) {
+        reject();
+        return;
+      }
+
+      // Marge proportionnelle de 7% autour du bounding box (entre les 5-10% de fitElementsToScreen)
+      const marginX = contentW * 0.07;
+      const marginY = contentH * 0.07;
+      const cropX = minL - marginX;
+      const cropY = minT - marginY;
+      const cropW = contentW + marginX * 2;
+      const cropH = contentH + marginY * 2;
+
+      // Cloner le canvas dans un conteneur caché à scale(1) — le DOM visible n'est pas touché
+      const ghost = canvasEl.cloneNode(true);
+      ghost.style.position = 'fixed';
+      ghost.style.left = '-99999px';
+      ghost.style.top = '0px';
+      ghost.style.transform = 'translate(0px,0px) scale(1)';
+      ghost.style.pointerEvents = 'none';
+      ghost.style.visibility = 'hidden';
+      // Marquer les images crossOrigin pour que useCORS fonctionne correctement
+      ghost.querySelectorAll('img').forEach((img) => {
+        img.crossOrigin = 'anonymous';
+      });
+      document.body.appendChild(ghost);
+      // Forcer le reflow pour que offsetWidth/offsetHeight soient corrects sur le ghost
+      ghost.getBoundingClientRect();
+
+      html2canvas(ghost, {
+        scale: 1,
+        useCORS: true,
+        allowTaint: true,
+        x: cropX,
+        y: cropY,
+        width: cropW,
+        height: cropH,
+        scrollX: 0,
+        scrollY: 0,
+      })
+        .then((c) => {
+          ghost.remove();
+          resolve({ dataUrl: c.toDataURL('image/png'), cropW, cropH });
+        })
+        .catch((err) => {
+          ghost.remove();
+          reject(err);
+        });
+    });
   }
 
   function deleteBoard(id) {
@@ -944,153 +1036,6 @@ const App = (function () {
     closeModal('rename-modal');
   }
 
-  // ── COVER EDITOR ──────────────────────────────────────────────────────────
-  const COVER_MASK_W    = 90;
-  const COVER_MASK_H    = 67.5;
-  const COVER_WS_W      = 300;
-  const COVER_WS_H      = 200;
-  const COVER_MASK_LEFT = (COVER_WS_W - COVER_MASK_W) / 2; // 105
-  const COVER_MASK_TOP  = (COVER_WS_H - COVER_MASK_H) / 2; // 66.25
-
-  let _coverBoardId  = null;
-  let _coverOffsetX  = 0;
-  let _coverOffsetY  = 0;
-  let _coverScale    = 1;
-  let _coverMinScale = 1;
-  let _coverNatW     = 0;
-  let _coverNatH     = 0;
-  let _coverDragging = false;
-  let _coverDragSX   = 0;
-  let _coverDragSY   = 0;
-  let _coverDragOX   = 0;
-  let _coverDragOY   = 0;
-
-  function openCoverEditor(boardId) {
-    _coverBoardId = boardId;
-    _coverOffsetX = _coverOffsetY = 0;
-    _coverScale = 1;
-    _coverNatW = _coverNatH = 0;
-    document.getElementById('cover-save-btn').disabled = true;
-    ['cover-img-dim', 'cover-img-bright'].forEach((id) => {
-      const el = document.getElementById(id);
-      el.src = '';
-      el.style.display = 'none';
-    });
-    document.getElementById('cover-zoom-row').style.display = 'none';
-    document.getElementById('cover-zoom-slider').value = 0;
-    populateCoverGallery(boardId);
-    const board = boards.find((b) => b.id === boardId);
-    if (board && board.thumbnail) loadCoverImage(board.thumbnail);
-    openModal('cover-editor-modal');
-  }
-
-  function populateCoverGallery(boardId) {
-    const gallery = document.getElementById('cover-gallery');
-    const wrap    = document.getElementById('cover-gallery-wrap');
-    gallery.innerHTML = '';
-    const board = boards.find((b) => b.id === boardId);
-    if (!board) { wrap.style.display = 'none'; return; }
-    const imgs = (board.elements || []).filter((e) => e.type === 'image' && e.src);
-    if (!imgs.length) { wrap.style.display = 'none'; return; }
-    wrap.style.display = '';
-    imgs.forEach((e) => {
-      const thumb = document.createElement('img');
-      thumb.src = e.src;
-      thumb.title = 'Utiliser cette image';
-      thumb.addEventListener('click', () => loadCoverImage(e.src));
-      gallery.appendChild(thumb);
-    });
-  }
-
-  function loadCoverImage(src) {
-    const dimImg    = document.getElementById('cover-img-dim');
-    const brightImg = document.getElementById('cover-img-bright');
-    const img = new Image();
-    img.onload = () => {
-      _coverNatW = img.naturalWidth;
-      _coverNatH = img.naturalHeight;
-      _coverMinScale = Math.max(COVER_MASK_W / _coverNatW, COVER_MASK_H / _coverNatH);
-      _coverScale    = _coverMinScale;
-      const scaledW  = _coverNatW * _coverScale;
-      const scaledH  = _coverNatH * _coverScale;
-      _coverOffsetX  = (COVER_MASK_W - scaledW) / 2;
-      _coverOffsetY  = (COVER_MASK_H - scaledH) / 2;
-      clampCoverOffset();
-      dimImg.src    = src;
-      brightImg.src = src;
-      dimImg.style.display    = '';
-      brightImg.style.display = '';
-      updateCropView();
-      document.getElementById('cover-zoom-slider').value = 0;
-      document.getElementById('cover-zoom-row').style.display = 'flex';
-      document.getElementById('cover-save-btn').disabled = false;
-    };
-    img.src = src;
-  }
-
-  function updateCropView() {
-    const w = _coverNatW * _coverScale;
-    const h = _coverNatH * _coverScale;
-    const dimImg = document.getElementById('cover-img-dim');
-    dimImg.style.left   = (COVER_MASK_LEFT + _coverOffsetX) + 'px';
-    dimImg.style.top    = (COVER_MASK_TOP  + _coverOffsetY) + 'px';
-    dimImg.style.width  = w + 'px';
-    dimImg.style.height = h + 'px';
-    const brightImg = document.getElementById('cover-img-bright');
-    brightImg.style.left   = _coverOffsetX + 'px';
-    brightImg.style.top    = _coverOffsetY + 'px';
-    brightImg.style.width  = w + 'px';
-    brightImg.style.height = h + 'px';
-  }
-
-  function clampCoverOffset() {
-    const w = _coverNatW * _coverScale;
-    const h = _coverNatH * _coverScale;
-    _coverOffsetX = Math.min(0, Math.max(COVER_MASK_W - w, _coverOffsetX));
-    _coverOffsetY = Math.min(0, Math.max(COVER_MASK_H - h, _coverOffsetY));
-  }
-
-  function saveCoverCrop() {
-    const board = boards.find((b) => b.id === _coverBoardId);
-    if (!board || !_coverNatW) return;
-    const OUT_W = 180, OUT_H = 135;
-    const ratio = OUT_W / COVER_MASK_W; // 2
-    const cvs = document.createElement('canvas');
-    cvs.width  = OUT_W;
-    cvs.height = OUT_H;
-    const ctx = cvs.getContext('2d');
-    const img = document.getElementById('cover-img-dim');
-    ctx.drawImage(
-      img,
-      _coverOffsetX * ratio,
-      _coverOffsetY * ratio,
-      _coverNatW * _coverScale * ratio,
-      _coverNatH * _coverScale * ratio
-    );
-    board.thumbnail = cvs.toDataURL('image/jpeg', 0.85);
-    saveBoards();
-    renderHome();
-    closeModal('cover-editor-modal');
-  }
-
-  // ── HOME CONTEXT MENU ─────────────────────────────────────────────────────
-  let _ctxMenuBoardId = null;
-
-  function showHomeCtxMenu(e, boardId) {
-    _ctxMenuBoardId = boardId;
-    const menu = document.getElementById('home-ctx-menu');
-    menu.style.display = 'block';
-    const mx = Math.min(e.clientX, window.innerWidth - menu.offsetWidth - 8);
-    const my = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 8);
-    menu.style.left = mx + 'px';
-    menu.style.top  = my + 'px';
-  }
-
-  function hideHomeCtxMenu() {
-    const menu = document.getElementById('home-ctx-menu');
-    if (menu) menu.style.display = 'none';
-  }
-
   // ── CANVAS / ZOOM / PAN ──────────────────────────────────────────────────
   function clampPan() {
     const wrapper = document.getElementById('canvas-wrapper');
@@ -1102,10 +1047,10 @@ const App = (function () {
       minX = Math.min(...els.map((e) => parseFloat(e.style.left) || 0));
       minY = Math.min(...els.map((e) => parseFloat(e.style.top) || 0));
       maxX = Math.max(
-        ...els.map((e) => (parseFloat(e.style.left) || 0) + (parseFloat(e.style.width) || 0))
+        ...els.map((e) => (parseFloat(e.style.left) || 0) + e.offsetWidth)
       );
       maxY = Math.max(
-        ...els.map((e) => (parseFloat(e.style.top) || 0) + (parseFloat(e.style.height) || 0))
+        ...els.map((e) => (parseFloat(e.style.top) || 0) + e.offsetHeight)
       );
     } else {
       minX = 0;
@@ -1115,10 +1060,22 @@ const App = (function () {
     }
     const W = (maxX - minX) * zoomLevel;
     const H = (maxY - minY) * zoomLevel;
-    const marginX = Math.max(0.5 * W, 200);
-    const marginY = Math.max(0.5 * H, 200);
-    panX = Math.min(Math.max(panX, -marginX - maxX * zoomLevel), vw + marginX - minX * zoomLevel);
-    panY = Math.min(Math.max(panY, -marginY - maxY * zoomLevel), vh + marginY - minY * zoomLevel);
+    const marginX = 0.05 * W;
+    const marginY = 0.05 * H;
+    const extW = W + 2 * marginX; // = 1.1 * W
+    const extH = H + 2 * marginY;
+    if (extW <= vw) {
+      // Contenu + marge tient dans le viewport : le board ne peut pas sortir de la zone
+      panX = Math.min(Math.max(panX, marginX - minX * zoomLevel), vw - maxX * zoomLevel - marginX);
+    } else {
+      // Zoomé : pan libre mais le bord droit/gauche du contenu reste visible (5% marge)
+      panX = Math.min(Math.max(panX, marginX - maxX * zoomLevel), vw - marginX - minX * zoomLevel);
+    }
+    if (extH <= vh) {
+      panY = Math.min(Math.max(panY, marginY - minY * zoomLevel), vh - maxY * zoomLevel - marginY);
+    } else {
+      panY = Math.min(Math.max(panY, marginY - maxY * zoomLevel), vh - marginY - minY * zoomLevel);
+    }
   }
 
   function applyTransform() {
@@ -1456,6 +1413,13 @@ const App = (function () {
     });
 
     window.addEventListener('mousemove', (e) => {
+      // Envoyer la position du curseur pour la collaboration
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        const wRect = wrapper.getBoundingClientRect();
+        const cx = (e.clientX - wRect.left - panX) / zoomLevel;
+        const cy = (e.clientY - wRect.top - panY) / zoomLevel;
+        Collab.sendCursor(cx, cy);
+      }
       if (isPanning) {
         panX = e.clientX - panStart.x;
         panY = e.clientY - panStart.y;
@@ -1475,6 +1439,14 @@ const App = (function () {
         selRect.style.top = y + 'px';
         selRect.style.width = w + 'px';
         selRect.style.height = h + 'px';
+        // Sync du rectangle de sélection pour la collaboration
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          const canvasX = (x - panX) / zoomLevel;
+          const canvasY = (y - panY) / zoomLevel;
+          const canvasW = w / zoomLevel;
+          const canvasH = h / zoomLevel;
+          Collab.sendSelectionRect(canvasX, canvasY, canvasW, canvasH);
+        }
       }
     });
 
@@ -1484,6 +1456,21 @@ const App = (function () {
         wrapper.style.cursor = '';
       }
       if (isResizing) {
+        // Collab: sync taille finale + libérer le lock
+        if (typeof Collab !== 'undefined' && Collab.isActive() && resizeEl) {
+          const fw = parseFloat(resizeEl.style.width) || null;
+          const fh = parseFloat(resizeEl.style.height) || null;
+          Collab.syncElementSize(resizeEl.dataset.id, fw, fh, true);
+          Collab.releaseLock(resizeEl.dataset.id);
+        }
+        // Action-based undo for resize
+        if (resizeEl) {
+          const afterW = parseFloat(resizeEl.style.width) || null;
+          const afterH = parseFloat(resizeEl.style.height) || null;
+          if (afterW !== resizeStartW || afterH !== resizeStartH) {
+            pushAction({ type: 'resize', elId: resizeEl.dataset.id, before: { w: resizeStartW, h: resizeStartH }, after: { w: afterW, h: afterH } });
+          }
+        }
         isResizing = false;
         resizeEl = null;
         clearSnapGuides();
@@ -1492,6 +1479,8 @@ const App = (function () {
       if (isSelecting) {
         isSelecting = false;
         selRect.style.display = 'none';
+        // Effacer le rectangle de sélection distant
+        if (typeof Collab !== 'undefined' && Collab.isActive()) Collab.clearSelectionRect();
         // Calculer les éléments dans le rectangle
         const wRect = wrapper.getBoundingClientRect();
         const rLeft = parseFloat(selRect.style.left);
@@ -1522,6 +1511,8 @@ const App = (function () {
             updateMultiResizeHandle();
           }
         }
+        // Sync de la sélection pour la collaboration
+        _collabSyncSelection();
       }
     });
 
@@ -1550,10 +1541,14 @@ const App = (function () {
         const x = (e.clientX - rect.left - panX) / zoomLevel;
         const y = (e.clientY - rect.top - panY) / zoomLevel;
         if (type === 'note') {
-          createNoteElement('', x - 115, y - 80, 290, 75);
+          const ne = createNoteElement('', x - 115, y - 80, 290, 75);
+          _collabSyncCreatedEl(ne);
+          if (ne) pushAction({ type: 'create', elId: ne.dataset.id, after: _captureElState(ne) });
           pushHistory();
         } else if (type === 'color') {
-          createColorElement('#000000', x - 65, y - 70, 130, 140);
+          const ce = createColorElement('#000000', x - 65, y - 70, 130, 140);
+          _collabSyncCreatedEl(ce);
+          if (ce) pushAction({ type: 'create', elId: ce.dataset.id, after: _captureElState(ce) });
           pushHistory();
         } else if (type === 'link') {
           // Stocker la position pour après la saisie de l'URL
@@ -1784,6 +1779,11 @@ const App = (function () {
   }
 
   // ── HISTORIQUE ───────────────────────────────────────────────────────────
+  // Système dual : innerHTML (mode solo) + actions (mode collab)
+  let _actionHistory = [];
+  let _actionIndex = -1;
+  const MAX_ACTIONS = 100;
+
   function pushHistory() {
     // Synchroniser les valeurs des hex inputs couleur (innerHTML ne capture pas .value dynamique)
     document
@@ -1804,7 +1804,219 @@ const App = (function () {
     if (history.length > 50) history.shift();
     historyIndex = history.length - 1;
   }
+
+  /**
+   * Enregistre une action structurée pour le undo/redo collaboratif.
+   * @param {object} action - {type, elId, before, after}
+   *   type: 'move'|'resize'|'create'|'delete'|'editText'|'editColor'|'groupMove'|'generic'
+   *   elId: string | string[] (pour groupMove)
+   *   before: état avant l'action
+   *   after: état après l'action
+   */
+  function pushAction(action) {
+    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+    action.userId = isCollab ? Collab.getMyUserId() : 'local';
+    action.timestamp = Date.now();
+    if (isCollab && action.elId && !Array.isArray(action.elId)) {
+      action.elementVersion = Collab.getElementVersion(action.elId);
+    }
+    if (_actionIndex < _actionHistory.length - 1) {
+      _actionHistory = _actionHistory.slice(0, _actionIndex + 1);
+    }
+    _actionHistory.push(action);
+    if (_actionHistory.length > MAX_ACTIONS) _actionHistory.shift();
+    _actionIndex = _actionHistory.length - 1;
+  }
+
+  /** Capture l'état d'un élément pour les actions create/delete */
+  function _captureElState(el) {
+    return {
+      type: el.dataset.type,
+      x: parseFloat(el.style.left) || 0,
+      y: parseFloat(el.style.top) || 0,
+      w: parseFloat(el.style.width) || null,
+      h: parseFloat(el.style.height) || null,
+      z: parseInt(el.style.zIndex) || 100,
+      data: el.dataset.type === 'image'
+        ? _imgStore.get(el.dataset.id) || el.dataset.savedata || ''
+        : el.dataset.savedata || '',
+    };
+  }
+
+  function _applyReverse(action) {
+    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+    switch (action.type) {
+      case 'move': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        el.style.left = action.before.x + 'px';
+        el.style.top = action.before.y + 'px';
+        updateConnectionsForEl(el);
+        if (isCollab) Collab.syncElementPosition(action.elId, action.before.x, action.before.y, true);
+        break;
+      }
+      case 'resize': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        if (action.before.w) el.style.width = action.before.w + 'px';
+        if (action.before.h) el.style.height = action.before.h + 'px';
+        updateConnectionsForEl(el);
+        if (isCollab) Collab.syncElementSize(action.elId, action.before.w, action.before.h, true);
+        break;
+      }
+      case 'editText':
+      case 'editColor': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        el.dataset.savedata = action.before.data;
+        if (action.type === 'editText') {
+          const ta = el.querySelector('textarea');
+          if (ta) { ta.value = action.before.data; ta.setAttribute('data-snap-value', action.before.data); }
+        } else {
+          const swatch = el.querySelector('.color-swatch');
+          if (swatch) swatch.style.backgroundColor = action.before.data;
+          const hexInput = el.querySelector('.color-hex-input');
+          if (hexInput) hexInput.value = action.before.data.replace('#', '');
+        }
+        if (isCollab) Collab.syncElementData(action.elId, action.before.data);
+        break;
+      }
+      case 'create': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (el) {
+          removeConnectionsForEl(el);
+          removeCaptionsForEl(el);
+          el.remove();
+        }
+        if (isCollab) Collab.syncElementDelete(action.elId);
+        break;
+      }
+      case 'delete': {
+        const restored = restoreElement({ id: action.elId, ...action.before });
+        if (isCollab && restored) {
+          _collabSyncCreatedEl(restored);
+        }
+        break;
+      }
+      case 'groupMove': {
+        if (!Array.isArray(action.elId) || !Array.isArray(action.before)) break;
+        action.elId.forEach((id, i) => {
+          const el = document.querySelector('[data-id="' + id + '"]');
+          if (!el || !action.before[i]) return;
+          el.style.left = action.before[i].x + 'px';
+          el.style.top = action.before[i].y + 'px';
+          updateConnectionsForEl(el);
+          if (isCollab) Collab.syncElementPosition(id, action.before[i].x, action.before[i].y, true);
+        });
+        break;
+      }
+    }
+  }
+
+  function _applyForward(action) {
+    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+    switch (action.type) {
+      case 'move': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        el.style.left = action.after.x + 'px';
+        el.style.top = action.after.y + 'px';
+        updateConnectionsForEl(el);
+        if (isCollab) Collab.syncElementPosition(action.elId, action.after.x, action.after.y, true);
+        break;
+      }
+      case 'resize': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        if (action.after.w) el.style.width = action.after.w + 'px';
+        if (action.after.h) el.style.height = action.after.h + 'px';
+        updateConnectionsForEl(el);
+        if (isCollab) Collab.syncElementSize(action.elId, action.after.w, action.after.h, true);
+        break;
+      }
+      case 'editText':
+      case 'editColor': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        el.dataset.savedata = action.after.data;
+        if (action.type === 'editText') {
+          const ta = el.querySelector('textarea');
+          if (ta) { ta.value = action.after.data; ta.setAttribute('data-snap-value', action.after.data); }
+        } else {
+          const swatch = el.querySelector('.color-swatch');
+          if (swatch) swatch.style.backgroundColor = action.after.data;
+          const hexInput = el.querySelector('.color-hex-input');
+          if (hexInput) hexInput.value = action.after.data.replace('#', '');
+        }
+        if (isCollab) Collab.syncElementData(action.elId, action.after.data);
+        break;
+      }
+      case 'create': {
+        const restored = restoreElement({ id: action.elId, ...action.after });
+        if (isCollab && restored) _collabSyncCreatedEl(restored);
+        break;
+      }
+      case 'delete': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (el) {
+          removeConnectionsForEl(el);
+          removeCaptionsForEl(el);
+          el.remove();
+        }
+        if (isCollab) Collab.syncElementDelete(action.elId);
+        break;
+      }
+      case 'groupMove': {
+        if (!Array.isArray(action.elId) || !Array.isArray(action.after)) break;
+        action.elId.forEach((id, i) => {
+          const el = document.querySelector('[data-id="' + id + '"]');
+          if (!el || !action.after[i]) return;
+          el.style.left = action.after[i].x + 'px';
+          el.style.top = action.after[i].y + 'px';
+          updateConnectionsForEl(el);
+          if (isCollab) Collab.syncElementPosition(id, action.after[i].x, action.after[i].y, true);
+        });
+        break;
+      }
+    }
+  }
+
   function undo() {
+    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+
+    // Mode collab: undo par action
+    if (isCollab && _actionHistory.length > 0) {
+      let skipped = 0;
+      while (_actionIndex >= 0 && skipped < 5) {
+        const action = _actionHistory[_actionIndex];
+        // Vérifier les conflits (sauf pour create/delete)
+        if (action.type !== 'create' && action.type !== 'delete' && action.type !== 'generic') {
+          const elId = Array.isArray(action.elId) ? action.elId[0] : action.elId;
+          if (elId && Collab.isLockedByOther(elId)) {
+            _actionIndex--;
+            skipped++;
+            continue;
+          }
+          if (elId && Collab.wasModifiedSince(elId, action.elementVersion || 0)) {
+            _actionIndex--;
+            skipped++;
+            continue;
+          }
+        }
+        _applyReverse(action);
+        _actionIndex--;
+        toast('Annulé');
+        return;
+      }
+      if (skipped > 0) {
+        toast('Impossible d\'annuler : éléments modifiés par d\'autres');
+      } else {
+        toast('Rien à annuler');
+      }
+      return;
+    }
+
+    // Mode solo: undo innerHTML classique
     if (historyIndex <= 0) {
       toast('Rien à annuler');
       return;
@@ -1814,10 +2026,26 @@ const App = (function () {
     reattachAllEvents();
     selectedEl = null;
     multiSelected.clear();
-
     toast('Annulé');
   }
+
   function redo() {
+    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+
+    // Mode collab: redo par action
+    if (isCollab && _actionHistory.length > 0) {
+      if (_actionIndex >= _actionHistory.length - 1) {
+        toast('Rien à rétablir');
+        return;
+      }
+      _actionIndex++;
+      const action = _actionHistory[_actionIndex];
+      _applyForward(action);
+      toast('Rétabli');
+      return;
+    }
+
+    // Mode solo: redo innerHTML classique
     if (historyIndex >= history.length - 1) {
       toast('Rien à rétablir');
       return;
@@ -1827,7 +2055,6 @@ const App = (function () {
     reattachAllEvents();
     selectedEl = null;
     multiSelected.clear();
-
     toast('Rétabli');
   }
   function reattachAllEvents() {
@@ -1854,6 +2081,11 @@ const App = (function () {
     let _noteValueOnFocus = '';
     function activateNoteEdit(e) {
       if (document.body.classList.contains('readonly-mode')) return;
+      // Collab: vérifier le lock
+      if (typeof Collab !== 'undefined' && Collab.isActive() && Collab.isLockedByOther(el.dataset.id)) {
+        toast('Élément en cours d\'édition');
+        return;
+      }
       e.stopPropagation();
       e.preventDefault();
       ta.style.pointerEvents = 'auto';
@@ -1862,6 +2094,10 @@ const App = (function () {
       _noteValueOnFocus = ta.value;
       ta.focus();
       showTextEditPanel(el);
+      // Collab: acquérir le lock
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.acquireLock(el.dataset.id);
+      }
     }
     wrap.addEventListener('dblclick', activateNoteEdit);
     ta.addEventListener('dblclick', activateNoteEdit);
@@ -1870,6 +2106,10 @@ const App = (function () {
     });
     ta.addEventListener('input', () => {
       el.dataset.savedata = ta.value;
+      // Collab: sync texte debounced
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(el.dataset.id, ta.value);
+      }
     });
     ta.addEventListener('blur', (e) => {
       const panel = document.getElementById('text-edit-panel');
@@ -1879,12 +2119,23 @@ const App = (function () {
       ta.style.cursor = 'move';
       delete el.dataset.editing;
       hideTextEditPanel();
+      // Collab: libérer le lock
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.releaseLock(el.dataset.id);
+      }
       if (!ta.value.trim()) {
+        // Action-based undo for delete (empty note)
+        pushAction({ type: 'delete', elId: el.dataset.id, before: { type: el.dataset.type, x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0, w: parseFloat(el.style.width) || null, h: parseFloat(el.style.height) || null, z: parseInt(el.style.zIndex) || 100, data: _noteValueOnFocus } });
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
         pushHistory();
+        // Collab: sync suppression
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.syncElementDelete(el.dataset.id);
+        }
       } else if (ta.value !== _noteValueOnFocus) {
+        pushAction({ type: 'editText', elId: el.dataset.id, before: { data: _noteValueOnFocus }, after: { data: ta.value } });
         pushHistory();
       }
     });
@@ -1939,15 +2190,35 @@ const App = (function () {
       hexInput.value = el.dataset.savedata.toUpperCase();
       swatch.style.background = el.dataset.savedata;
     }
+    let _colorValueOnFocus = el.dataset.savedata || '#000000';
     // Bloquer le drag depuis l'input
     hexInput.addEventListener('mousedown', (e) => e.stopPropagation());
     hexInput.addEventListener('pointerdown', (e) => e.stopPropagation());
+    hexInput.addEventListener('focus', () => {
+      _colorValueOnFocus = el.dataset.savedata || '#000000';
+      // Collab: vérifier et acquérir le lock
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        if (Collab.isLockedByOther(el.dataset.id)) {
+          toast('Élément en cours d\'édition');
+          hexInput.blur();
+          return;
+        }
+        Collab.acquireLock(el.dataset.id);
+      }
+    });
     function applyHexColor(val) {
       const v = val.trim().toUpperCase();
       if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) {
         swatch.style.background = v;
         el.dataset.savedata = v;
         hexInput.value = v;
+        // Collab: sync couleur
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.syncElementData(el.dataset.id, v);
+        }
+        if (v !== _colorValueOnFocus) {
+          pushAction({ type: 'editColor', elId: el.dataset.id, before: { data: _colorValueOnFocus }, after: { data: v } });
+        }
         pushHistory();
 
         return true;
@@ -1964,6 +2235,10 @@ const App = (function () {
     hexInput.addEventListener('blur', () => {
       if (!applyHexColor(hexInput.value))
         hexInput.value = (el.dataset.savedata || '#000000').toUpperCase();
+      // Collab: libérer le lock
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.releaseLock(el.dataset.id);
+      }
     });
     hexInput.addEventListener('input', () => {
       hexInput.value = hexInput.value.toUpperCase();
@@ -1974,11 +2249,28 @@ const App = (function () {
     eyeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      // Collab: vérifier le lock avant eyedropper
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        if (Collab.isLockedByOther(el.dataset.id)) {
+          toast('Élément en cours d\'édition');
+          return;
+        }
+        _colorValueOnFocus = el.dataset.savedata || '#000000';
+        Collab.acquireLock(el.dataset.id);
+      }
       activateEyedropper(el, swatch, hexInput);
     });
   }
 
   // ── SÉLECTION ────────────────────────────────────────────────────────────
+  function _collabSyncSelection() {
+    if (typeof Collab === 'undefined' || !Collab.isActive()) return;
+    const ids = [];
+    if (selectedEl) ids.push(selectedEl.dataset.id);
+    multiSelected.forEach((el) => ids.push(el.dataset.id));
+    Collab.sendSelection(ids);
+  }
+
   function deselectAll() {
     document
       .querySelectorAll('#canvas .board-element.selected')
@@ -1990,6 +2282,7 @@ const App = (function () {
     multiSelected.clear();
     updateMultiResizeHandle();
     updateAllConnections();
+    _collabSyncSelection();
   }
 
   function selectEl(el, addToMulti = false) {
@@ -2015,8 +2308,13 @@ const App = (function () {
       el.classList.add('selected');
       selectedEl = el;
       el.style.zIndex = ++nextZ;
+      // Sync z-index en mode collab
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementZ(el.dataset.id, nextZ);
+      }
     }
     updateMultiResizeHandle();
+    _collabSyncSelection();
   }
 
   // Supprime toutes les connexions liées à un élément
@@ -2074,6 +2372,14 @@ const App = (function () {
     if (!toDelete.length) {
       toast('Aucun élément sélectionné');
       return;
+    }
+    // Action-based undo for delete
+    toDelete.forEach((el) => {
+      pushAction({ type: 'delete', elId: el.dataset.id, before: _captureElState(el) });
+    });
+    // Collab: sync suppressions
+    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+      toDelete.forEach((el) => Collab.syncElementDelete(el.dataset.id));
     }
     toast(toDelete.length > 1 ? toDelete.length + ' éléments supprimés' : 'Supprimé');
     let done = 0;
@@ -2402,6 +2708,11 @@ const App = (function () {
       if (e.target.isContentEditable) return;
       if (e.button !== 0) return;
       if (el.dataset.justDragged) return;
+      // Collab: vérifier si l'élément est locké par un autre utilisateur
+      if (typeof Collab !== 'undefined' && Collab.isActive() && Collab.isLockedByOther(el.dataset.id)) {
+        toast('Élément en cours d\'édition par un autre utilisateur');
+        return;
+      }
       e.stopPropagation();
       e.preventDefault();
 
@@ -2529,7 +2840,31 @@ const App = (function () {
         rafId = requestAnimationFrame(dragRAF);
       }
 
+      // Collab: acquérir le lock de manière optimiste au premier mouvement
+      let _collabLockAcquired = false;
+      let _collabLockPending = false;
+
       const onMove = (ev) => {
+        // Collab: tenter l'acquisition du lock au premier mouvement
+        if (typeof Collab !== 'undefined' && Collab.isActive() && !_collabLockAcquired && !_collabLockPending) {
+          _collabLockPending = true;
+          Collab.acquireLock(dragEl.dataset.id).then((ok) => {
+            _collabLockPending = false;
+            if (ok) {
+              _collabLockAcquired = true;
+            } else {
+              // Lock échoué: annuler le drag
+              dragActive = false;
+              cancelAnimationFrame(rafId);
+              dragEl.style.left = origLeft + 'px';
+              dragEl.style.top = origTop + 'px';
+              dragEl.style.transform = '';
+              window.removeEventListener('mousemove', onMove);
+              window.removeEventListener('mouseup', onUp);
+              toast('Élément verrouillé par un autre utilisateur');
+            }
+          });
+        }
         if (isAltDown && !duplicated) {
           const prevAxis = shiftAxisX;
           doDuplicate();
@@ -2578,6 +2913,11 @@ const App = (function () {
 
         targetX = startLeft + dx;
         targetY = startTop + dy;
+
+        // Collab: sync position throttlée pendant le drag
+        if (typeof Collab !== 'undefined' && Collab.isActive() && _collabLockAcquired) {
+          Collab.syncElementPosition(dragEl.dataset.id, targetX, targetY, false);
+        }
       };
 
       const onUp = () => {
@@ -2606,7 +2946,39 @@ const App = (function () {
         window.removeEventListener('mouseup', onUp);
         if (moved || duplicated) {
           pushHistory();
-
+          // Action-based undo: enregistrer le mouvement
+          if (moved && !duplicated) {
+            const finalX = parseFloat(dragEl.style.left) || 0;
+            const finalY = parseFloat(dragEl.style.top) || 0;
+            pushAction({
+              type: 'move', elId: dragEl.dataset.id,
+              before: { x: origLeft, y: origTop },
+              after: { x: finalX, y: finalY },
+            });
+          } else if (duplicated) {
+            const d = dragEl;
+            pushAction({
+              type: 'create', elId: d.dataset.id,
+              after: {
+                type: d.dataset.type,
+                x: parseFloat(d.style.left) || 0, y: parseFloat(d.style.top) || 0,
+                w: parseFloat(d.style.width) || null, h: parseFloat(d.style.height) || null,
+                z: parseInt(d.style.zIndex) || 100,
+                data: d.dataset.type === 'image' ? 'pending' : (d.dataset.savedata || ''),
+              },
+            });
+          }
+          // Collab: sync position finale + libérer le lock
+          if (typeof Collab !== 'undefined' && Collab.isActive() && _collabLockAcquired) {
+            const fx = parseFloat(dragEl.style.left) || 0;
+            const fy = parseFloat(dragEl.style.top) || 0;
+            Collab.syncElementPosition(dragEl.dataset.id, fx, fy, true);
+            Collab.releaseLock(dragEl.dataset.id);
+          }
+          // Collab: sync la création si duplication
+          if (duplicated && typeof Collab !== 'undefined' && Collab.isActive()) {
+            _collabSyncCreatedEl(dragEl);
+          }
           dragEl.dataset.justDragged = '1';
           setTimeout(() => delete dragEl.dataset.justDragged, 150);
         }
@@ -2655,6 +3027,14 @@ const App = (function () {
         e.stopPropagation();
         e.preventDefault();
         if (document.body.classList.contains('readonly-mode')) return;
+        // Collab: vérifier et acquérir le lock
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          if (Collab.isLockedByOther(el.dataset.id)) {
+            toast('Élément verrouillé');
+            return;
+          }
+          Collab.acquireLock(el.dataset.id);
+        }
         isResizing = true;
         resizeEl = el;
         resizeStartW = parseFloat(el.style.width) || el.offsetWidth;
@@ -2669,6 +3049,16 @@ const App = (function () {
   }
 
   function startGroupDrag(e, group) {
+    // Collab: vérifier que aucun élément du groupe n'est locké par un autre
+    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+      for (const el of group) {
+        if (Collab.isLockedByOther(el.dataset.id)) {
+          toast('Un élément du groupe est verrouillé');
+          return;
+        }
+      }
+    }
+
     const canvasRect = document.getElementById('canvas').getBoundingClientRect();
     const startMX = (e.clientX - canvasRect.left) / zoomLevel;
     const startMY = (e.clientY - canvasRect.top) / zoomLevel;
@@ -2854,8 +3244,42 @@ const App = (function () {
       clearSnapGuides();
       if (moved || duplicated) {
         pushHistory();
+        // Action-based undo: enregistrer le groupMove
+        if (moved && !duplicated) {
+          const ids = [];
+          const beforeArr = [];
+          const afterArr = [];
+          activeGroup.forEach((el) => {
+            const s = starts.get(el);
+            if (!s) return;
+            ids.push(el.dataset.id);
+            beforeArr.push({ x: s.left, y: s.top });
+            afterArr.push({ x: s.left + targetDX, y: s.top + targetDY });
+          });
+          pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr });
+        }
+        // Collab: sync positions finales + libérer les locks
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          activeGroup.forEach((el) => {
+            const fx = parseFloat(el.style.left) || 0;
+            const fy = parseFloat(el.style.top) || 0;
+            Collab.syncElementPosition(el.dataset.id, fx, fy, true);
+            Collab.releaseLock(el.dataset.id);
+          });
+        }
       }
     };
+    // Collab: acquérir les locks sur tous les éléments du groupe
+    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+      Promise.all([...activeGroup].map((el) => Collab.acquireLock(el.dataset.id))).then((results) => {
+        if (results.some((ok) => !ok)) {
+          // Au moins un lock a échoué, libérer ceux acquis et annuler
+          activeGroup.forEach((el) => Collab.releaseLock(el.dataset.id));
+          toast('Un élément du groupe est verrouillé');
+          return;
+        }
+      });
+    }
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     groupRafId = requestAnimationFrame(groupDragRAF);
@@ -3005,6 +3429,97 @@ const App = (function () {
     return el;
   }
 
+  // ── COLLAB BOARD (rejoindre en tant que guest) ─────────────────────────
+  async function _loadCollabBoard(boardId) {
+    const errPage = (msg) => {
+      document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;background:#f4f4f6;"><div style="font-family:\'HelveticaBold\',sans-serif;font-size:26px;color:#ff3c00">MOODBOARDS</div><div style="font-size:15px;color:#888">' + msg + '</div></div>';
+    };
+    if (!window._fbDb) {
+      errPage('Firebase non disponible.');
+      return;
+    }
+    if (typeof Collab === 'undefined') {
+      errPage('Module de collaboration non chargé.');
+      return;
+    }
+    try {
+      // Vérifier que la session collab existe et est active
+      const metaSnap = await window._fbDb.ref('collabSessions/' + boardId + '/meta').get();
+      if (!metaSnap.exists() || !metaSnap.val().active) {
+        errPage('Cette session collaborative n\'existe plus ou est terminée.');
+        return;
+      }
+      // Charger le nom du board depuis boards/
+      const boardSnap = await window._fbDb.ref('boards/' + boardId).get();
+      const boardName = (boardSnap.exists() && boardSnap.val().name) || 'Moodboard';
+
+      // Afficher le board screen
+      document.getElementById('board-screen').style.display = 'flex';
+      document.getElementById('board-title-display').textContent = boardName;
+      document.getElementById('canvas').innerHTML = '';
+      zoomLevel = 1;
+      panX = 0;
+      panY = 0;
+      nextZ = 100;
+      applyTransform();
+
+      // Charger les éléments depuis la session collab
+      const elemSnap = await window._fbDb.ref('collabSessions/' + boardId + '/elements').get();
+      if (elemSnap.exists()) {
+        elemSnap.forEach((child) => {
+          const d = child.val();
+          if (d.deleted) return;
+          restoreElement({
+            id: child.key,
+            type: d.type,
+            x: d.x, y: d.y, w: d.w, h: d.h, z: d.z,
+            data: d.data || '',
+          });
+          if (d.z && d.z >= nextZ) nextZ = d.z + 1;
+        });
+      }
+      // Charger les connexions
+      const connSnap = await window._fbDb.ref('collabSessions/' + boardId + '/connections').get();
+      if (connSnap.exists()) {
+        connSnap.forEach((child) => {
+          const d = child.val();
+          setTimeout(() => createConnection(d.from, d.to), 100);
+        });
+      }
+      // Charger les captions
+      const capSnap = await window._fbDb.ref('collabSessions/' + boardId + '/captions').get();
+      if (capSnap.exists()) {
+        capSnap.forEach((child) => {
+          const d = child.val();
+          const cap = restoreElement({
+            type: 'caption',
+            x: d.x, y: d.y, width: d.width,
+            parentId: d.parentId, text: d.text,
+          });
+          if (cap) cap.dataset.capId = child.key;
+        });
+      }
+
+      setTimeout(() => fitElementsToScreen(), 150);
+      pushHistory();
+
+      // Démarrer la session collab en tant que guest
+      currentBoardId = boardId;
+      await Collab.startSession(boardId, false);
+
+      // Masquer les éléments UI non pertinents pour les guests
+      const shareBtn = document.getElementById('share-btn');
+      if (shareBtn) shareBtn.style.display = 'none';
+      const collabBtn = document.getElementById('collab-btn');
+      if (collabBtn) collabBtn.style.display = 'none';
+
+      setupUIEvents();
+    } catch (e) {
+      console.warn('Collab board load error:', e);
+      errPage('Erreur lors du chargement de la session collaborative.');
+    }
+  }
+
   // ── SHARED BOARD (lecture seule) ────────────────────────────────────────
   async function _loadSharedBoard(id) {
     const errPage = (msg) => {
@@ -3115,7 +3630,9 @@ const App = (function () {
   // ── NOTE ──────────────────────────────────────────────────────────────────
   function addNote() {
     const c = getCenter();
-    createNoteElement('', c.x - 110, c.y - 75, 290, 75);
+    const el = createNoteElement('', c.x - 110, c.y - 75, 290, 75);
+    _collabSyncCreatedEl(el);
+    if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
     pushHistory();
   }
   function createNoteElement(content, x, y, w, h) {
@@ -3183,7 +3700,9 @@ const App = (function () {
   // ── COULEUR ───────────────────────────────────────────────────────────────
   function addColorDirect() {
     const c = getCenter();
-    createColorElement('#000000', c.x - 65, c.y - 70, 130, 140);
+    const el = createColorElement('#000000', c.x - 65, c.y - 70, 130, 140);
+    _collabSyncCreatedEl(el);
+    if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
     pushHistory();
   }
   function openColorPicker() {
@@ -3206,7 +3725,9 @@ const App = (function () {
     const hex =
       '#' + document.getElementById('hex-input').value.trim().toUpperCase().replace('#', '');
     const c = getCenter();
-    createColorElement(hex, c.x - 65, c.y - 70, 130, 140);
+    const el = createColorElement(hex, c.x - 65, c.y - 70, 130, 140);
+    _collabSyncCreatedEl(el);
+    if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
     pushHistory();
 
     closeColorModal();
@@ -3301,6 +3822,7 @@ const App = (function () {
     // Essayer l'API EyeDropper native (Chrome 95+)
     if (window.EyeDropper) {
       const picker = new window.EyeDropper();
+      const prevColor = colorEl.dataset.savedata || '#000000';
       picker
         .open()
         .then((result) => {
@@ -3308,9 +3830,21 @@ const App = (function () {
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
+          if (hex !== prevColor) {
+            pushAction({ type: 'editColor', elId: colorEl.dataset.id, before: { data: prevColor }, after: { data: hex } });
+          }
+          if (typeof Collab !== 'undefined' && Collab.isActive()) {
+            Collab.syncElementData(colorEl.dataset.id, hex);
+            Collab.releaseLock(colorEl.dataset.id);
+          }
           pushHistory();
         })
-        .catch(() => {}); // annulé par l'utilisateur
+        .catch(() => {
+          // annulé par l'utilisateur — libérer le lock
+          if (typeof Collab !== 'undefined' && Collab.isActive()) {
+            Collab.releaseLock(colorEl.dataset.id);
+          }
+        });
       return;
     }
     // Fallback : curseur custom sur le canvas-wrapper
@@ -3352,13 +3886,24 @@ const App = (function () {
           const px = ctx.getImageData(1, 1, 1, 1).data;
           const toHex = (v) => v.toString(16).padStart(2, '0').toUpperCase();
           const hex = '#' + toHex(px[0]) + toHex(px[1]) + toHex(px[2]);
+          const prevCol = colorEl.dataset.savedata || '#000000';
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
+          if (hex !== prevCol) {
+            pushAction({ type: 'editColor', elId: colorEl.dataset.id, before: { data: prevCol }, after: { data: hex } });
+          }
+          if (typeof Collab !== 'undefined' && Collab.isActive()) {
+            Collab.syncElementData(colorEl.dataset.id, hex);
+            Collab.releaseLock(colorEl.dataset.id);
+          }
           pushHistory();
         })
         .catch(() => {
           canvasDiv.style.transform = savedTf;
+          if (typeof Collab !== 'undefined' && Collab.isActive()) {
+            Collab.releaseLock(colorEl.dataset.id);
+          }
           toast('Impossible de lire le pixel');
         });
     };
@@ -3370,6 +3915,10 @@ const App = (function () {
         wrapper.style.cursor = '';
         wrapper.removeEventListener('click', onPick, true);
         document.removeEventListener('keydown', onKey, true);
+        // Collab: libérer le lock à l'annulation
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.releaseLock(colorEl.dataset.id);
+        }
       }
     };
     document.addEventListener('keydown', onKey, true);
@@ -3401,7 +3950,9 @@ const App = (function () {
       lx = c.x - 140;
       ly = c.y - 90;
     }
-    createLinkElement(url, title, img, lx, ly);
+    const linkEl = createLinkElement(url, title, img, lx, ly);
+    _collabSyncCreatedEl(linkEl);
+    if (linkEl) pushAction({ type: 'create', elId: linkEl.dataset.id, after: _captureElState(linkEl) });
     pushHistory();
 
     closeLinkModal();
@@ -3468,7 +4019,9 @@ const App = (function () {
       isEmbed = true;
     }
     const c = getCenter();
-    createVideoElement(embed, isEmbed, c.x - 180, c.y - 101, 360, 202);
+    const vEl = createVideoElement(embed, isEmbed, c.x - 180, c.y - 101, 360, 202);
+    _collabSyncCreatedEl(vEl);
+    if (vEl) pushAction({ type: 'create', elId: vEl.dataset.id, after: _captureElState(vEl) });
     pushHistory();
 
     closeVideoModal();
@@ -3480,7 +4033,9 @@ const App = (function () {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const c = getCenter();
-      createVideoElement(ev.target.result, false, c.x - 180, c.y - 101, 360, 202);
+      const vEl2 = createVideoElement(ev.target.result, false, c.x - 180, c.y - 101, 360, 202);
+      _collabSyncCreatedEl(vEl2);
+      if (vEl2) pushAction({ type: 'create', elId: vEl2.dataset.id, after: _captureElState(vEl2) });
       pushHistory();
 
       closeVideoModal();
@@ -3835,8 +4390,16 @@ const App = (function () {
     if (multiSelected.has(el) && multiSelected.size > 0) {
       const toDelete = [...multiSelected];
       if (selectedEl && !multiSelected.has(selectedEl)) toDelete.push(selectedEl);
+      // Action-based undo for delete (multi)
+      toDelete.forEach((e) => {
+        pushAction({ type: 'delete', elId: e.dataset.id, before: _captureElState(e) });
+      });
       multiSelected.clear();
       selectedEl = null;
+      // Collab: sync suppression
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        toDelete.forEach((e) => Collab.syncElementDelete(e.dataset.id));
+      }
       let done = 0;
       toDelete.forEach((e) => {
         removeConnectionsForEl(e);
@@ -3850,6 +4413,12 @@ const App = (function () {
       });
       toast(toDelete.length + ' éléments supprimés');
     } else {
+      // Action-based undo for delete (single)
+      pushAction({ type: 'delete', elId: el.dataset.id, before: _captureElState(el) });
+      // Collab: sync suppression
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementDelete(el.dataset.id);
+      }
       removeConnectionsForEl(el);
       removeCaptionsForEl(el);
       selectedEl = null;
@@ -4940,6 +5509,85 @@ const App = (function () {
     }
   }
 
+  // ── COLLAB HELPERS ─────────────────────────────────────────────────────
+  /** Sync un élément nouvellement créé vers Firebase */
+  function _collabSyncCreatedEl(el) {
+    if (typeof Collab === 'undefined' || !Collab.isActive()) return;
+    if (!el || !el.dataset || !el.dataset.id) return;
+    Collab.syncElementCreate(
+      el.dataset.id,
+      el.dataset.type,
+      parseFloat(el.style.left) || 0,
+      parseFloat(el.style.top) || 0,
+      parseFloat(el.style.width) || null,
+      parseFloat(el.style.height) || null,
+      el.dataset.type === 'image' ? 'pending' : (el.dataset.savedata || ''),
+      parseInt(el.style.zIndex) || 100
+    );
+  }
+
+  // ── COLLAB BRIDGE ──────────────────────────────────────────────────────
+  // Fonctions internes exposées pour collab.js (préfixées _collab)
+  function _collabGetZoom() { return zoomLevel; }
+  function _collabGetPanX() { return panX; }
+  function _collabGetPanY() { return panY; }
+  function _collabRestoreElement(s) { return restoreElement(s); }
+  function _collabUpdateConnections(el) { updateConnectionsForEl(el); }
+  function _collabRemoveConnectionsForEl(el) { removeConnectionsForEl(el); }
+  function _collabRemoveCaptionsForEl(el) { removeCaptionsForEl(el); }
+  function _collabCreateConnection(from, to) { createConnection(from, to); }
+  function _collabDeleteImgStore(elId) { _imgStore.delete(elId); }
+  function _collabMergeElements(boardId, elements) {
+    const board = boards.find((b) => b.id === boardId);
+    if (board) {
+      board.elements = elements;
+      board.savedAt = Date.now();
+      saveBoards();
+      if (window._fbDb) {
+        window._fbDb
+          .ref('boards/' + boardId)
+          .set({ name: board.name, elements: board.elements, savedAt: board.savedAt })
+          .catch((e) => console.warn('Firebase sync error:', e));
+      }
+    }
+  }
+  function _collabGetBoardElements() {
+    const elements = [];
+    document.querySelectorAll('#canvas .board-element').forEach((el) => {
+      elements.push({
+        id: el.dataset.id,
+        type: el.dataset.type,
+        x: parseFloat(el.style.left) || 0,
+        y: parseFloat(el.style.top) || 0,
+        w: parseFloat(el.style.width) || null,
+        h: parseFloat(el.style.height) || null,
+        z: parseInt(el.style.zIndex) || 100,
+        data: el.dataset.type === 'image'
+          ? _imgStore.get(el.dataset.id) || el.dataset.savedata || ''
+          : el.dataset.savedata || '',
+      });
+    });
+    document.querySelectorAll('#canvas .el-connection').forEach((svg) => {
+      elements.push({
+        type: 'connection',
+        from: svg.dataset.from,
+        to: svg.dataset.to,
+        connId: svg.dataset.connId,
+      });
+    });
+    document.querySelectorAll('#canvas .el-caption').forEach((cap) => {
+      elements.push({
+        type: 'caption',
+        x: parseFloat(cap.style.left) || 0,
+        y: parseFloat(cap.style.top) || 0,
+        width: cap.style.width,
+        parentId: cap.dataset.parentId || '',
+        text: cap.textContent || '',
+      });
+    });
+    return elements;
+  }
+
   // ── API PUBLIQUE ──────────────────────────────────────────────────────────
   return {
     init,
@@ -5008,6 +5656,18 @@ const App = (function () {
     toolDragStart,
     toast,
     syncLibraryFromStorage,
+    // Collab bridge (utilisé par collab.js)
+    _collabGetZoom,
+    _collabGetPanX,
+    _collabGetPanY,
+    _collabRestoreElement,
+    _collabUpdateConnections,
+    _collabRemoveConnectionsForEl,
+    _collabRemoveCaptionsForEl,
+    _collabCreateConnection,
+    _collabDeleteImgStore,
+    _collabMergeElements,
+    _collabGetBoardElements,
   };
 })();
 

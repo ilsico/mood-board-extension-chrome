@@ -53,7 +53,9 @@ async function rebuildMenus(boards) {
       contexts: ['image'],
     });
     if (!Array.isArray(boards) || boards.length === 0) return;
-    for (const board of boards) {
+    // Trier du plus récemment sauvegardé au plus ancien
+    const sorted = [...boards].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    for (const board of sorted) {
       await chrome.contextMenus.create({
         id: 'mb-board-' + board.id,
         parentId: ROOT_ID,

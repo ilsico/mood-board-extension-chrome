@@ -29,7 +29,7 @@ window.Collab = (function () {
 
   // Palette de couleurs Figma-like (8 couleurs distinctes)
   const COLORS = [
-    '#E94F37', '#2D7FF9', '#18A058', '#F59E0B',
+    '#ff3c00', '#2D7FF9', '#18A058', '#F59E0B',
     '#8B5CF6', '#EC4899', '#06B6D4', '#F97316',
   ];
 

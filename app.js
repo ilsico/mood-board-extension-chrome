@@ -19,7 +19,8 @@ const App = (function () {
   let historyIndex = -1;
   let selectedEl = null; // élément unique sélectionné
   let multiSelected = new Set(); // sélection multiple
-  let libSelectedIds = new Set(); 
+  let libSelectedIds = new Set();
+  let _libLastClickedId = null; // dernier item cliqué (pour Shift range)
   let isResizing = false;
   let resizeEl = null;
   let resizeStartW = 0,
@@ -2363,6 +2364,7 @@ const App = (function () {
       toDelete.push(el);
     });
     multiSelected.clear();
+    updateMultiResizeHandle();
     if (selectedEl) {
       removeConnectionsForEl(selectedEl);
       removeCaptionsForEl(selectedEl);
@@ -3285,20 +3287,29 @@ const App = (function () {
     groupRafId = requestAnimationFrame(groupDragRAF);
   }
 
+  function _getMinSize(el) {
+    const t = el && el.dataset ? el.dataset.type : '';
+    if (t === 'link') return { w: 103, h: 73 };
+    if (t === 'color') return { w: 80, h: 80 };
+    if (t === 'file') return { w: 120, h: 50 };
+    return { w: 60, h: 40 };
+  }
+
   function handleResizeMouse(e) {
     const dx = (e.clientX - resizeStartX) / zoomLevel;
     const dy = (e.clientY - resizeStartY) / zoomLevel;
+    const mins = _getMinSize(resizeEl);
     let fw, fh;
 
     if (resizeRatio) {
-      const newW = Math.max(40, resizeStartW + dx);
-      const newH = Math.max(40, resizeStartH + dy);
+      const newW = Math.max(mins.w, resizeStartW + dx);
+      const newH = Math.max(mins.h, resizeStartH + dy);
       const scale = Math.max(newW / resizeStartW, newH / resizeStartH);
-      fw = Math.max(40, Math.round(resizeStartW * scale));
-      fh = Math.max(40, Math.round(fw / resizeRatio));
+      fw = Math.max(mins.w, Math.round(resizeStartW * scale));
+      fh = Math.max(mins.h, Math.round(fw / resizeRatio));
     } else {
-      fw = Math.max(60, resizeStartW + dx);
-      fh = Math.max(40, resizeStartH + dy);
+      fw = Math.max(mins.w, resizeStartW + dx);
+      fh = Math.max(mins.h, resizeStartH + dy);
     }
 
     resizeEl.style.width = fw + 'px';
@@ -4237,6 +4248,23 @@ const App = (function () {
     });
   }
 
+  function createFileElement(name, size, icon, x, y) {
+    const el = makeElement('file', x || 100, y || 100, 260, 76);
+    el.dataset.savedata = JSON.stringify({ name, size, icon });
+    const wrap = document.createElement('div');
+    wrap.className = 'el-file';
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'file-icon';
+    iconDiv.textContent = icon === 'file' ? '📎' : icon;
+    wrap.appendChild(iconDiv);
+    const info = document.createElement('div');
+    info.className = 'file-info';
+    info.innerHTML = `<div class="file-name">${escHtml(name)}</div><div class="file-size">${escHtml(size)}</div>`;
+    wrap.appendChild(info);
+    el.insertBefore(wrap, el.querySelector('.element-toolbar'));
+    return el;
+  }
+
   function createVideoFileElement(name, size, videoSrc, x, y, w, h) {
     const el = makeElement('file', x || 100, y || 100, w || 300, h || 200);
     el.dataset.savedata = JSON.stringify({
@@ -4929,6 +4957,7 @@ const App = (function () {
       const div = document.createElement('div');
       div.className = 'lib-panel-item';
       div.draggable = true;
+      div.dataset.libId = item.id;
       if (libSelectedIds.has(item.id)) div.classList.add('selected-lib-item');
 
       const indicator = document.createElement('div');
@@ -4952,16 +4981,24 @@ const App = (function () {
         deletePanelLibItem(item.id, item.folder);
       });
 
-      // Sélection SHIFT+clic
+      // Sélection SHIFT+clic (range comme Windows Explorer)
       div.addEventListener('click', (e) => {
-        if (e.shiftKey) {
-          // Basculer la sélection de cet item
-          if (libSelectedIds.has(item.id)) {
-            libSelectedIds.delete(item.id);
-            div.classList.remove('selected-lib-item');
-          } else {
-            libSelectedIds.add(item.id);
-            div.classList.add('selected-lib-item');
+        if (e.shiftKey && _libLastClickedId) {
+          // Sélection range : du dernier cliqué jusqu'à celui-ci
+          const allItems = [...grid.querySelectorAll('.lib-panel-item')];
+          const allIds = allItems.map((d) => d.dataset.libId);
+          const idxA = allIds.indexOf(_libLastClickedId);
+          const idxB = allIds.indexOf(item.id);
+          if (idxA !== -1 && idxB !== -1) {
+            const from = Math.min(idxA, idxB);
+            const to = Math.max(idxA, idxB);
+            libSelectedIds.clear();
+            document.querySelectorAll('.lib-panel-item.selected-lib-item')
+              .forEach((d) => d.classList.remove('selected-lib-item'));
+            for (let i = from; i <= to; i++) {
+              libSelectedIds.add(allIds[i]);
+              allItems[i].classList.add('selected-lib-item');
+            }
           }
         } else {
           // Clic simple : sélectionner uniquement cet item
@@ -4971,6 +5008,7 @@ const App = (function () {
             .forEach((d) => d.classList.remove('selected-lib-item'));
           libSelectedIds.add(item.id);
           div.classList.add('selected-lib-item');
+          _libLastClickedId = item.id;
         }
       });
 

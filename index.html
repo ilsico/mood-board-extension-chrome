@@ -758,18 +758,13 @@
       #lib-toggle-btn:hover {
         background: #f5f5fb;
       }
-      #lib-toggle-btn svg {
+      #lib-toggle-btn img {
         width: 18px;
         height: 18px;
-        stroke: #888;
-        fill: none;
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
         transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
         flex-shrink: 0;
       }
-      #lib-panel.open #lib-toggle-btn svg {
+      #lib-panel.open #lib-toggle-btn img {
         transform: rotate(180deg);
       }
       #lib-panel-content {
@@ -1239,6 +1234,8 @@
         border: 1px solid #eaeaf0;
         width: 100%;
         height: 100%;
+        min-width: 103px;
+        min-height: 73px;
         cursor: pointer;
         display: flex;
         flex-direction: column;
@@ -1707,9 +1704,15 @@
 
       /* ===== ANIMATIONS ÉLÉMENTS ===== */
       @keyframes dropSnap {
-        0%   { transform: translateZ(0) scale(0.95); }
-        50%  { transform: translateZ(0) scale(1.05); }
-        100% { transform: translateZ(0) scale(1); }
+        0% {
+          transform: translateZ(0) scale(0.95);
+        }
+        50% {
+          transform: translateZ(0) scale(1.05);
+        }
+        100% {
+          transform: translateZ(0) scale(1);
+        }
       }
       .element-drop-snap {
         transform-origin: center center;
@@ -1723,12 +1726,20 @@
         transform: translate(-50%, -50%);
         object-fit: cover;
         opacity: 1;
-        transition: width 0.2s ease-out, height 0.2s ease-out;
+        transition:
+          width 0.2s ease-out,
+          height 0.2s ease-out;
       }
       @keyframes previewSnap {
-        0%   { transform: translate(-50%, -50%) scale(0.9); }
-        50%  { transform: translate(-50%, -50%) scale(1.05); }
-        100% { transform: translate(-50%, -50%) scale(1); }
+        0% {
+          transform: translate(-50%, -50%) scale(0.9);
+        }
+        50% {
+          transform: translate(-50%, -50%) scale(1.05);
+        }
+        100% {
+          transform: translate(-50%, -50%) scale(1);
+        }
       }
       .preview-active-snap {
         animation: previewSnap 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
@@ -1736,15 +1747,33 @@
 
       /* ===== LOADER OVERLAY ===== */
       @keyframes playFrames {
-        0%   { background-image: url('loading/frame1.png'); }
-        10%  { background-image: url('loading/frame2.png'); }
-        20%  { background-image: url('loading/frame3.png'); }
-        30%  { background-image: url('loading/frame4.png'); }
-        40%  { background-image: url('loading/frame5.png'); }
-        50%  { background-image: url('loading/frame6.png'); }
-        60%  { background-image: url('loading/frame7.png'); }
-        77%  { background-image: url('loading/frame8.png'); }
-        100% { background-image: url('loading/frame9.png'); }
+        0% {
+          background-image: url('loading/frame1.png');
+        }
+        10% {
+          background-image: url('loading/frame2.png');
+        }
+        20% {
+          background-image: url('loading/frame3.png');
+        }
+        30% {
+          background-image: url('loading/frame4.png');
+        }
+        40% {
+          background-image: url('loading/frame5.png');
+        }
+        50% {
+          background-image: url('loading/frame6.png');
+        }
+        60% {
+          background-image: url('loading/frame7.png');
+        }
+        77% {
+          background-image: url('loading/frame8.png');
+        }
+        100% {
+          background-image: url('loading/frame9.png');
+        }
       }
       #loader-overlay {
         position: fixed;
@@ -1762,7 +1791,9 @@
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
-        transition: opacity 0.3s ease-out, visibility 0.3s; /* uniquement à la fermeture */
+        transition:
+          opacity 0.3s ease-out,
+          visibility 0.3s; /* uniquement à la fermeture */
       }
       .loader-frame {
         width: 100%;
@@ -1885,33 +1916,45 @@
 
       /* ===== COLLABORATION ===== */
       .collab-btn {
-        background: #2d7ff9;
+        background: #ff3c00;
         color: #fff;
         border: none;
-        border-radius: 6px;
-        padding: 6px 14px;
+        padding: 5.75px 14px;
         cursor: pointer;
-        font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         font-size: 13px;
-        margin-left: 8px;
+        font-weight: 700;
+        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         transition: background 0.15s;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 6px;
       }
-      .collab-btn:hover { background: #1a6de0; }
-      .collab-btn.active { background: #E94F37; }
-      .collab-btn.active:hover { background: #d13e28; }
+      .collab-btn:hover {
+        background: #e03500;
+      }
+      .collab-btn.active {
+        background: #e94f37;
+      }
+      .collab-btn.active:hover {
+        background: #d13e28;
+      }
 
       #collab-cursors,
       #collab-sel-rects {
         position: absolute;
-        top: 0; left: 0;
-        width: 100%; height: 100%;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
         pointer-events: none;
         z-index: 99998;
         overflow: visible;
       }
       .collab-cursor {
         position: absolute;
-        top: 0; left: 0;
+        top: 0;
+        left: 0;
         pointer-events: none;
         z-index: 99999;
         transition: opacity 0.3s;
@@ -1934,14 +1977,16 @@
         outline-offset: 2px;
       }
       .board-element.collab-locked .resize-handle,
-      .board-element.collab-locked .element-toolbar { display: none !important; }
+      .board-element.collab-locked .element-toolbar {
+        display: none !important;
+      }
 
       #collab-status-bar {
         position: fixed;
         bottom: 12px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(0,0,0,0.75);
+        background: rgba(0, 0, 0, 0.75);
         color: #fff;
         padding: 6px 16px;
         border-radius: 20px;
@@ -1950,11 +1995,13 @@
         z-index: 100000;
         pointer-events: none;
       }
-      #collab-status-bar.hidden { display: none; }
+      #collab-status-bar.hidden {
+        display: none;
+      }
     </style>
   </head>
   <body>
-    <img id="drag-custom-preview" src="" alt="">
+    <img id="drag-custom-preview" src="" alt="" />
     <div id="loader-overlay" class="hidden">
       <div class="loader-frame"></div>
     </div>
@@ -1968,19 +2015,33 @@
 
     <div id="board-screen">
       <header id="board-header">
-        <button class="back-btn" id="back-btn" title="Retour à l'accueil">&#8592;</button>
+        <button class="back-btn" id="back-btn" title="Retour à l'accueil">
+          <img src="PNG/retour.png" alt="" style="width: 16px; height: 16px" />
+        </button>
         <div class="board-title-display" id="board-title-display">Moodboard</div>
-        <button id="share-btn" class="share-btn" title="Partager ce board" style="display: none">
-          ⬆ Partager
-        </button>
-        <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
-          Collaborer
-        </button>
+        <div style="display: flex; align-items: center; gap: 6px">
+          <button id="share-btn" class="share-btn" title="Partager ce board" style="display: none">
+            <img src="PNG/partager.png" alt="" style="width: 14px; height: 14px; flex-shrink: 0" />
+            Partager
+          </button>
+          <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
+            <img
+              src="PNG/collaborer.png"
+              alt=""
+              style="width: 18px; height: 18px; flex-shrink: 0"
+            />
+            Collaborer
+          </button>
+        </div>
       </header>
 
       <div class="fit-btn-group">
         <button id="refresh-save-btn" class="refresh-save-btn" title="Synchroniser (Ctrl+S)">
-          <img src="PNG/sauvegarder.png" alt="Sync" style="width:20px;height:20px;object-fit:contain;">
+          <img
+            src="PNG/sauvegarder.png"
+            alt="Sync"
+            style="width: 20px; height: 20px; object-fit: contain"
+          />
         </button>
         <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">⊡</button>
         <button
@@ -2082,7 +2143,15 @@
 
         <div id="lib-panel">
           <button id="lib-toggle-btn" title="Bibliothèque d'images">
-            <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            <img
+              src="PNG/retour.png"
+              alt=""
+              style="
+                width: 18px;
+                height: 18px;
+                transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+              "
+            />
           </button>
 
           <div id="lib-panel-inner">
@@ -2272,7 +2341,7 @@
           <button id="close-export-modal" class="modal-close">&#x2715;</button>
         </div>
         <div style="padding: 24px 26px; display: flex; flex-direction: column; gap: 10px">
-          <button id="export-png-btn" class="form-submit">Exporter en PNG</button>
+          <button id="export-png-btn" class="form-submit">PNG — Haute résolution</button>
           <div style="border-top: 1px solid #eaeaf0; margin: 2px 0"></div>
           <button id="export-pdf-hr-btn" class="form-submit" style="background: #1a1a2e">
             PDF — Haute résolution
@@ -2342,7 +2411,12 @@
             <button id="cover-file-btn" class="form-submit" style="width: 100%">
               📁 Depuis votre appareil (JPEG, PNG, SVG)
             </button>
-            <input id="cover-file-input" type="file" accept=".jpg,.jpeg,.png,.svg,image/svg+xml" hidden />
+            <input
+              id="cover-file-input"
+              type="file"
+              accept=".jpg,.jpeg,.png,.svg,image/svg+xml"
+              hidden
+            />
           </div>
           <div id="cover-workspace">
             <img id="cover-img-dim" draggable="false" />
@@ -2355,7 +2429,7 @@
           <div class="cover-zoom-row" id="cover-zoom-row" style="display: none">
             <span>🔍</span>
             <input type="range" id="cover-zoom-slider" min="0" max="1" step="0.001" value="0" />
-            <span style="font-size:18px; line-height:1">+</span>
+            <span style="font-size: 18px; line-height: 1">+</span>
           </div>
           <div id="cover-gallery-wrap" style="display: none">
             <div style="font-size: 11px; color: #888; margin-bottom: 6px">Depuis ce moodboard</div>

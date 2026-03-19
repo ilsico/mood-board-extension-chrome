@@ -271,6 +271,8 @@ const App = (function () {
       },
       true
     ); // capture pour intercepter avant les autres handlers
+    _setupHomeContextMenu();
+    _applyCustomCursor();
     setupPanelDrop();
     // Fermer les lightboxes au clic sur l'overlay
     document.getElementById('lightbox-overlay').addEventListener('click', closeLightbox);
@@ -623,6 +625,13 @@ const App = (function () {
       card.querySelector('.btn-delete').addEventListener('click', (e) => {
         e.stopPropagation();
         App.deleteBoard(b.id);
+      });
+
+      // Clic droit → menu contextuel
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        _showHomeCtxMenu(e, b.id);
       });
 
       // Drag pour déplacer la carte — simple clic+drag, double-clic pour ouvrir
@@ -1007,7 +1016,7 @@ const App = (function () {
   }
 
   function deleteBoard(id) {
-    if (!confirm('Supprimer ce moodboard ?')) return;
+    if (!id) return;
     boards = boards.filter((b) => b.id !== id);
     saveBoards();
     renderHome();
@@ -1564,15 +1573,32 @@ const App = (function () {
       // Drop multiple depuis le panneau bibliothèque
       if (src === 'multi-lib' && draggedLibItems.length > 0) {
         const rect = wrapper.getBoundingClientRect();
-        const w = _pvW;
-        const h = _pvH;
-        draggedLibItems.forEach((libItem, i) => {
-          const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
-          const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 30;
-          createImageElement(libItem.src, x, y, w, h);
-          pushHistory();
-        });
+        const items = draggedLibItems.slice();
         draggedLibItems = [];
+        items.forEach((libItem, i) => {
+          const tmpImg = new Image();
+          tmpImg.onload = () => {
+            const wrapEl = document.getElementById('canvas-wrapper');
+            const vw = (wrapEl ? wrapEl.clientWidth : window.innerWidth) / (zoomLevel || 1);
+            const vh = (wrapEl ? wrapEl.clientHeight : window.innerHeight) / (zoomLevel || 1);
+            const maxDim = Math.max(vw, vh) * 0.2;
+            let w = tmpImg.naturalWidth || 220;
+            let h = tmpImg.naturalHeight || 170;
+            if (w > maxDim) { h = Math.round((h * maxDim) / w); w = Math.round(maxDim); }
+            if (h > maxDim) { w = Math.round((w * maxDim) / h); h = Math.round(maxDim); }
+            const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
+            const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 30;
+            createImageElement(libItem.src, x, y, w, h);
+            pushHistory();
+          };
+          tmpImg.onerror = () => {
+            const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 30;
+            const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 30;
+            createImageElement(libItem.src, x, y, 220, 170);
+            pushHistory();
+          };
+          tmpImg.src = libItem.src;
+        });
         return;
       }
       if (src && src.startsWith('data:')) {
@@ -5508,6 +5534,237 @@ const App = (function () {
     closeModal('export-modal');
   }
 
+  // ── CUSTOM CURSOR ─────────────────────────────────────────────────────────
+  function _applyCustomCursor() {
+    const size = 20;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ff3c00';
+    // Flèche standard : pointe en haut-gauche
+    ctx.beginPath();
+    ctx.moveTo(1, 1);
+    ctx.lineTo(1, 15);
+    ctx.lineTo(5, 11);
+    ctx.lineTo(8, 18);
+    ctx.lineTo(10, 17);
+    ctx.lineTo(7, 10);
+    ctx.lineTo(13, 10);
+    ctx.closePath();
+    ctx.fill();
+    const url = c.toDataURL('image/png');
+    document.body.style.cursor = `url("${url}") 1 1, auto`;
+  }
+
+  // ── HOME CONTEXT MENU ────────────────────────────────────────────────────
+  let _homeCtxBoardId = null;
+
+  function _setupHomeContextMenu() {
+    const menu = document.getElementById('home-ctx-menu');
+    if (!menu || menu._homeCtxReady) return;
+    menu._homeCtxReady = true;
+
+    menu.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn || !_homeCtxBoardId) return;
+      const action = btn.dataset.action;
+      const targetId = _homeCtxBoardId; // sauvegarder avant hide (qui null-ify _homeCtxBoardId)
+      _hideHomeCtxMenu();
+      if (action === 'edit') openEditBoardModal(targetId);
+      if (action === 'delete') deleteBoard(targetId);
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      if (!e.target.closest('#home-ctx-menu')) _hideHomeCtxMenu();
+    }, true);
+
+    // Boutons de la modale édition (pas de onclick= dans le HTML → CSP extension)
+    document.getElementById('edit-board-close-btn').addEventListener('click', closeEditBoardModal);
+    document.getElementById('edit-board-save-btn').addEventListener('click', confirmEditBoard);
+  }
+
+  function _showHomeCtxMenu(e, boardId) {
+    _homeCtxBoardId = boardId;
+    const menu = document.getElementById('home-ctx-menu');
+    menu.style.display = 'block';
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    menu.style.left = Math.min(e.clientX, vw - mw - 6) + 'px';
+    menu.style.top  = Math.min(e.clientY, vh - mh - 6) + 'px';
+  }
+
+  function _hideHomeCtxMenu() {
+    document.getElementById('home-ctx-menu').style.display = 'none';
+    _homeCtxBoardId = null;
+  }
+
+  // ── EDIT BOARD MODAL ──────────────────────────────────────────────────────
+  let _editBoardId = null;
+  let _editImg = { src: null, naturalW: 0, naturalH: 0, scale: 1, offsetX: 0, offsetY: 0 };
+  let _editDrag = null;
+
+  function openEditBoardModal(id) {
+    _editBoardId = id;
+    const b = boards.find((b) => b.id === id);
+    if (!b) return;
+
+    document.getElementById('edit-board-name').value = b.name || '';
+    _editImg = { src: null, naturalW: 0, naturalH: 0, scale: 1, offsetX: 0, offsetY: 0 };
+    document.getElementById('edit-board-editor').style.display = 'none';
+    document.getElementById('edit-board-zoom').value = 1;
+
+    openModal('edit-board-modal');
+    _setupEditBoardImageEditor();
+    _setupEditBoardFileBtn();
+  }
+
+  function closeEditBoardModal() {
+    closeModal('edit-board-modal');
+    _editBoardId = null;
+  }
+
+  function confirmEditBoard() {
+    if (!_editBoardId) return;
+    const b = boards.find((b) => b.id === _editBoardId);
+    if (!b) return;
+
+    const name = document.getElementById('edit-board-name').value.trim();
+    if (name) b.name = name;
+
+    if (_editImg.src) {
+      b.thumbnail = _exportEditBoardCrop();
+    }
+
+    saveBoards();
+    renderHome();
+    closeEditBoardModal();
+  }
+
+  function _setupEditBoardFileBtn() {
+    const btn = document.getElementById('edit-board-file-btn');
+    const input = document.getElementById('edit-board-file-input');
+    if (btn._ebfReady) return;
+    btn._ebfReady = true;
+    btn.addEventListener('click', () => input.click());
+    input.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => _loadEditBoardImage(ev.target.result);
+      reader.readAsDataURL(file);
+      input.value = '';
+    });
+  }
+
+  function _loadEditBoardImage(src) {
+    const img = document.getElementById('edit-board-img');
+    const preview = document.getElementById('edit-board-preview');
+    const editor = document.getElementById('edit-board-editor');
+
+    const tmp = new Image();
+    tmp.onload = () => {
+      _editImg.src = src;
+      _editImg.naturalW = tmp.naturalWidth;
+      _editImg.naturalH = tmp.naturalHeight;
+
+      // Scale initial : couvrir entièrement le cadre 4:3
+      const pw = preview.offsetWidth;
+      const ph = pw * 0.75;
+      const coverScale = Math.max(pw / tmp.naturalWidth, ph / tmp.naturalHeight);
+      _editImg.scale = coverScale;
+      _editImg.offsetX = 0;
+      _editImg.offsetY = 0;
+
+      document.getElementById('edit-board-zoom').min = coverScale;
+      document.getElementById('edit-board-zoom').max = coverScale * 3;
+      document.getElementById('edit-board-zoom').step = coverScale * 0.005;
+      document.getElementById('edit-board-zoom').value = coverScale;
+
+      img.src = src;
+      editor.style.display = 'flex';
+      _applyEditBoardTransform();
+    };
+    tmp.src = src;
+  }
+
+  function _applyEditBoardTransform() {
+    const img = document.getElementById('edit-board-img');
+    const preview = document.getElementById('edit-board-preview');
+    const pw = preview.offsetWidth;
+    const ph = pw * 0.75;
+
+    const iw = _editImg.naturalW * _editImg.scale;
+    const ih = _editImg.naturalH * _editImg.scale;
+
+    // Clamper offsetX/Y pour ne pas laisser de vide dans le cadre
+    const maxOX = (iw - pw) / 2;
+    const maxOY = (ih - ph) / 2;
+    _editImg.offsetX = Math.max(-maxOX, Math.min(maxOX, _editImg.offsetX));
+    _editImg.offsetY = Math.max(-maxOY, Math.min(maxOY, _editImg.offsetY));
+
+    img.style.width  = iw + 'px';
+    img.style.height = ih + 'px';
+    img.style.left   = (pw / 2 - iw / 2 + _editImg.offsetX) + 'px';
+    img.style.top    = (ph / 2 - ih / 2 + _editImg.offsetY) + 'px';
+  }
+
+  function _setupEditBoardImageEditor() {
+    const preview = document.getElementById('edit-board-preview');
+    const zoom = document.getElementById('edit-board-zoom');
+    if (preview._ebEditorReady) return;
+    preview._ebEditorReady = true;
+
+    // Drag
+    preview.addEventListener('mousedown', (e) => {
+      if (!_editImg.src) return;
+      e.preventDefault();
+      preview.classList.add('dragging');
+      _editDrag = { startX: e.clientX - _editImg.offsetX, startY: e.clientY - _editImg.offsetY };
+
+      function onMove(ev) {
+        _editImg.offsetX = ev.clientX - _editDrag.startX;
+        _editImg.offsetY = ev.clientY - _editDrag.startY;
+        _applyEditBoardTransform();
+      }
+      function onUp() {
+        preview.classList.remove('dragging');
+        _editDrag = null;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+
+    // Zoom slider
+    zoom.addEventListener('input', () => {
+      _editImg.scale = parseFloat(zoom.value);
+      _applyEditBoardTransform();
+    });
+  }
+
+  function _exportEditBoardCrop() {
+    const preview = document.getElementById('edit-board-preview');
+    const pw = preview.offsetWidth;
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = 360;
+    canvas.height = 270;
+    const ctx = canvas.getContext('2d');
+
+    const scaleToCanvas = 360 / pw;
+    const iw = _editImg.naturalW * _editImg.scale * scaleToCanvas;
+    const ih = _editImg.naturalH * _editImg.scale * scaleToCanvas;
+    const dx = (360 / 2 - iw / 2 + _editImg.offsetX * scaleToCanvas);
+    const dy = (270 / 2 - ih / 2 + _editImg.offsetY * scaleToCanvas);
+
+    const img = new Image();
+    img.src = _editImg.src;
+    ctx.drawImage(img, dx, dy, iw, ih);
+    return canvas.toDataURL('image/jpeg', 0.82);
+  }
+
   // ── TOAST ─────────────────────────────────────────────────────────────────
   let toastTimer;
   function toast(msg) {
@@ -5680,6 +5937,9 @@ const App = (function () {
     exportPDF,
     openExportModal,
     closeExportModal,
+    openEditBoardModal,
+    closeEditBoardModal,
+    confirmEditBoard,
     openVideoLightbox,
     closeVideoLightbox,
     fitElementsToScreen,

@@ -120,7 +120,7 @@
         object-fit: cover;
         display: block;
         flex-shrink: 0;
-        background: #cc3000;
+        background: #ff3c00;
       }
       .board-card .board-info {
         width: 180px;
@@ -191,7 +191,7 @@
       }
       .board-action-btn.delete:hover {
         background: #fee2e2;
-        color: #ef4444;
+        color: #ff3c00;
       }
 
       /* ── Cover placeholder ── */
@@ -251,10 +251,31 @@
         margin: 4px 0;
       }
       .home-ctx-menu .ctx-danger {
-        color: #ef4444;
+        color: #ff3c00;
       }
       .home-ctx-menu .ctx-danger:hover {
         background: #fee2e2;
+      }
+
+      /* ── Edit board modal image editor ── */
+      #edit-board-preview {
+        position: relative;
+        width: 100%;
+        padding-top: 75%; /* 4:3 ratio */
+        background: #111;
+        overflow: hidden;
+        cursor: grab;
+        border-radius: 2px;
+        user-select: none;
+      }
+      #edit-board-preview.dragging {
+        cursor: grabbing;
+      }
+      #edit-board-img {
+        position: absolute;
+        top: 0; left: 0;
+        transform-origin: center center;
+        pointer-events: none;
       }
 
       /* ── Cover editor modal ── */
@@ -356,7 +377,7 @@
           transform 0.15s;
       }
       #new-board-btn:hover {
-        background: #e03500;
+        background: #ff3c00;
         transform: translateX(-50%) scale(1.08);
       }
 
@@ -414,7 +435,7 @@
         gap: 6px;
       }
       .share-btn:hover {
-        background: #e03500;
+        background: #ff3c00;
       }
       #board-header .board-title-display {
         font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -458,7 +479,7 @@
       .fit-screen-btn:hover,
       .preview-btn:hover,
       .refresh-save-btn:hover {
-        background: #e03500;
+        background: #ff3c00;
       }
       #autosave-menu {
         position: fixed;
@@ -915,7 +936,7 @@
         display: block;
       }
       .lib-panel-item .lib-item-delete:hover {
-        background: #ef4444;
+        background: #ff3c00;
       }
       .lib-panel-item .lib-item-name {
         position: absolute;
@@ -1557,7 +1578,7 @@
         transition: background 0.15s;
       }
       .add-color-btn:hover {
-        background: #e03500;
+        background: #ff3c00;
       }
 
       .form-wrap {
@@ -1651,7 +1672,7 @@
         background: #f5f5fb;
       }
       .ctx-item.danger {
-        color: #ef4444;
+        color: #ff3c00;
       }
       .ctx-item.danger:hover {
         background: #fee2e2;
@@ -2442,10 +2463,41 @@
 
     <!-- Home right-click context menu -->
     <div id="home-ctx-menu" class="home-ctx-menu">
-      <button data-action="edit-cover">Modifier la couverture</button>
-      <button data-action="rename">Renommer</button>
+      <button data-action="edit">Modifier</button>
       <div class="ctx-sep"></div>
       <button data-action="delete" class="ctx-danger">Supprimer</button>
+    </div>
+
+    <!-- Edit board modal -->
+    <div class="modal-overlay hidden" id="edit-board-modal">
+      <div class="modal" style="width:460px">
+        <div class="modal-header">
+          <h2>Modifier le moodboard</h2>
+          <button class="modal-close" id="edit-board-close-btn">&#x2715;</button>
+        </div>
+        <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Nom</label>
+            <input id="edit-board-name" type="text" maxlength="45" class="form-input" style="width:100%;box-sizing:border-box" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Couverture</label>
+            <button id="edit-board-file-btn" class="form-submit" style="width:100%;margin-bottom:10px">📁 Choisir une image</button>
+            <input id="edit-board-file-input" type="file" accept=".jpg,.jpeg,.png,.webp" hidden />
+          </div>
+          <div id="edit-board-editor" style="display:none;flex-direction:column;gap:10px">
+            <div id="edit-board-preview">
+              <img id="edit-board-img" draggable="false" />
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:13px">🔍</span>
+              <input type="range" id="edit-board-zoom" min="1" max="3" step="0.01" value="1" style="flex:1" />
+              <span style="font-size:18px;line-height:1">+</span>
+            </div>
+          </div>
+          <button class="form-submit" id="edit-board-save-btn">Enregistrer</button>
+        </div>
+      </div>
     </div>
 
     <!-- Collab status bar -->

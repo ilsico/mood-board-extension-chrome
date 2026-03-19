@@ -28,10 +28,7 @@ window.Collab = (function () {
   let _userCount = 0;
 
   // Palette de couleurs Figma-like (8 couleurs distinctes)
-  const COLORS = [
-    '#ff3c00', '#2D7FF9', '#18A058', '#F59E0B',
-    '#8B5CF6', '#EC4899', '#06B6D4', '#F97316',
-  ];
+  const COLORS = ['#ff3c00'];
 
   const CURSOR_SEND_INTERVAL = 66; // ~15 Hz
   const DRAG_SYNC_INTERVAL = 66; // ~15 Hz
@@ -115,7 +112,8 @@ window.Collab = (function () {
         if (c) usedColors.add(c);
       });
     }
-    _userColor = COLORS.find((c) => !usedColors.has(c)) || COLORS[_hashStr(_userId) % COLORS.length];
+    _userColor =
+      COLORS.find((c) => !usedColors.has(c)) || COLORS[_hashStr(_userId) % COLORS.length];
 
     // Écrire la présence
     const presenceRef = _sessionRef.child('presence/' + _userId);
@@ -159,7 +157,7 @@ window.Collab = (function () {
               h: el.h || null,
               z: el.z || 100,
               type: el.type,
-              data: el.type === 'image' ? 'pending' : (el.data || ''),
+              data: el.type === 'image' ? 'pending' : el.data || '',
               version: 0,
               lastEditBy: _userId,
               lastEditAt: firebase.database.ServerValue.TIMESTAMP,
@@ -291,7 +289,11 @@ window.Collab = (function () {
   function sendSelectionRect(x, y, w, h) {
     if (!_active || !_sessionRef) return;
     _sessionRef.child('presence/' + _userId + '/selectionRect').set({
-      x: x, y: y, w: w, h: h, active: true,
+      x: x,
+      y: y,
+      w: w,
+      h: h,
+      active: true,
     });
   }
 
@@ -335,7 +337,10 @@ window.Collab = (function () {
     if (!_active || !_sessionRef) return;
     if (_lockCache[elementId] !== _userId) return;
     _sessionRef.child('locks/' + elementId).remove();
-    _sessionRef.child('locks/' + elementId).onDisconnect().cancel();
+    _sessionRef
+      .child('locks/' + elementId)
+      .onDisconnect()
+      .cancel();
     delete _lockCache[elementId];
   }
 
@@ -344,7 +349,10 @@ window.Collab = (function () {
     Object.keys(_lockCache).forEach((elId) => {
       if (_lockCache[elId] === _userId) {
         _sessionRef.child('locks/' + elId).remove();
-        _sessionRef.child('locks/' + elId).onDisconnect().cancel();
+        _sessionRef
+          .child('locks/' + elId)
+          .onDisconnect()
+          .cancel();
       }
     });
     _lockCache = {};
@@ -389,7 +397,9 @@ window.Collab = (function () {
       if (!_throttledPositionSync[elId]) {
         _throttledPositionSync[elId] = _makeThrottle((id, px, py) => {
           _sessionRef.child('elements/' + id).update({
-            x: px, y: py, lastEditBy: _userId,
+            x: px,
+            y: py,
+            lastEditBy: _userId,
           });
         }, DRAG_SYNC_INTERVAL);
       }
@@ -412,7 +422,9 @@ window.Collab = (function () {
       });
     } else {
       _sessionRef.child('elements/' + elId).update({
-        w: w, h: h, lastEditBy: _userId,
+        w: w,
+        h: h,
+        lastEditBy: _userId,
       });
     }
   }
@@ -440,9 +452,13 @@ window.Collab = (function () {
   function syncElementCreate(elId, type, x, y, w, h, data, z) {
     if (!_active || !_sessionRef) return;
     _sessionRef.child('elements/' + elId).set({
-      x: x, y: y, w: w || null, h: h || null, z: z || 100,
+      x: x,
+      y: y,
+      w: w || null,
+      h: h || null,
+      z: z || 100,
       type: type,
-      data: type === 'image' ? 'pending' : (data || ''),
+      data: type === 'image' ? 'pending' : data || '',
       version: 0,
       lastEditBy: _userId,
       lastEditAt: firebase.database.ServerValue.TIMESTAMP,
@@ -480,7 +496,10 @@ window.Collab = (function () {
     if (!_active || !_sessionRef) return;
     _sessionRef.child('captions/' + captionId).set({
       parentId: parentId || '',
-      x: x, y: y, width: width || '', text: text || '',
+      x: x,
+      y: y,
+      width: width || '',
+      text: text || '',
     });
   }
 
@@ -824,14 +843,18 @@ window.Collab = (function () {
     div.dataset.userId = uid;
     div.innerHTML =
       '<svg width="16" height="16" viewBox="0 0 16 16" fill="none">' +
-      '<path d="M0,0 L0,14 L4,10 L8,16 L10,14 L6,8 L12,8 Z" fill="' + color + '" stroke="#fff" stroke-width="0.5"/>' +
+      '<path d="M0,0 L0,14 L4,10 L8,16 L10,14 L6,8 L12,8 Z" fill="' +
+      color +
+      '" stroke="#fff" stroke-width="0.5"/>' +
       '</svg>';
     div.style.opacity = '0';
     container.appendChild(div);
     _remoteCursors[uid] = {
       el: div,
-      targetX: 0, targetY: 0,
-      curX: 0, curY: 0,
+      targetX: 0,
+      targetY: 0,
+      curX: 0,
+      curY: 0,
       color: color,
       visible: false,
     };
@@ -863,9 +886,9 @@ window.Collab = (function () {
     let anyActive = false;
     const wrapper = document.getElementById('canvas-wrapper');
     // Récupérer zoom/pan depuis App (exposé)
-    const zoomLevel = (typeof App !== 'undefined' && App._collabGetZoom) ? App._collabGetZoom() : 1;
-    const panX = (typeof App !== 'undefined' && App._collabGetPanX) ? App._collabGetPanX() : 0;
-    const panY = (typeof App !== 'undefined' && App._collabGetPanY) ? App._collabGetPanY() : 0;
+    const zoomLevel = typeof App !== 'undefined' && App._collabGetZoom ? App._collabGetZoom() : 1;
+    const panX = typeof App !== 'undefined' && App._collabGetPanX ? App._collabGetPanX() : 0;
+    const panY = typeof App !== 'undefined' && App._collabGetPanY ? App._collabGetPanY() : 0;
 
     Object.keys(_remoteCursors).forEach((uid) => {
       const c = _remoteCursors[uid];
@@ -953,14 +976,14 @@ window.Collab = (function () {
     }
 
     // Convertir canvas coords → screen coords
-    const zoomLevel = (typeof App !== 'undefined' && App._collabGetZoom) ? App._collabGetZoom() : 1;
-    const panX = (typeof App !== 'undefined' && App._collabGetPanX) ? App._collabGetPanX() : 0;
-    const panY = (typeof App !== 'undefined' && App._collabGetPanY) ? App._collabGetPanY() : 0;
+    const zoomLevel = typeof App !== 'undefined' && App._collabGetZoom ? App._collabGetZoom() : 1;
+    const panX = typeof App !== 'undefined' && App._collabGetPanX ? App._collabGetPanX() : 0;
+    const panY = typeof App !== 'undefined' && App._collabGetPanY ? App._collabGetPanY() : 0;
 
-    div.style.left = (rect.x * zoomLevel + panX) + 'px';
-    div.style.top = (rect.y * zoomLevel + panY) + 'px';
-    div.style.width = (rect.w * zoomLevel) + 'px';
-    div.style.height = (rect.h * zoomLevel) + 'px';
+    div.style.left = rect.x * zoomLevel + panX + 'px';
+    div.style.top = rect.y * zoomLevel + panY + 'px';
+    div.style.width = rect.w * zoomLevel + 'px';
+    div.style.height = rect.h * zoomLevel + 'px';
     div.style.borderColor = color;
     div.style.backgroundColor = color + '15'; // 15 = ~8% opacity
   }
@@ -1052,7 +1075,11 @@ window.Collab = (function () {
         elements.push({
           id: child.key,
           type: d.type,
-          x: d.x, y: d.y, w: d.w, h: d.h, z: d.z,
+          x: d.x,
+          y: d.y,
+          w: d.w,
+          h: d.h,
+          z: d.z,
           data: d.data || '',
         });
       });
@@ -1071,8 +1098,11 @@ window.Collab = (function () {
           const d = child.val();
           elements.push({
             type: 'caption',
-            x: d.x, y: d.y, width: d.width,
-            parentId: d.parentId, text: d.text,
+            x: d.x,
+            y: d.y,
+            width: d.width,
+            parentId: d.parentId,
+            text: d.text,
           });
         });
       }
@@ -1091,11 +1121,21 @@ window.Collab = (function () {
     // Lifecycle
     startSession: startSession,
     endSession: endSession,
-    isActive: function () { return _active; },
-    isOwner: function () { return _isOwner; },
-    getMyUserId: function () { return _userId; },
-    getMyColor: function () { return _userColor; },
-    getBoardId: function () { return _boardId; },
+    isActive: function () {
+      return _active;
+    },
+    isOwner: function () {
+      return _isOwner;
+    },
+    getMyUserId: function () {
+      return _userId;
+    },
+    getMyColor: function () {
+      return _userColor;
+    },
+    getBoardId: function () {
+      return _boardId;
+    },
 
     // Présence
     sendCursor: sendCursor,

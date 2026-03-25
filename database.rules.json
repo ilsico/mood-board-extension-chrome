@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "collabSessions": {
+      "$boardId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "boards": {
+      "$boardId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}

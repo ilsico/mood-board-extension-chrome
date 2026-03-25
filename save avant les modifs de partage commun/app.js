@@ -19,8 +19,7 @@ const App = (function () {
   let historyIndex = -1;
   let selectedEl = null; // élément unique sélectionné
   let multiSelected = new Set(); // sélection multiple
-  let libSelectedIds = new Set();
-  let _libLastClickedId = null; // dernier item cliqué (pour Shift range)
+  let libSelectedIds = new Set(); 
   let isResizing = false;
   let resizeEl = null;
   let resizeStartW = 0,
@@ -45,7 +44,6 @@ const App = (function () {
   let draggedLibItemId = null; // ID de l'item lib en cours de drag (pour drop sur catégorie)
   let draggedLibItems = []; // items sélectionnés pour drag multiple vers le board
   let fileReplaceTarget = null; // élément .board-element à remplacer lors du prochain handleFileUpload
-  const SHARE_BASE_URL = 'https://moodboard-app-b21b9.web.app';
 
   //// ── PERSISTANCE (IndexedDB - Stockage illimité sur disque dur) ───────────
   const DB_NAME = 'MoodboardDB';
@@ -99,45 +97,8 @@ const App = (function () {
   // Miniatures désactivées (cartes accueil sans aperçu)
   let wheelRaf = null;
 
-  // ── COMPRESSION D'IMAGE ──────────────────────────────────────────────────
-  // Réduit les images lourdes (>500KB ou >maxWidth px) en JPEG via Canvas API.
-  // Retourne une Promise<string> (data URL compressée ou src inchangé si déjà petit).
-  function compressImage(src, maxWidth, quality) {
-    maxWidth = maxWidth || 1600;
-    quality = quality || 0.8;
-    return new Promise(function (resolve) {
-      var img = new Image();
-      img.onload = function () {
-        var w = img.naturalWidth,
-          h = img.naturalHeight;
-        if (w <= maxWidth && src.length < 500000) {
-          resolve(src);
-          return;
-        }
-        if (w > maxWidth) {
-          h = Math.round((h * maxWidth) / w);
-          w = maxWidth;
-        }
-        var cvs = document.createElement('canvas');
-        cvs.width = w;
-        cvs.height = h;
-        var ctx = cvs.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(cvs.toDataURL('image/jpeg', quality));
-      };
-      img.onerror = function () {
-        resolve(src);
-      };
-      img.src = src;
-    });
-  }
-
   function saveCurrentBoard() {
     if (!currentBoardId) return;
-    // En mode collab, seul le owner sauvegarde localement
-    if (typeof Collab !== 'undefined' && Collab.isActive() && !Collab.isOwner()) return;
     const board = boards.find((b) => b.id === currentBoardId);
     if (!board) return;
     const elements = [];
@@ -181,20 +142,10 @@ const App = (function () {
     saveBoards();
     // Sync Firebase (fire-and-forget, silencieux)
     if (window._fbDb) {
-      const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
-      const payloadSize = new Blob([JSON.stringify(payload)]).size;
-      if (payloadSize > 8 * 1024 * 1024) {
-        toast(
-          'Erreur : Le board est trop lourd (' +
-            Math.round(payloadSize / 1024 / 1024) +
-            ' Mo). Réduisez la taille des images.'
-        );
-      } else {
-        window._fbDb
-          .ref('boards/' + currentBoardId)
-          .set(payload)
-          .catch((e) => console.warn('Firebase sync error:', e));
-      }
+      window._fbDb
+        .ref('boards/' + currentBoardId)
+        .set({ name: board.name, elements: board.elements, savedAt: board.savedAt })
+        .catch((e) => console.warn('Firebase sync error:', e));
     }
   }
 
@@ -317,8 +268,6 @@ const App = (function () {
       },
       true
     ); // capture pour intercepter avant les autres handlers
-    _setupHomeContextMenu();
-    _applyCustomCursor();
     setupPanelDrop();
     // Fermer les lightboxes au clic sur l'overlay
     document.getElementById('lightbox-overlay').addEventListener('click', closeLightbox);
@@ -332,21 +281,6 @@ const App = (function () {
         closeVideoLightbox();
       }
     });
-
-    // ── Détection mode collaboration : ?collab=ID ──
-    const _collabId = new URLSearchParams(window.location.search).get('collab');
-    if (_collabId && typeof Collab !== 'undefined') {
-      const _ae = (id, fn) => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('click', fn);
-      };
-      _ae('fit-screen-btn', () => fitElementsToScreen());
-      _ae('preview-btn', () => togglePreviewMode());
-      _ae('refresh-save-btn', () => triggerManualSync());
-      // Charger le board depuis Firebase et rejoindre en tant que guest
-      await _loadCollabBoard(_collabId);
-      return;
-    }
 
     // ── Détection mode partage : ?board=ID ──
     const _sharedId = new URLSearchParams(window.location.search).get('board');
@@ -393,27 +327,6 @@ const App = (function () {
 
     // Écran d'accueil
     addEvt('new-board-btn', 'click', () => createBoard());
-    addEvt('join-board-btn', 'click', () => {
-      const input = document.getElementById('join-board-input');
-      if (input) input.value = '';
-      openModal('join-board-modal');
-      setTimeout(() => {
-        if (input) input.focus();
-      }, 80);
-    });
-    addEvt('close-join-board-modal', 'click', () => closeModal('join-board-modal'));
-    addEvt('submit-join-board', 'click', async () => {
-      const input = document.getElementById('join-board-input');
-      const val = input ? input.value.trim() : '';
-      closeModal('join-board-modal');
-      if (val) await joinBoardById(val);
-    });
-    const joinInput = document.getElementById('join-board-input');
-    if (joinInput) {
-      joinInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') document.getElementById('submit-join-board').click();
-      });
-    }
 
     // Header board
     addEvt('back-btn', 'click', () => goHome());
@@ -441,55 +354,17 @@ const App = (function () {
       });
     }
     addEvt('share-btn', 'click', () => {
-      if (!currentBoardId) {
-        toast('Aucun board ouvert');
-        return;
-      }
-      saveCurrentBoard();
-      const shareUrl = SHARE_BASE_URL + '/?board=' + currentBoardId;
-      navigator.clipboard
-        .writeText(shareUrl)
-        .then(() => toast('Lien de lecture seule copié !'))
-        .catch(() => toast('URL : ' + shareUrl));
-    });
-
-    // Bouton Collaborer
-    addEvt('collab-btn', 'click', async () => {
-      if (typeof Collab === 'undefined') {
-        toast('Module collab non chargé');
-        return;
-      }
       if (!currentBoardId || !window._fbDb) {
         toast('Firebase non disponible');
         return;
       }
-
-      const btn = document.getElementById('collab-btn');
-
-      if (Collab.isActive()) {
-        Collab.endSession();
-        if (btn) btn.classList.remove('collab-active');
-        toast('Session collaborative terminée');
-        return;
-      }
-
-      try {
-        saveCurrentBoard();
-        const elements = _collabGetBoardElements();
-        const ok = await Collab.startSession(currentBoardId, true, { elements });
-        if (!ok) {
-          toast('Impossible de démarrer la session');
-          return;
-        }
-        navigator.clipboard
-          .writeText(currentBoardId)
-          .then(() => toast('ID du board copié !'))
-          .catch(() => toast('ID : ' + currentBoardId));
-        if (btn) btn.classList.add('collab-active');
-      } catch (e) {
-        toast('Erreur lors du démarrage de la session');
-        if (btn) btn.classList.remove('collab-active');
-      }
+      saveCurrentBoard();
+      // Remplace "ton-site" par le vrai nom que Netlify t'a donné (ou te donnera)
+      const url = 'https://soft-zabaione-8a5fbc.netlify.app/?board=' + currentBoardId;
+      navigator.clipboard
+        .writeText(url)
+        .then(() => toast('Lien copié dans le presse-papier'))
+        .catch(() => toast('Lien : ' + url));
     });
 
     // Toolbar — outils (clic + drag)
@@ -679,7 +554,6 @@ const App = (function () {
       const saved = formatSavedAt(b.savedAt);
       card.innerHTML = `
         ${b.thumbnail ? `<img class="board-thumb" src="${b.thumbnail}" alt="">` : ''}
-        ${b.isCollaborative ? '<div class="collab-badge" title="Board collaboratif">COLLAB</div>' : ''}
 
         <div class="board-info">
           <div class="board-name">${escHtml(b.name)}</div>
@@ -700,13 +574,6 @@ const App = (function () {
       card.querySelector('.btn-delete').addEventListener('click', (e) => {
         e.stopPropagation();
         App.deleteBoard(b.id);
-      });
-
-      // Clic droit → menu contextuel
-      card.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        _showHomeCtxMenu(e, b.id);
       });
 
       // Drag pour déplacer la carte — simple clic+drag, double-clic pour ouvrir
@@ -951,13 +818,6 @@ const App = (function () {
   function openBoard(id) {
     const board = boards.find((b) => b.id === id);
     if (!board) return;
-
-    // Board collaboratif : auto-reconnexion via Firebase
-    if (board.isCollaborative) {
-      _openCollabBoard(board);
-      return;
-    }
-
     const loaderOverlay = document.getElementById('loader-overlay');
     const loaderFrame = loaderOverlay.querySelector('.loader-frame');
     loaderFrame.style.animation = 'none';
@@ -973,8 +833,6 @@ const App = (function () {
         const shareBtn = document.getElementById('share-btn');
         if (shareBtn && window._fbDb && !document.body.classList.contains('readonly-mode'))
           shareBtn.style.display = '';
-        const collabBtn = document.getElementById('collab-btn');
-        if (collabBtn) collabBtn.classList.remove('collab-active');
         document.getElementById('home-screen').style.display = 'none';
         document.getElementById('board-screen').style.display = 'flex';
         // Réattacher les listeners pinch maintenant que canvas-wrapper est visible
@@ -1003,20 +861,6 @@ const App = (function () {
   }
 
   function goHome() {
-    // Snapshot des éléments si board collaboratif avant de quitter
-    if (typeof Collab !== 'undefined' && Collab.isActive()) {
-      const board = boards.find((b) => b.id === currentBoardId);
-      if (board && board.isCollaborative) {
-        board.elements = _collabGetBoardElements();
-        board.savedAt = Date.now();
-        saveBoards();
-      }
-      Collab.endSession();
-      const collabBtn = document.getElementById('collab-btn');
-      if (collabBtn) collabBtn.classList.remove('collab-active');
-    }
-    // Retirer le mode lecture seule (potentiellement mis par _openCollabBoardLocal)
-    document.body.classList.remove('readonly-mode');
     try {
       saveCurrentBoard();
     } catch (e) {
@@ -1110,7 +954,7 @@ const App = (function () {
   }
 
   function deleteBoard(id) {
-    if (!id) return;
+    if (!confirm('Supprimer ce moodboard ?')) return;
     boards = boards.filter((b) => b.id !== id);
     saveBoards();
     renderHome();
@@ -1150,8 +994,12 @@ const App = (function () {
     if (els.length) {
       minX = Math.min(...els.map((e) => parseFloat(e.style.left) || 0));
       minY = Math.min(...els.map((e) => parseFloat(e.style.top) || 0));
-      maxX = Math.max(...els.map((e) => (parseFloat(e.style.left) || 0) + e.offsetWidth));
-      maxY = Math.max(...els.map((e) => (parseFloat(e.style.top) || 0) + e.offsetHeight));
+      maxX = Math.max(
+        ...els.map((e) => (parseFloat(e.style.left) || 0) + e.offsetWidth)
+      );
+      maxY = Math.max(
+        ...els.map((e) => (parseFloat(e.style.top) || 0) + e.offsetHeight)
+      );
     } else {
       minX = 0;
       minY = 0;
@@ -1513,13 +1361,6 @@ const App = (function () {
     });
 
     window.addEventListener('mousemove', (e) => {
-      // Envoyer la position du curseur pour la collaboration
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        const wRect = wrapper.getBoundingClientRect();
-        const cx = (e.clientX - wRect.left - panX) / zoomLevel;
-        const cy = (e.clientY - wRect.top - panY) / zoomLevel;
-        Collab.sendCursor(cx, cy);
-      }
       if (isPanning) {
         panX = e.clientX - panStart.x;
         panY = e.clientY - panStart.y;
@@ -1539,14 +1380,6 @@ const App = (function () {
         selRect.style.top = y + 'px';
         selRect.style.width = w + 'px';
         selRect.style.height = h + 'px';
-        // Sync du rectangle de sélection pour la collaboration
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          const canvasX = (x - panX) / zoomLevel;
-          const canvasY = (y - panY) / zoomLevel;
-          const canvasW = w / zoomLevel;
-          const canvasH = h / zoomLevel;
-          Collab.sendSelectionRect(canvasX, canvasY, canvasW, canvasH);
-        }
       }
     });
 
@@ -1556,26 +1389,6 @@ const App = (function () {
         wrapper.style.cursor = '';
       }
       if (isResizing) {
-        // Collab: sync taille finale + libérer le lock
-        if (typeof Collab !== 'undefined' && Collab.isActive() && resizeEl) {
-          const fw = parseFloat(resizeEl.style.width) || null;
-          const fh = parseFloat(resizeEl.style.height) || null;
-          Collab.syncElementSize(resizeEl.dataset.id, fw, fh, true);
-          Collab.releaseLock(resizeEl.dataset.id);
-        }
-        // Action-based undo for resize
-        if (resizeEl) {
-          const afterW = parseFloat(resizeEl.style.width) || null;
-          const afterH = parseFloat(resizeEl.style.height) || null;
-          if (afterW !== resizeStartW || afterH !== resizeStartH) {
-            pushAction({
-              type: 'resize',
-              elId: resizeEl.dataset.id,
-              before: { w: resizeStartW, h: resizeStartH },
-              after: { w: afterW, h: afterH },
-            });
-          }
-        }
         isResizing = false;
         resizeEl = null;
         clearSnapGuides();
@@ -1584,8 +1397,6 @@ const App = (function () {
       if (isSelecting) {
         isSelecting = false;
         selRect.style.display = 'none';
-        // Effacer le rectangle de sélection distant
-        if (typeof Collab !== 'undefined' && Collab.isActive()) Collab.clearSelectionRect();
         // Calculer les éléments dans le rectangle
         const wRect = wrapper.getBoundingClientRect();
         const rLeft = parseFloat(selRect.style.left);
@@ -1616,8 +1427,6 @@ const App = (function () {
             updateMultiResizeHandle();
           }
         }
-        // Sync de la sélection pour la collaboration
-        _collabSyncSelection();
       }
     });
 
@@ -1646,14 +1455,10 @@ const App = (function () {
         const x = (e.clientX - rect.left - panX) / zoomLevel;
         const y = (e.clientY - rect.top - panY) / zoomLevel;
         if (type === 'note') {
-          const ne = createNoteElement('', x - 115, y - 80, 290, 75);
-          _collabSyncCreatedEl(ne);
-          if (ne) pushAction({ type: 'create', elId: ne.dataset.id, after: _captureElState(ne) });
+          createNoteElement('', x - 115, y - 80, 290, 75);
           pushHistory();
         } else if (type === 'color') {
-          const ce = createColorElement('#000000', x - 65, y - 70, 130, 140);
-          _collabSyncCreatedEl(ce);
-          if (ce) pushAction({ type: 'create', elId: ce.dataset.id, after: _captureElState(ce) });
+          createColorElement('#000000', x - 65, y - 70, 130, 140);
           pushHistory();
         } else if (type === 'link') {
           // Stocker la position pour après la saisie de l'URL
@@ -1668,38 +1473,15 @@ const App = (function () {
       // Drop multiple depuis le panneau bibliothèque
       if (src === 'multi-lib' && draggedLibItems.length > 0) {
         const rect = wrapper.getBoundingClientRect();
-        const items = draggedLibItems.slice();
-        draggedLibItems = [];
-        items.forEach((libItem, i) => {
-          const tmpImg = new Image();
-          tmpImg.onload = () => {
-            const wrapEl = document.getElementById('canvas-wrapper');
-            const vw = (wrapEl ? wrapEl.clientWidth : window.innerWidth) / (zoomLevel || 1);
-            const vh = (wrapEl ? wrapEl.clientHeight : window.innerHeight) / (zoomLevel || 1);
-            const maxDim = Math.max(vw, vh) * 0.2;
-            let w = tmpImg.naturalWidth || 220;
-            let h = tmpImg.naturalHeight || 170;
-            if (w > maxDim) {
-              h = Math.round((h * maxDim) / w);
-              w = Math.round(maxDim);
-            }
-            if (h > maxDim) {
-              w = Math.round((w * maxDim) / h);
-              h = Math.round(maxDim);
-            }
-            const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
-            const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 30;
-            createImageElement(libItem.src, x, y, w, h);
-            pushHistory();
-          };
-          tmpImg.onerror = () => {
-            const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 30;
-            const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 30;
-            createImageElement(libItem.src, x, y, 220, 170);
-            pushHistory();
-          };
-          tmpImg.src = libItem.src;
+        const w = _pvW;
+        const h = _pvH;
+        draggedLibItems.forEach((libItem, i) => {
+          const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
+          const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 30;
+          createImageElement(libItem.src, x, y, w, h);
+          pushHistory();
         });
+        draggedLibItems = [];
         return;
       }
       if (src && src.startsWith('data:')) {
@@ -1720,8 +1502,8 @@ const App = (function () {
           .filter((f) => f.type.startsWith('image/'))
           .forEach((file, i) => {
             const reader = new FileReader();
-            reader.onload = async (ev) => {
-              const src = await compressImage(ev.target.result);
+            reader.onload = (ev) => {
+              const src = ev.target.result;
               const tmpImg = new Image();
               tmpImg.onload = () => {
                 const w = tmpImg.naturalWidth || 220;
@@ -1863,8 +1645,8 @@ const App = (function () {
           const blob = item.getAsFile();
           if (!blob) continue;
           const reader = new FileReader();
-          reader.onload = async (ev) => {
-            const src = await compressImage(ev.target.result);
+          reader.onload = (ev) => {
+            const src = ev.target.result;
             const c = getCenter();
             const tmpImg = new Image();
             tmpImg.onload = () => {
@@ -1907,11 +1689,6 @@ const App = (function () {
   }
 
   // ── HISTORIQUE ───────────────────────────────────────────────────────────
-  // Système dual : innerHTML (mode solo) + actions (mode collab)
-  let _actionHistory = [];
-  let _actionIndex = -1;
-  const MAX_ACTIONS = 100;
-
   function pushHistory() {
     // Synchroniser les valeurs des hex inputs couleur (innerHTML ne capture pas .value dynamique)
     document
@@ -1932,228 +1709,7 @@ const App = (function () {
     if (history.length > 50) history.shift();
     historyIndex = history.length - 1;
   }
-
-  /**
-   * Enregistre une action structurée pour le undo/redo collaboratif.
-   * @param {object} action - {type, elId, before, after}
-   *   type: 'move'|'resize'|'create'|'delete'|'editText'|'editColor'|'groupMove'|'generic'
-   *   elId: string | string[] (pour groupMove)
-   *   before: état avant l'action
-   *   after: état après l'action
-   */
-  function pushAction(action) {
-    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
-    action.userId = isCollab ? Collab.getMyUserId() : 'local';
-    action.timestamp = Date.now();
-    if (isCollab && action.elId && !Array.isArray(action.elId)) {
-      action.elementVersion = Collab.getElementVersion(action.elId);
-    }
-    if (_actionIndex < _actionHistory.length - 1) {
-      _actionHistory = _actionHistory.slice(0, _actionIndex + 1);
-    }
-    _actionHistory.push(action);
-    if (_actionHistory.length > MAX_ACTIONS) _actionHistory.shift();
-    _actionIndex = _actionHistory.length - 1;
-  }
-
-  /** Capture l'état d'un élément pour les actions create/delete */
-  function _captureElState(el) {
-    return {
-      type: el.dataset.type,
-      x: parseFloat(el.style.left) || 0,
-      y: parseFloat(el.style.top) || 0,
-      w: parseFloat(el.style.width) || null,
-      h: parseFloat(el.style.height) || null,
-      z: parseInt(el.style.zIndex) || 100,
-      data:
-        el.dataset.type === 'image'
-          ? _imgStore.get(el.dataset.id) || el.dataset.savedata || ''
-          : el.dataset.savedata || '',
-    };
-  }
-
-  function _applyReverse(action) {
-    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
-    switch (action.type) {
-      case 'move': {
-        const el = document.querySelector('[data-id="' + action.elId + '"]');
-        if (!el) break;
-        el.style.left = action.before.x + 'px';
-        el.style.top = action.before.y + 'px';
-        updateConnectionsForEl(el);
-        if (isCollab)
-          Collab.syncElementPosition(action.elId, action.before.x, action.before.y, true);
-        break;
-      }
-      case 'resize': {
-        const el = document.querySelector('[data-id="' + action.elId + '"]');
-        if (!el) break;
-        if (action.before.w) el.style.width = action.before.w + 'px';
-        if (action.before.h) el.style.height = action.before.h + 'px';
-        updateConnectionsForEl(el);
-        if (isCollab) Collab.syncElementSize(action.elId, action.before.w, action.before.h, true);
-        break;
-      }
-      case 'editText':
-      case 'editColor': {
-        const el = document.querySelector('[data-id="' + action.elId + '"]');
-        if (!el) break;
-        el.dataset.savedata = action.before.data;
-        if (action.type === 'editText') {
-          const ta = el.querySelector('textarea');
-          if (ta) {
-            ta.value = action.before.data;
-            ta.setAttribute('data-snap-value', action.before.data);
-          }
-        } else {
-          const swatch = el.querySelector('.color-swatch');
-          if (swatch) swatch.style.backgroundColor = action.before.data;
-          const hexInput = el.querySelector('.color-hex-input');
-          if (hexInput) hexInput.value = action.before.data.replace('#', '');
-        }
-        if (isCollab) Collab.syncElementData(action.elId, action.before.data);
-        break;
-      }
-      case 'create': {
-        const el = document.querySelector('[data-id="' + action.elId + '"]');
-        if (el) {
-          removeConnectionsForEl(el);
-          removeCaptionsForEl(el);
-          el.remove();
-        }
-        if (isCollab) Collab.syncElementDelete(action.elId);
-        break;
-      }
-      case 'delete': {
-        const restored = restoreElement({ id: action.elId, ...action.before });
-        if (isCollab && restored) {
-          _collabSyncCreatedEl(restored);
-        }
-        break;
-      }
-      case 'groupMove': {
-        if (!Array.isArray(action.elId) || !Array.isArray(action.before)) break;
-        action.elId.forEach((id, i) => {
-          const el = document.querySelector('[data-id="' + id + '"]');
-          if (!el || !action.before[i]) return;
-          el.style.left = action.before[i].x + 'px';
-          el.style.top = action.before[i].y + 'px';
-          updateConnectionsForEl(el);
-          if (isCollab)
-            Collab.syncElementPosition(id, action.before[i].x, action.before[i].y, true);
-        });
-        break;
-      }
-    }
-  }
-
-  function _applyForward(action) {
-    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
-    switch (action.type) {
-      case 'move': {
-        const el = document.querySelector('[data-id="' + action.elId + '"]');
-        if (!el) break;
-        el.style.left = action.after.x + 'px';
-        el.style.top = action.after.y + 'px';
-        updateConnectionsForEl(el);
-        if (isCollab) Collab.syncElementPosition(action.elId, action.after.x, action.after.y, true);
-        break;
-      }
-      case 'resize': {
-        const el = document.querySelector('[data-id="' + action.elId + '"]');
-        if (!el) break;
-        if (action.after.w) el.style.width = action.after.w + 'px';
-        if (action.after.h) el.style.height = action.after.h + 'px';
-        updateConnectionsForEl(el);
-        if (isCollab) Collab.syncElementSize(action.elId, action.after.w, action.after.h, true);
-        break;
-      }
-      case 'editText':
-      case 'editColor': {
-        const el = document.querySelector('[data-id="' + action.elId + '"]');
-        if (!el) break;
-        el.dataset.savedata = action.after.data;
-        if (action.type === 'editText') {
-          const ta = el.querySelector('textarea');
-          if (ta) {
-            ta.value = action.after.data;
-            ta.setAttribute('data-snap-value', action.after.data);
-          }
-        } else {
-          const swatch = el.querySelector('.color-swatch');
-          if (swatch) swatch.style.backgroundColor = action.after.data;
-          const hexInput = el.querySelector('.color-hex-input');
-          if (hexInput) hexInput.value = action.after.data.replace('#', '');
-        }
-        if (isCollab) Collab.syncElementData(action.elId, action.after.data);
-        break;
-      }
-      case 'create': {
-        const restored = restoreElement({ id: action.elId, ...action.after });
-        if (isCollab && restored) _collabSyncCreatedEl(restored);
-        break;
-      }
-      case 'delete': {
-        const el = document.querySelector('[data-id="' + action.elId + '"]');
-        if (el) {
-          removeConnectionsForEl(el);
-          removeCaptionsForEl(el);
-          el.remove();
-        }
-        if (isCollab) Collab.syncElementDelete(action.elId);
-        break;
-      }
-      case 'groupMove': {
-        if (!Array.isArray(action.elId) || !Array.isArray(action.after)) break;
-        action.elId.forEach((id, i) => {
-          const el = document.querySelector('[data-id="' + id + '"]');
-          if (!el || !action.after[i]) return;
-          el.style.left = action.after[i].x + 'px';
-          el.style.top = action.after[i].y + 'px';
-          updateConnectionsForEl(el);
-          if (isCollab) Collab.syncElementPosition(id, action.after[i].x, action.after[i].y, true);
-        });
-        break;
-      }
-    }
-  }
-
   function undo() {
-    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
-
-    // Mode collab: undo par action
-    if (isCollab && _actionHistory.length > 0) {
-      let skipped = 0;
-      while (_actionIndex >= 0 && skipped < 5) {
-        const action = _actionHistory[_actionIndex];
-        // Vérifier les conflits (sauf pour create/delete)
-        if (action.type !== 'create' && action.type !== 'delete' && action.type !== 'generic') {
-          const elId = Array.isArray(action.elId) ? action.elId[0] : action.elId;
-          if (elId && Collab.isLockedByOther(elId)) {
-            _actionIndex--;
-            skipped++;
-            continue;
-          }
-          if (elId && Collab.wasModifiedSince(elId, action.elementVersion || 0)) {
-            _actionIndex--;
-            skipped++;
-            continue;
-          }
-        }
-        _applyReverse(action);
-        _actionIndex--;
-        toast('Annulé');
-        return;
-      }
-      if (skipped > 0) {
-        toast("Impossible d'annuler : éléments modifiés par d'autres");
-      } else {
-        toast('Rien à annuler');
-      }
-      return;
-    }
-
-    // Mode solo: undo innerHTML classique
     if (historyIndex <= 0) {
       toast('Rien à annuler');
       return;
@@ -2163,26 +1719,10 @@ const App = (function () {
     reattachAllEvents();
     selectedEl = null;
     multiSelected.clear();
+
     toast('Annulé');
   }
-
   function redo() {
-    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
-
-    // Mode collab: redo par action
-    if (isCollab && _actionHistory.length > 0) {
-      if (_actionIndex >= _actionHistory.length - 1) {
-        toast('Rien à rétablir');
-        return;
-      }
-      _actionIndex++;
-      const action = _actionHistory[_actionIndex];
-      _applyForward(action);
-      toast('Rétabli');
-      return;
-    }
-
-    // Mode solo: redo innerHTML classique
     if (historyIndex >= history.length - 1) {
       toast('Rien à rétablir');
       return;
@@ -2192,6 +1732,7 @@ const App = (function () {
     reattachAllEvents();
     selectedEl = null;
     multiSelected.clear();
+
     toast('Rétabli');
   }
   function reattachAllEvents() {
@@ -2218,15 +1759,6 @@ const App = (function () {
     let _noteValueOnFocus = '';
     function activateNoteEdit(e) {
       if (document.body.classList.contains('readonly-mode')) return;
-      // Collab: vérifier le lock
-      if (
-        typeof Collab !== 'undefined' &&
-        Collab.isActive() &&
-        Collab.isLockedByOther(el.dataset.id)
-      ) {
-        toast("Élément en cours d'édition");
-        return;
-      }
       e.stopPropagation();
       e.preventDefault();
       ta.style.pointerEvents = 'auto';
@@ -2235,10 +1767,6 @@ const App = (function () {
       _noteValueOnFocus = ta.value;
       ta.focus();
       showTextEditPanel(el);
-      // Collab: acquérir le lock
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.acquireLock(el.dataset.id);
-      }
     }
     wrap.addEventListener('dblclick', activateNoteEdit);
     ta.addEventListener('dblclick', activateNoteEdit);
@@ -2247,10 +1775,6 @@ const App = (function () {
     });
     ta.addEventListener('input', () => {
       el.dataset.savedata = ta.value;
-      // Collab: sync texte debounced
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.syncElementData(el.dataset.id, ta.value);
-      }
     });
     ta.addEventListener('blur', (e) => {
       const panel = document.getElementById('text-edit-panel');
@@ -2260,40 +1784,12 @@ const App = (function () {
       ta.style.cursor = 'move';
       delete el.dataset.editing;
       hideTextEditPanel();
-      // Collab: libérer le lock
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.releaseLock(el.dataset.id);
-      }
       if (!ta.value.trim()) {
-        // Action-based undo for delete (empty note)
-        pushAction({
-          type: 'delete',
-          elId: el.dataset.id,
-          before: {
-            type: el.dataset.type,
-            x: parseFloat(el.style.left) || 0,
-            y: parseFloat(el.style.top) || 0,
-            w: parseFloat(el.style.width) || null,
-            h: parseFloat(el.style.height) || null,
-            z: parseInt(el.style.zIndex) || 100,
-            data: _noteValueOnFocus,
-          },
-        });
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
         pushHistory();
-        // Collab: sync suppression
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          Collab.syncElementDelete(el.dataset.id);
-        }
       } else if (ta.value !== _noteValueOnFocus) {
-        pushAction({
-          type: 'editText',
-          elId: el.dataset.id,
-          before: { data: _noteValueOnFocus },
-          after: { data: ta.value },
-        });
         pushHistory();
       }
     });
@@ -2348,40 +1844,15 @@ const App = (function () {
       hexInput.value = el.dataset.savedata.toUpperCase();
       swatch.style.background = el.dataset.savedata;
     }
-    let _colorValueOnFocus = el.dataset.savedata || '#000000';
     // Bloquer le drag depuis l'input
     hexInput.addEventListener('mousedown', (e) => e.stopPropagation());
     hexInput.addEventListener('pointerdown', (e) => e.stopPropagation());
-    hexInput.addEventListener('focus', () => {
-      _colorValueOnFocus = el.dataset.savedata || '#000000';
-      // Collab: vérifier et acquérir le lock
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        if (Collab.isLockedByOther(el.dataset.id)) {
-          toast("Élément en cours d'édition");
-          hexInput.blur();
-          return;
-        }
-        Collab.acquireLock(el.dataset.id);
-      }
-    });
     function applyHexColor(val) {
       const v = val.trim().toUpperCase();
       if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) {
         swatch.style.background = v;
         el.dataset.savedata = v;
         hexInput.value = v;
-        // Collab: sync couleur
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          Collab.syncElementData(el.dataset.id, v);
-        }
-        if (v !== _colorValueOnFocus) {
-          pushAction({
-            type: 'editColor',
-            elId: el.dataset.id,
-            before: { data: _colorValueOnFocus },
-            after: { data: v },
-          });
-        }
         pushHistory();
 
         return true;
@@ -2398,10 +1869,6 @@ const App = (function () {
     hexInput.addEventListener('blur', () => {
       if (!applyHexColor(hexInput.value))
         hexInput.value = (el.dataset.savedata || '#000000').toUpperCase();
-      // Collab: libérer le lock
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.releaseLock(el.dataset.id);
-      }
     });
     hexInput.addEventListener('input', () => {
       hexInput.value = hexInput.value.toUpperCase();
@@ -2412,28 +1879,11 @@ const App = (function () {
     eyeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      // Collab: vérifier le lock avant eyedropper
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        if (Collab.isLockedByOther(el.dataset.id)) {
-          toast("Élément en cours d'édition");
-          return;
-        }
-        _colorValueOnFocus = el.dataset.savedata || '#000000';
-        Collab.acquireLock(el.dataset.id);
-      }
       activateEyedropper(el, swatch, hexInput);
     });
   }
 
   // ── SÉLECTION ────────────────────────────────────────────────────────────
-  function _collabSyncSelection() {
-    if (typeof Collab === 'undefined' || !Collab.isActive()) return;
-    const ids = [];
-    if (selectedEl) ids.push(selectedEl.dataset.id);
-    multiSelected.forEach((el) => ids.push(el.dataset.id));
-    Collab.sendSelection(ids);
-  }
-
   function deselectAll() {
     document
       .querySelectorAll('#canvas .board-element.selected')
@@ -2445,7 +1895,6 @@ const App = (function () {
     multiSelected.clear();
     updateMultiResizeHandle();
     updateAllConnections();
-    _collabSyncSelection();
   }
 
   function selectEl(el, addToMulti = false) {
@@ -2471,13 +1920,8 @@ const App = (function () {
       el.classList.add('selected');
       selectedEl = el;
       el.style.zIndex = ++nextZ;
-      // Sync z-index en mode collab
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.syncElementZ(el.dataset.id, nextZ);
-      }
     }
     updateMultiResizeHandle();
-    _collabSyncSelection();
   }
 
   // Supprime toutes les connexions liées à un élément
@@ -2526,7 +1970,6 @@ const App = (function () {
       toDelete.push(el);
     });
     multiSelected.clear();
-    updateMultiResizeHandle();
     if (selectedEl) {
       removeConnectionsForEl(selectedEl);
       removeCaptionsForEl(selectedEl);
@@ -2536,14 +1979,6 @@ const App = (function () {
     if (!toDelete.length) {
       toast('Aucun élément sélectionné');
       return;
-    }
-    // Action-based undo for delete
-    toDelete.forEach((el) => {
-      pushAction({ type: 'delete', elId: el.dataset.id, before: _captureElState(el) });
-    });
-    // Collab: sync suppressions
-    if (typeof Collab !== 'undefined' && Collab.isActive()) {
-      toDelete.forEach((el) => Collab.syncElementDelete(el.dataset.id));
     }
     toast(toDelete.length > 1 ? toDelete.length + ' éléments supprimés' : 'Supprimé');
     let done = 0;
@@ -2872,15 +2307,6 @@ const App = (function () {
       if (e.target.isContentEditable) return;
       if (e.button !== 0) return;
       if (el.dataset.justDragged) return;
-      // Collab: vérifier si l'élément est locké par un autre utilisateur
-      if (
-        typeof Collab !== 'undefined' &&
-        Collab.isActive() &&
-        Collab.isLockedByOther(el.dataset.id)
-      ) {
-        toast("Élément en cours d'édition par un autre utilisateur");
-        return;
-      }
       e.stopPropagation();
       e.preventDefault();
 
@@ -3008,36 +2434,7 @@ const App = (function () {
         rafId = requestAnimationFrame(dragRAF);
       }
 
-      // Collab: acquérir le lock de manière optimiste au premier mouvement
-      let _collabLockAcquired = false;
-      let _collabLockPending = false;
-
       const onMove = (ev) => {
-        // Collab: tenter l'acquisition du lock au premier mouvement
-        if (
-          typeof Collab !== 'undefined' &&
-          Collab.isActive() &&
-          !_collabLockAcquired &&
-          !_collabLockPending
-        ) {
-          _collabLockPending = true;
-          Collab.acquireLock(dragEl.dataset.id).then((ok) => {
-            _collabLockPending = false;
-            if (ok) {
-              _collabLockAcquired = true;
-            } else {
-              // Lock échoué: annuler le drag
-              dragActive = false;
-              cancelAnimationFrame(rafId);
-              dragEl.style.left = origLeft + 'px';
-              dragEl.style.top = origTop + 'px';
-              dragEl.style.transform = '';
-              window.removeEventListener('mousemove', onMove);
-              window.removeEventListener('mouseup', onUp);
-              toast('Élément verrouillé par un autre utilisateur');
-            }
-          });
-        }
         if (isAltDown && !duplicated) {
           const prevAxis = shiftAxisX;
           doDuplicate();
@@ -3086,11 +2483,6 @@ const App = (function () {
 
         targetX = startLeft + dx;
         targetY = startTop + dy;
-
-        // Collab: sync position throttlée pendant le drag
-        if (typeof Collab !== 'undefined' && Collab.isActive() && _collabLockAcquired) {
-          Collab.syncElementPosition(dragEl.dataset.id, targetX, targetY, false);
-        }
       };
 
       const onUp = () => {
@@ -3119,43 +2511,7 @@ const App = (function () {
         window.removeEventListener('mouseup', onUp);
         if (moved || duplicated) {
           pushHistory();
-          // Action-based undo: enregistrer le mouvement
-          if (moved && !duplicated) {
-            const finalX = parseFloat(dragEl.style.left) || 0;
-            const finalY = parseFloat(dragEl.style.top) || 0;
-            pushAction({
-              type: 'move',
-              elId: dragEl.dataset.id,
-              before: { x: origLeft, y: origTop },
-              after: { x: finalX, y: finalY },
-            });
-          } else if (duplicated) {
-            const d = dragEl;
-            pushAction({
-              type: 'create',
-              elId: d.dataset.id,
-              after: {
-                type: d.dataset.type,
-                x: parseFloat(d.style.left) || 0,
-                y: parseFloat(d.style.top) || 0,
-                w: parseFloat(d.style.width) || null,
-                h: parseFloat(d.style.height) || null,
-                z: parseInt(d.style.zIndex) || 100,
-                data: d.dataset.type === 'image' ? 'pending' : d.dataset.savedata || '',
-              },
-            });
-          }
-          // Collab: sync position finale + libérer le lock
-          if (typeof Collab !== 'undefined' && Collab.isActive() && _collabLockAcquired) {
-            const fx = parseFloat(dragEl.style.left) || 0;
-            const fy = parseFloat(dragEl.style.top) || 0;
-            Collab.syncElementPosition(dragEl.dataset.id, fx, fy, true);
-            Collab.releaseLock(dragEl.dataset.id);
-          }
-          // Collab: sync la création si duplication
-          if (duplicated && typeof Collab !== 'undefined' && Collab.isActive()) {
-            _collabSyncCreatedEl(dragEl);
-          }
+
           dragEl.dataset.justDragged = '1';
           setTimeout(() => delete dragEl.dataset.justDragged, 150);
         }
@@ -3204,14 +2560,6 @@ const App = (function () {
         e.stopPropagation();
         e.preventDefault();
         if (document.body.classList.contains('readonly-mode')) return;
-        // Collab: vérifier et acquérir le lock
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          if (Collab.isLockedByOther(el.dataset.id)) {
-            toast('Élément verrouillé');
-            return;
-          }
-          Collab.acquireLock(el.dataset.id);
-        }
         isResizing = true;
         resizeEl = el;
         resizeStartW = parseFloat(el.style.width) || el.offsetWidth;
@@ -3226,16 +2574,6 @@ const App = (function () {
   }
 
   function startGroupDrag(e, group) {
-    // Collab: vérifier que aucun élément du groupe n'est locké par un autre
-    if (typeof Collab !== 'undefined' && Collab.isActive()) {
-      for (const el of group) {
-        if (Collab.isLockedByOther(el.dataset.id)) {
-          toast('Un élément du groupe est verrouillé');
-          return;
-        }
-      }
-    }
-
     const canvasRect = document.getElementById('canvas').getBoundingClientRect();
     const startMX = (e.clientX - canvasRect.left) / zoomLevel;
     const startMY = (e.clientY - canvasRect.top) / zoomLevel;
@@ -3421,72 +2759,27 @@ const App = (function () {
       clearSnapGuides();
       if (moved || duplicated) {
         pushHistory();
-        // Action-based undo: enregistrer le groupMove
-        if (moved && !duplicated) {
-          const ids = [];
-          const beforeArr = [];
-          const afterArr = [];
-          activeGroup.forEach((el) => {
-            const s = starts.get(el);
-            if (!s) return;
-            ids.push(el.dataset.id);
-            beforeArr.push({ x: s.left, y: s.top });
-            afterArr.push({ x: s.left + targetDX, y: s.top + targetDY });
-          });
-          pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr });
-        }
-        // Collab: sync positions finales + libérer les locks
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          activeGroup.forEach((el) => {
-            const fx = parseFloat(el.style.left) || 0;
-            const fy = parseFloat(el.style.top) || 0;
-            Collab.syncElementPosition(el.dataset.id, fx, fy, true);
-            Collab.releaseLock(el.dataset.id);
-          });
-        }
       }
     };
-    // Collab: acquérir les locks sur tous les éléments du groupe
-    if (typeof Collab !== 'undefined' && Collab.isActive()) {
-      Promise.all([...activeGroup].map((el) => Collab.acquireLock(el.dataset.id))).then(
-        (results) => {
-          if (results.some((ok) => !ok)) {
-            // Au moins un lock a échoué, libérer ceux acquis et annuler
-            activeGroup.forEach((el) => Collab.releaseLock(el.dataset.id));
-            toast('Un élément du groupe est verrouillé');
-            return;
-          }
-        }
-      );
-    }
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     groupRafId = requestAnimationFrame(groupDragRAF);
   }
 
-  function _getMinSize(el) {
-    const t = el && el.dataset ? el.dataset.type : '';
-    if (t === 'link') return { w: 103, h: 73 };
-    if (t === 'color') return { w: 80, h: 80 };
-    if (t === 'file') return { w: 120, h: 50 };
-    return { w: 60, h: 40 };
-  }
-
   function handleResizeMouse(e) {
     const dx = (e.clientX - resizeStartX) / zoomLevel;
     const dy = (e.clientY - resizeStartY) / zoomLevel;
-    const mins = _getMinSize(resizeEl);
     let fw, fh;
 
     if (resizeRatio) {
-      const newW = Math.max(mins.w, resizeStartW + dx);
-      const newH = Math.max(mins.h, resizeStartH + dy);
+      const newW = Math.max(40, resizeStartW + dx);
+      const newH = Math.max(40, resizeStartH + dy);
       const scale = Math.max(newW / resizeStartW, newH / resizeStartH);
-      fw = Math.max(mins.w, Math.round(resizeStartW * scale));
-      fh = Math.max(mins.h, Math.round(fw / resizeRatio));
+      fw = Math.max(40, Math.round(resizeStartW * scale));
+      fh = Math.max(40, Math.round(fw / resizeRatio));
     } else {
-      fw = Math.max(mins.w, resizeStartW + dx);
-      fh = Math.max(mins.h, resizeStartH + dy);
+      fw = Math.max(60, resizeStartW + dx);
+      fh = Math.max(40, resizeStartH + dy);
     }
 
     resizeEl.style.width = fw + 'px';
@@ -3617,317 +2910,6 @@ const App = (function () {
     return el;
   }
 
-  // ── COLLAB BOARD (rejoindre en tant que guest) ─────────────────────────
-  async function _loadCollabBoard(boardId) {
-    const errPage = (msg) => {
-      document.body.innerHTML =
-        '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;background:#f4f4f6;"><div style="font-family:\'HelveticaBold\',sans-serif;font-size:26px;color:#ff3c00">MOODBOARDS</div><div style="font-size:15px;color:#888">' +
-        msg +
-        '</div></div>';
-    };
-    if (!window._fbDb) {
-      errPage('Firebase non disponible.');
-      return;
-    }
-    if (typeof Collab === 'undefined') {
-      errPage('Module de collaboration non chargé.');
-      return;
-    }
-    if (window._fbAuthReady) {
-      await window._fbAuthReady;
-    }
-    try {
-      // Vérifier que la session collab existe et est active
-      const metaSnap = await window._fbDb.ref('collabSessions/' + boardId + '/meta').get();
-      if (!metaSnap.exists() || !metaSnap.val().active) {
-        errPage("Cette session collaborative n'existe plus ou est terminée.");
-        return;
-      }
-      // Charger le nom du board depuis boards/
-      const boardSnap = await window._fbDb.ref('boards/' + boardId).get();
-      const boardName = (boardSnap.exists() && boardSnap.val().name) || 'Moodboard';
-
-      // Afficher le board screen
-      document.getElementById('board-screen').style.display = 'flex';
-      document.getElementById('board-title-display').textContent = boardName;
-      document.getElementById('canvas').innerHTML = '';
-      zoomLevel = 1;
-      panX = 0;
-      panY = 0;
-      nextZ = 100;
-      applyTransform();
-
-      // Charger les éléments depuis la session collab
-      const elemSnap = await window._fbDb.ref('collabSessions/' + boardId + '/elements').get();
-      if (elemSnap.exists()) {
-        elemSnap.forEach((child) => {
-          const d = child.val();
-          if (d.deleted) return;
-          restoreElement({
-            id: child.key,
-            type: d.type,
-            x: d.x,
-            y: d.y,
-            w: d.w,
-            h: d.h,
-            z: d.z,
-            data: d.data || '',
-          });
-          if (d.z && d.z >= nextZ) nextZ = d.z + 1;
-        });
-      }
-      // Charger les connexions
-      const connSnap = await window._fbDb.ref('collabSessions/' + boardId + '/connections').get();
-      if (connSnap.exists()) {
-        connSnap.forEach((child) => {
-          const d = child.val();
-          setTimeout(() => createConnection(d.from, d.to), 100);
-        });
-      }
-      // Charger les captions
-      const capSnap = await window._fbDb.ref('collabSessions/' + boardId + '/captions').get();
-      if (capSnap.exists()) {
-        capSnap.forEach((child) => {
-          const d = child.val();
-          const cap = restoreElement({
-            type: 'caption',
-            x: d.x,
-            y: d.y,
-            width: d.width,
-            parentId: d.parentId,
-            text: d.text,
-          });
-          if (cap) cap.dataset.capId = child.key;
-        });
-      }
-
-      setTimeout(() => fitElementsToScreen(), 150);
-      pushHistory();
-
-      // Démarrer la session collab en tant que guest
-      currentBoardId = boardId;
-      await Collab.startSession(boardId, false);
-
-      // Masquer les éléments UI non pertinents pour les guests
-      const shareBtn = document.getElementById('share-btn');
-      if (shareBtn) shareBtn.style.display = 'none';
-      const collabBtn = document.getElementById('collab-btn');
-      if (collabBtn) collabBtn.style.display = 'none';
-
-      setupUIEvents();
-    } catch (e) {
-      console.warn('Collab board load error:', e);
-      errPage('Erreur lors du chargement de la session collaborative.');
-    }
-  }
-
-  // ── JOIN BOARD BY ID (rejoindre via ID depuis l'accueil) ────────────────
-  async function joinBoardById(boardId) {
-    boardId = (boardId || '').trim();
-    if (!boardId) {
-      toast('Veuillez entrer un ID de board');
-      return;
-    }
-
-    // Déjà dans la liste locale ?
-    const existing = boards.find((b) => b.id === boardId);
-    if (existing) {
-      toast('Ce board est déjà dans votre liste');
-      openBoard(boardId);
-      return;
-    }
-
-    if (!window._fbDb) {
-      toast('Firebase non disponible');
-      return;
-    }
-    if (typeof Collab === 'undefined') {
-      toast('Module collab non chargé');
-      return;
-    }
-
-    if (window._fbAuthReady) {
-      await window._fbAuthReady;
-    }
-    try {
-      // Vérifier que la session collab existe et est active
-      const metaSnap = await window._fbDb.ref('collabSessions/' + boardId + '/meta').get();
-      if (!metaSnap.exists() || !metaSnap.val().active) {
-        toast("Cette session collaborative n'est pas active");
-        return;
-      }
-
-      // Récupérer le nom du board
-      const boardSnap = await window._fbDb.ref('boards/' + boardId).get();
-      const boardName = (boardSnap.exists() && boardSnap.val().name) || 'Moodboard';
-
-      // Ajouter à la liste locale avec le flag isCollaborative
-      const cols = Math.max(1, Math.floor((window.innerWidth - 200) / 220));
-      const idx = boards.length;
-      boards.push({
-        id: boardId,
-        name: boardName,
-        created: new Date().toLocaleDateString('fr-FR'),
-        savedAt: Date.now(),
-        thumbnail: '',
-        elements: [],
-        x: 60 + (idx % cols) * 220,
-        y: 80 + Math.floor(idx / cols) * 240,
-        isCollaborative: true,
-      });
-      saveBoards();
-      renderHome(); // ← AJOUTER CETTE LIGNE pour que la carte apparaisse avant navigation
-      toast('Board rejoint ! Ouverture en cours…');
-      openBoard(boardId);
-    } catch (e) {
-      console.error('joinBoardById error:', e);
-      toast('Erreur lors de la connexion au board');
-    }
-  }
-
-  // ── OPEN COLLAB BOARD (depuis l'accueil, auto-reconnexion) ───────────────
-  async function _openCollabBoard(board) {
-    const loaderOverlay = document.getElementById('loader-overlay');
-    const loaderFrame = loaderOverlay.querySelector('.loader-frame');
-    loaderFrame.style.animation = 'none';
-    void loaderFrame.offsetWidth;
-    loaderFrame.style.animation = '';
-    loaderOverlay.classList.remove('hidden');
-
-    if (!window._fbDb || typeof Collab === 'undefined') {
-      toast('Firebase non disponible — copie locale chargée');
-      _openCollabBoardLocal(board);
-      setTimeout(() => loaderOverlay.classList.add('hidden'), 2000);
-      return;
-    }
-
-    if (window._fbAuthReady) {
-      await window._fbAuthReady;
-    }
-    try {
-      const metaSnap = await window._fbDb.ref('collabSessions/' + board.id + '/meta').get();
-      const isActive = metaSnap.exists() && metaSnap.val().active;
-
-      if (isActive) {
-        // Session active : charger depuis Firebase et démarrer collab
-        currentBoardId = board.id;
-        document.getElementById('home-screen').style.display = 'none';
-        document.getElementById('board-screen').style.display = 'flex';
-        document.getElementById('board-title-display').textContent = board.name;
-        if (window._reattachPinch) window._reattachPinch();
-        document.getElementById('canvas').innerHTML = '';
-        zoomLevel = 1;
-        panX = 0;
-        panY = 0;
-        nextZ = 100;
-        history = [];
-        historyIndex = -1;
-        selectedEl = null;
-        multiSelected.clear();
-        applyTransform();
-        updateZoomDisplay();
-
-        // Charger éléments depuis la session collab
-        const elemSnap = await window._fbDb.ref('collabSessions/' + board.id + '/elements').get();
-        if (elemSnap.exists()) {
-          elemSnap.forEach((child) => {
-            const d = child.val();
-            if (d.deleted) return;
-            restoreElement({
-              id: child.key,
-              type: d.type,
-              x: d.x,
-              y: d.y,
-              w: d.w,
-              h: d.h,
-              z: d.z,
-              data: d.data || '',
-            });
-            if (d.z && d.z >= nextZ) nextZ = d.z + 1;
-          });
-        }
-        // Charger connexions
-        const connSnap = await window._fbDb
-          .ref('collabSessions/' + board.id + '/connections')
-          .get();
-        if (connSnap.exists()) {
-          connSnap.forEach((child) => {
-            const d = child.val();
-            setTimeout(() => createConnection(d.from, d.to), 100);
-          });
-        }
-        // Charger captions
-        const capSnap = await window._fbDb.ref('collabSessions/' + board.id + '/captions').get();
-        if (capSnap.exists()) {
-          capSnap.forEach((child) => {
-            const d = child.val();
-            const cap = restoreElement({
-              type: 'caption',
-              x: d.x,
-              y: d.y,
-              width: d.width,
-              parentId: d.parentId,
-              text: d.text,
-            });
-            if (cap) cap.dataset.capId = child.key;
-          });
-        }
-
-        setTimeout(() => fitElementsToScreen(), 150);
-        pushHistory();
-        renderPanelLib();
-
-        await Collab.startSession(board.id, false);
-
-        // Masquer boutons owner-only pour les guests
-        const shareBtn = document.getElementById('share-btn');
-        if (shareBtn) shareBtn.style.display = 'none';
-        const collabBtn = document.getElementById('collab-btn');
-        if (collabBtn) collabBtn.style.display = 'none';
-      } else {
-        // Session inactive : charger la copie locale
-        toast('Session inactive — copie locale en lecture seule');
-        _openCollabBoardLocal(board);
-      }
-    } catch (e) {
-      console.warn('_openCollabBoard error:', e);
-      toast('Erreur de connexion — copie locale chargée');
-      _openCollabBoardLocal(board);
-    }
-
-    setTimeout(() => loaderOverlay.classList.add('hidden'), 2000);
-  }
-
-  function _openCollabBoardLocal(board) {
-    currentBoardId = board.id;
-    document.body.classList.add('readonly-mode');
-    document.getElementById('home-screen').style.display = 'none';
-    document.getElementById('board-screen').style.display = 'flex';
-    document.getElementById('board-title-display').textContent = board.name;
-    if (window._reattachPinch) window._reattachPinch();
-    document.getElementById('canvas').innerHTML = '';
-    zoomLevel = 1;
-    panX = 0;
-    panY = 0;
-    nextZ = 100;
-    history = [];
-    historyIndex = -1;
-    selectedEl = null;
-    multiSelected.clear();
-    applyTransform();
-    updateZoomDisplay();
-    if (board.elements && board.elements.length) {
-      board.elements.forEach((e) => restoreElement(e));
-      setTimeout(() => fitElementsToScreen(), 120);
-    }
-    pushHistory();
-    renderPanelLib();
-    const shareBtn = document.getElementById('share-btn');
-    if (shareBtn) shareBtn.style.display = 'none';
-    const collabBtn = document.getElementById('collab-btn');
-    if (collabBtn) collabBtn.style.display = 'none';
-  }
-
   // ── SHARED BOARD (lecture seule) ────────────────────────────────────────
   async function _loadSharedBoard(id) {
     const errPage = (msg) => {
@@ -4038,9 +3020,7 @@ const App = (function () {
   // ── NOTE ──────────────────────────────────────────────────────────────────
   function addNote() {
     const c = getCenter();
-    const el = createNoteElement('', c.x - 110, c.y - 75, 290, 75);
-    _collabSyncCreatedEl(el);
-    if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
+    createNoteElement('', c.x - 110, c.y - 75, 290, 75);
     pushHistory();
   }
   function createNoteElement(content, x, y, w, h) {
@@ -4108,9 +3088,7 @@ const App = (function () {
   // ── COULEUR ───────────────────────────────────────────────────────────────
   function addColorDirect() {
     const c = getCenter();
-    const el = createColorElement('#000000', c.x - 65, c.y - 70, 130, 140);
-    _collabSyncCreatedEl(el);
-    if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
+    createColorElement('#000000', c.x - 65, c.y - 70, 130, 140);
     pushHistory();
   }
   function openColorPicker() {
@@ -4133,9 +3111,7 @@ const App = (function () {
     const hex =
       '#' + document.getElementById('hex-input').value.trim().toUpperCase().replace('#', '');
     const c = getCenter();
-    const el = createColorElement(hex, c.x - 65, c.y - 70, 130, 140);
-    _collabSyncCreatedEl(el);
-    if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
+    createColorElement(hex, c.x - 65, c.y - 70, 130, 140);
     pushHistory();
 
     closeColorModal();
@@ -4230,7 +3206,6 @@ const App = (function () {
     // Essayer l'API EyeDropper native (Chrome 95+)
     if (window.EyeDropper) {
       const picker = new window.EyeDropper();
-      const prevColor = colorEl.dataset.savedata || '#000000';
       picker
         .open()
         .then((result) => {
@@ -4238,26 +3213,9 @@ const App = (function () {
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
-          if (hex !== prevColor) {
-            pushAction({
-              type: 'editColor',
-              elId: colorEl.dataset.id,
-              before: { data: prevColor },
-              after: { data: hex },
-            });
-          }
-          if (typeof Collab !== 'undefined' && Collab.isActive()) {
-            Collab.syncElementData(colorEl.dataset.id, hex);
-            Collab.releaseLock(colorEl.dataset.id);
-          }
           pushHistory();
         })
-        .catch(() => {
-          // annulé par l'utilisateur — libérer le lock
-          if (typeof Collab !== 'undefined' && Collab.isActive()) {
-            Collab.releaseLock(colorEl.dataset.id);
-          }
-        });
+        .catch(() => {}); // annulé par l'utilisateur
       return;
     }
     // Fallback : curseur custom sur le canvas-wrapper
@@ -4299,29 +3257,13 @@ const App = (function () {
           const px = ctx.getImageData(1, 1, 1, 1).data;
           const toHex = (v) => v.toString(16).padStart(2, '0').toUpperCase();
           const hex = '#' + toHex(px[0]) + toHex(px[1]) + toHex(px[2]);
-          const prevCol = colorEl.dataset.savedata || '#000000';
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
-          if (hex !== prevCol) {
-            pushAction({
-              type: 'editColor',
-              elId: colorEl.dataset.id,
-              before: { data: prevCol },
-              after: { data: hex },
-            });
-          }
-          if (typeof Collab !== 'undefined' && Collab.isActive()) {
-            Collab.syncElementData(colorEl.dataset.id, hex);
-            Collab.releaseLock(colorEl.dataset.id);
-          }
           pushHistory();
         })
         .catch(() => {
           canvasDiv.style.transform = savedTf;
-          if (typeof Collab !== 'undefined' && Collab.isActive()) {
-            Collab.releaseLock(colorEl.dataset.id);
-          }
           toast('Impossible de lire le pixel');
         });
     };
@@ -4333,10 +3275,6 @@ const App = (function () {
         wrapper.style.cursor = '';
         wrapper.removeEventListener('click', onPick, true);
         document.removeEventListener('keydown', onKey, true);
-        // Collab: libérer le lock à l'annulation
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          Collab.releaseLock(colorEl.dataset.id);
-        }
       }
     };
     document.addEventListener('keydown', onKey, true);
@@ -4368,10 +3306,7 @@ const App = (function () {
       lx = c.x - 140;
       ly = c.y - 90;
     }
-    const linkEl = createLinkElement(url, title, img, lx, ly);
-    _collabSyncCreatedEl(linkEl);
-    if (linkEl)
-      pushAction({ type: 'create', elId: linkEl.dataset.id, after: _captureElState(linkEl) });
+    createLinkElement(url, title, img, lx, ly);
     pushHistory();
 
     closeLinkModal();
@@ -4438,9 +3373,7 @@ const App = (function () {
       isEmbed = true;
     }
     const c = getCenter();
-    const vEl = createVideoElement(embed, isEmbed, c.x - 180, c.y - 101, 360, 202);
-    _collabSyncCreatedEl(vEl);
-    if (vEl) pushAction({ type: 'create', elId: vEl.dataset.id, after: _captureElState(vEl) });
+    createVideoElement(embed, isEmbed, c.x - 180, c.y - 101, 360, 202);
     pushHistory();
 
     closeVideoModal();
@@ -4452,9 +3385,7 @@ const App = (function () {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const c = getCenter();
-      const vEl2 = createVideoElement(ev.target.result, false, c.x - 180, c.y - 101, 360, 202);
-      _collabSyncCreatedEl(vEl2);
-      if (vEl2) pushAction({ type: 'create', elId: vEl2.dataset.id, after: _captureElState(vEl2) });
+      createVideoElement(ev.target.result, false, c.x - 180, c.y - 101, 360, 202);
       pushHistory();
 
       closeVideoModal();
@@ -4656,23 +3587,6 @@ const App = (function () {
     });
   }
 
-  function createFileElement(name, size, icon, x, y) {
-    const el = makeElement('file', x || 100, y || 100, 260, 76);
-    el.dataset.savedata = JSON.stringify({ name, size, icon });
-    const wrap = document.createElement('div');
-    wrap.className = 'el-file';
-    const iconDiv = document.createElement('div');
-    iconDiv.className = 'file-icon';
-    iconDiv.textContent = icon === 'file' ? '📎' : icon;
-    wrap.appendChild(iconDiv);
-    const info = document.createElement('div');
-    info.className = 'file-info';
-    info.innerHTML = `<div class="file-name">${escHtml(name)}</div><div class="file-size">${escHtml(size)}</div>`;
-    wrap.appendChild(info);
-    el.insertBefore(wrap, el.querySelector('.element-toolbar'));
-    return el;
-  }
-
   function createVideoFileElement(name, size, videoSrc, x, y, w, h) {
     const el = makeElement('file', x || 100, y || 100, w || 300, h || 200);
     el.dataset.savedata = JSON.stringify({
@@ -4826,16 +3740,8 @@ const App = (function () {
     if (multiSelected.has(el) && multiSelected.size > 0) {
       const toDelete = [...multiSelected];
       if (selectedEl && !multiSelected.has(selectedEl)) toDelete.push(selectedEl);
-      // Action-based undo for delete (multi)
-      toDelete.forEach((e) => {
-        pushAction({ type: 'delete', elId: e.dataset.id, before: _captureElState(e) });
-      });
       multiSelected.clear();
       selectedEl = null;
-      // Collab: sync suppression
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        toDelete.forEach((e) => Collab.syncElementDelete(e.dataset.id));
-      }
       let done = 0;
       toDelete.forEach((e) => {
         removeConnectionsForEl(e);
@@ -4849,12 +3755,6 @@ const App = (function () {
       });
       toast(toDelete.length + ' éléments supprimés');
     } else {
-      // Action-based undo for delete (single)
-      pushAction({ type: 'delete', elId: el.dataset.id, before: _captureElState(el) });
-      // Collab: sync suppression
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.syncElementDelete(el.dataset.id);
-      }
       removeConnectionsForEl(el);
       removeCaptionsForEl(el);
       selectedEl = null;
@@ -4942,13 +3842,12 @@ const App = (function () {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const src = await compressImage(ev.target.result);
+      reader.onload = (ev) => {
+        const src = ev.target.result;
         const img = replaceTargetEl.querySelector('img');
         if (img) {
           img.src = src;
-          _imgStore.set(replaceTargetEl.dataset.id, src);
-          replaceTargetEl.dataset.savedata = '';
+          replaceTargetEl.dataset.savedata = src;
           // Adapter le conteneur aux dimensions de la nouvelle image
           const tmpImg = new Image();
           tmpImg.onload = () => {
@@ -5366,7 +4265,6 @@ const App = (function () {
       const div = document.createElement('div');
       div.className = 'lib-panel-item';
       div.draggable = true;
-      div.dataset.libId = item.id;
       if (libSelectedIds.has(item.id)) div.classList.add('selected-lib-item');
 
       const indicator = document.createElement('div');
@@ -5390,25 +4288,16 @@ const App = (function () {
         deletePanelLibItem(item.id, item.folder);
       });
 
-      // Sélection SHIFT+clic (range comme Windows Explorer)
+      // Sélection SHIFT+clic
       div.addEventListener('click', (e) => {
-        if (e.shiftKey && _libLastClickedId) {
-          // Sélection range : du dernier cliqué jusqu'à celui-ci
-          const allItems = [...grid.querySelectorAll('.lib-panel-item')];
-          const allIds = allItems.map((d) => d.dataset.libId);
-          const idxA = allIds.indexOf(_libLastClickedId);
-          const idxB = allIds.indexOf(item.id);
-          if (idxA !== -1 && idxB !== -1) {
-            const from = Math.min(idxA, idxB);
-            const to = Math.max(idxA, idxB);
-            libSelectedIds.clear();
-            document
-              .querySelectorAll('.lib-panel-item.selected-lib-item')
-              .forEach((d) => d.classList.remove('selected-lib-item'));
-            for (let i = from; i <= to; i++) {
-              libSelectedIds.add(allIds[i]);
-              allItems[i].classList.add('selected-lib-item');
-            }
+        if (e.shiftKey) {
+          // Basculer la sélection de cet item
+          if (libSelectedIds.has(item.id)) {
+            libSelectedIds.delete(item.id);
+            div.classList.remove('selected-lib-item');
+          } else {
+            libSelectedIds.add(item.id);
+            div.classList.add('selected-lib-item');
           }
         } else {
           // Clic simple : sélectionner uniquement cet item
@@ -5418,7 +4307,6 @@ const App = (function () {
             .forEach((d) => d.classList.remove('selected-lib-item'));
           libSelectedIds.add(item.id);
           div.classList.add('selected-lib-item');
-          _libLastClickedId = item.id;
         }
       });
 
@@ -5577,12 +4465,11 @@ const App = (function () {
 
     files.forEach((file) => {
       const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const compressedSrc = await compressImage(ev.target.result);
+      reader.onload = (ev) => {
         const item = {
           id: 'lib_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
           name: file.name,
-          src: compressedSrc,
+          src: ev.target.result,
         };
         if (!library[targetFolder]) library[targetFolder] = [];
         library[targetFolder].push(item);
@@ -5653,12 +4540,11 @@ const App = (function () {
       let done = 0;
       files.forEach((file) => {
         const reader = new FileReader();
-        reader.onload = async (ev) => {
-          const compressedSrc = await compressImage(ev.target.result);
+        reader.onload = (ev) => {
           const item = {
             id: 'lib_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
             name: file.name,
-            src: compressedSrc,
+            src: ev.target.result,
           };
           const folder = panelFolder === 'all' ? 'image' : panelFolder;
           if (!library[folder]) library[folder] = [];
@@ -5911,7 +4797,6 @@ const App = (function () {
       'rename-modal',
       'export-modal',
       'create-board-modal',
-      'join-board-modal',
     ].forEach(closeModal);
   }
   function openExportModal() {
@@ -5919,243 +4804,6 @@ const App = (function () {
   }
   function closeExportModal() {
     closeModal('export-modal');
-  }
-
-  // ── CUSTOM CURSOR ─────────────────────────────────────────────────────────
-  function _applyCustomCursor() {
-    const size = 20;
-    const c = document.createElement('canvas');
-    c.width = size;
-    c.height = size;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#ff3c00';
-    // Flèche standard : pointe en haut-gauche
-    ctx.beginPath();
-    ctx.moveTo(1, 1);
-    ctx.lineTo(1, 15);
-    ctx.lineTo(5, 11);
-    ctx.lineTo(8, 18);
-    ctx.lineTo(10, 17);
-    ctx.lineTo(7, 10);
-    ctx.lineTo(13, 10);
-    ctx.closePath();
-    ctx.fill();
-    const url = c.toDataURL('image/png');
-    document.body.style.cursor = `url("${url}") 1 1, auto`;
-  }
-
-  // ── HOME CONTEXT MENU ────────────────────────────────────────────────────
-  let _homeCtxBoardId = null;
-
-  function _setupHomeContextMenu() {
-    const menu = document.getElementById('home-ctx-menu');
-    if (!menu || menu._homeCtxReady) return;
-    menu._homeCtxReady = true;
-
-    menu.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-action]');
-      if (!btn || !_homeCtxBoardId) return;
-      const action = btn.dataset.action;
-      const targetId = _homeCtxBoardId; // sauvegarder avant hide (qui null-ify _homeCtxBoardId)
-      _hideHomeCtxMenu();
-      if (action === 'edit') openEditBoardModal(targetId);
-      if (action === 'delete') deleteBoard(targetId);
-    });
-
-    document.addEventListener(
-      'mousedown',
-      (e) => {
-        if (!e.target.closest('#home-ctx-menu')) _hideHomeCtxMenu();
-      },
-      true
-    );
-
-    // Boutons de la modale édition (pas de onclick= dans le HTML → CSP extension)
-    document.getElementById('edit-board-close-btn').addEventListener('click', closeEditBoardModal);
-    document.getElementById('edit-board-save-btn').addEventListener('click', confirmEditBoard);
-  }
-
-  function _showHomeCtxMenu(e, boardId) {
-    _homeCtxBoardId = boardId;
-    const menu = document.getElementById('home-ctx-menu');
-    menu.style.display = 'block';
-    const mw = menu.offsetWidth,
-      mh = menu.offsetHeight;
-    const vw = window.innerWidth,
-      vh = window.innerHeight;
-    menu.style.left = Math.min(e.clientX, vw - mw - 6) + 'px';
-    menu.style.top = Math.min(e.clientY, vh - mh - 6) + 'px';
-  }
-
-  function _hideHomeCtxMenu() {
-    document.getElementById('home-ctx-menu').style.display = 'none';
-    _homeCtxBoardId = null;
-  }
-
-  // ── EDIT BOARD MODAL ──────────────────────────────────────────────────────
-  let _editBoardId = null;
-  let _editImg = { src: null, naturalW: 0, naturalH: 0, scale: 1, offsetX: 0, offsetY: 0 };
-  let _editDrag = null;
-
-  function openEditBoardModal(id) {
-    _editBoardId = id;
-    const b = boards.find((b) => b.id === id);
-    if (!b) return;
-
-    document.getElementById('edit-board-name').value = b.name || '';
-    _editImg = { src: null, naturalW: 0, naturalH: 0, scale: 1, offsetX: 0, offsetY: 0 };
-    document.getElementById('edit-board-editor').style.display = 'none';
-    document.getElementById('edit-board-zoom').value = 1;
-
-    openModal('edit-board-modal');
-    _setupEditBoardImageEditor();
-    _setupEditBoardFileBtn();
-  }
-
-  function closeEditBoardModal() {
-    closeModal('edit-board-modal');
-    _editBoardId = null;
-  }
-
-  function confirmEditBoard() {
-    if (!_editBoardId) return;
-    const b = boards.find((b) => b.id === _editBoardId);
-    if (!b) return;
-
-    const name = document.getElementById('edit-board-name').value.trim();
-    if (name) b.name = name;
-
-    if (_editImg.src) {
-      b.thumbnail = _exportEditBoardCrop();
-    }
-
-    saveBoards();
-    renderHome();
-    closeEditBoardModal();
-  }
-
-  function _setupEditBoardFileBtn() {
-    const btn = document.getElementById('edit-board-file-btn');
-    const input = document.getElementById('edit-board-file-input');
-    if (btn._ebfReady) return;
-    btn._ebfReady = true;
-    btn.addEventListener('click', () => input.click());
-    input.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => _loadEditBoardImage(ev.target.result);
-      reader.readAsDataURL(file);
-      input.value = '';
-    });
-  }
-
-  function _loadEditBoardImage(src) {
-    const img = document.getElementById('edit-board-img');
-    const preview = document.getElementById('edit-board-preview');
-    const editor = document.getElementById('edit-board-editor');
-
-    const tmp = new Image();
-    tmp.onload = () => {
-      _editImg.src = src;
-      _editImg.naturalW = tmp.naturalWidth;
-      _editImg.naturalH = tmp.naturalHeight;
-
-      // Scale initial : couvrir entièrement le cadre 4:3
-      const pw = preview.offsetWidth;
-      const ph = pw * 0.75;
-      const coverScale = Math.max(pw / tmp.naturalWidth, ph / tmp.naturalHeight);
-      _editImg.scale = coverScale;
-      _editImg.offsetX = 0;
-      _editImg.offsetY = 0;
-
-      document.getElementById('edit-board-zoom').min = coverScale;
-      document.getElementById('edit-board-zoom').max = coverScale * 3;
-      document.getElementById('edit-board-zoom').step = coverScale * 0.005;
-      document.getElementById('edit-board-zoom').value = coverScale;
-
-      img.src = src;
-      editor.style.display = 'flex';
-      _applyEditBoardTransform();
-    };
-    tmp.src = src;
-  }
-
-  function _applyEditBoardTransform() {
-    const img = document.getElementById('edit-board-img');
-    const preview = document.getElementById('edit-board-preview');
-    const pw = preview.offsetWidth;
-    const ph = pw * 0.75;
-
-    const iw = _editImg.naturalW * _editImg.scale;
-    const ih = _editImg.naturalH * _editImg.scale;
-
-    // Clamper offsetX/Y pour ne pas laisser de vide dans le cadre
-    const maxOX = (iw - pw) / 2;
-    const maxOY = (ih - ph) / 2;
-    _editImg.offsetX = Math.max(-maxOX, Math.min(maxOX, _editImg.offsetX));
-    _editImg.offsetY = Math.max(-maxOY, Math.min(maxOY, _editImg.offsetY));
-
-    img.style.width = iw + 'px';
-    img.style.height = ih + 'px';
-    img.style.left = pw / 2 - iw / 2 + _editImg.offsetX + 'px';
-    img.style.top = ph / 2 - ih / 2 + _editImg.offsetY + 'px';
-  }
-
-  function _setupEditBoardImageEditor() {
-    const preview = document.getElementById('edit-board-preview');
-    const zoom = document.getElementById('edit-board-zoom');
-    if (preview._ebEditorReady) return;
-    preview._ebEditorReady = true;
-
-    // Drag
-    preview.addEventListener('mousedown', (e) => {
-      if (!_editImg.src) return;
-      e.preventDefault();
-      preview.classList.add('dragging');
-      _editDrag = { startX: e.clientX - _editImg.offsetX, startY: e.clientY - _editImg.offsetY };
-
-      function onMove(ev) {
-        _editImg.offsetX = ev.clientX - _editDrag.startX;
-        _editImg.offsetY = ev.clientY - _editDrag.startY;
-        _applyEditBoardTransform();
-      }
-      function onUp() {
-        preview.classList.remove('dragging');
-        _editDrag = null;
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      }
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    });
-
-    // Zoom slider
-    zoom.addEventListener('input', () => {
-      _editImg.scale = parseFloat(zoom.value);
-      _applyEditBoardTransform();
-    });
-  }
-
-  function _exportEditBoardCrop() {
-    const preview = document.getElementById('edit-board-preview');
-    const pw = preview.offsetWidth;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = 360;
-    canvas.height = 270;
-    const ctx = canvas.getContext('2d');
-
-    const scaleToCanvas = 360 / pw;
-    const iw = _editImg.naturalW * _editImg.scale * scaleToCanvas;
-    const ih = _editImg.naturalH * _editImg.scale * scaleToCanvas;
-    const dx = 360 / 2 - iw / 2 + _editImg.offsetX * scaleToCanvas;
-    const dy = 270 / 2 - ih / 2 + _editImg.offsetY * scaleToCanvas;
-
-    const img = new Image();
-    img.src = _editImg.src;
-    ctx.drawImage(img, dx, dy, iw, ih);
-    return canvas.toDataURL('image/jpeg', 0.82);
   }
 
   // ── TOAST ─────────────────────────────────────────────────────────────────
@@ -6195,110 +4843,6 @@ const App = (function () {
       loadLibraryForBoard(currentBoardId);
       if (libPanelOpen) renderPanelLib();
     }
-  }
-
-  // ── COLLAB HELPERS ─────────────────────────────────────────────────────
-  /** Sync un élément nouvellement créé vers Firebase */
-  function _collabSyncCreatedEl(el) {
-    if (typeof Collab === 'undefined' || !Collab.isActive()) return;
-    if (!el || !el.dataset || !el.dataset.id) return;
-    Collab.syncElementCreate(
-      el.dataset.id,
-      el.dataset.type,
-      parseFloat(el.style.left) || 0,
-      parseFloat(el.style.top) || 0,
-      parseFloat(el.style.width) || null,
-      parseFloat(el.style.height) || null,
-      el.dataset.type === 'image' ? 'pending' : el.dataset.savedata || '',
-      parseInt(el.style.zIndex) || 100
-    );
-  }
-
-  // ── COLLAB BRIDGE ──────────────────────────────────────────────────────
-  // Fonctions internes exposées pour collab.js (préfixées _collab)
-  function _collabGetZoom() {
-    return zoomLevel;
-  }
-  function _collabGetPanX() {
-    return panX;
-  }
-  function _collabGetPanY() {
-    return panY;
-  }
-  function _collabRestoreElement(s) {
-    return restoreElement(s);
-  }
-  function _collabUpdateConnections(el) {
-    updateConnectionsForEl(el);
-  }
-  function _collabRemoveConnectionsForEl(el) {
-    removeConnectionsForEl(el);
-  }
-  function _collabRemoveCaptionsForEl(el) {
-    removeCaptionsForEl(el);
-  }
-  function _collabCreateConnection(from, to) {
-    createConnection(from, to);
-  }
-  function _collabDeleteImgStore(elId) {
-    _imgStore.delete(elId);
-  }
-  function _collabMergeElements(boardId, elements) {
-    const board = boards.find((b) => b.id === boardId);
-    if (board) {
-      board.elements = elements;
-      board.savedAt = Date.now();
-      saveBoards();
-      if (window._fbDb) {
-        const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
-        const payloadSize = new Blob([JSON.stringify(payload)]).size;
-        if (payloadSize > 8 * 1024 * 1024) {
-          toast('Erreur : Le board est trop lourd. Réduisez la taille des images.');
-        } else {
-          window._fbDb
-            .ref('boards/' + boardId)
-            .set(payload)
-            .catch((e) => console.warn('Firebase sync error:', e));
-        }
-      }
-    }
-  }
-  function _collabGetBoardElements() {
-    const elements = [];
-    document.querySelectorAll('#canvas .board-element').forEach((el) => {
-      elements.push({
-        id: el.dataset.id,
-        type: el.dataset.type,
-        x: parseFloat(el.style.left) || 0,
-        y: parseFloat(el.style.top) || 0,
-        w: parseFloat(el.style.width) || null,
-        h: parseFloat(el.style.height) || null,
-        z: parseInt(el.style.zIndex) || 100,
-        data:
-          el.dataset.type === 'image'
-            ? _imgStore.get(el.dataset.id) || el.dataset.savedata || ''
-            : el.dataset.savedata || '',
-      });
-    });
-    document.querySelectorAll('#canvas .el-connection').forEach((svg) => {
-      elements.push({
-        type: 'connection',
-        from: svg.dataset.from,
-        to: svg.dataset.to,
-        connId: svg.dataset.connId,
-      });
-    });
-    document.querySelectorAll('#canvas .el-caption').forEach((cap) => {
-      elements.push({
-        type: 'caption',
-        x: parseFloat(cap.style.left) || 0,
-        y: parseFloat(cap.style.top) || 0,
-        width: cap.style.width,
-        parentId: cap.dataset.parentId || '',
-        text: cap.textContent || '',
-      });
-    });
-    return elements;
   }
 
   // ── API PUBLIQUE ──────────────────────────────────────────────────────────
@@ -6355,9 +4899,6 @@ const App = (function () {
     exportPDF,
     openExportModal,
     closeExportModal,
-    openEditBoardModal,
-    closeEditBoardModal,
-    confirmEditBoard,
     openVideoLightbox,
     closeVideoLightbox,
     fitElementsToScreen,
@@ -6369,22 +4910,9 @@ const App = (function () {
     createBoard,
     closeCreateBoardModal,
     confirmCreateBoard,
-    joinBoardById,
     toolDragStart,
     toast,
     syncLibraryFromStorage,
-    // Collab bridge (utilisé par collab.js)
-    _collabGetZoom,
-    _collabGetPanX,
-    _collabGetPanY,
-    _collabRestoreElement,
-    _collabUpdateConnections,
-    _collabRemoveConnectionsForEl,
-    _collabRemoveCaptionsForEl,
-    _collabCreateConnection,
-    _collabDeleteImgStore,
-    _collabMergeElements,
-    _collabGetBoardElements,
   };
 })();
 

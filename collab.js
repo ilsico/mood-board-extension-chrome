@@ -95,6 +95,9 @@ window.Collab = (function () {
       App.toast('Firebase non disponible');
       return false;
     }
+    if (window._fbAuthReady) {
+      await window._fbAuthReady;
+    }
     if (_active) endSession();
 
     _boardId = boardId;
@@ -103,84 +106,87 @@ window.Collab = (function () {
     _active = true;
     _sessionRef = window._fbDb.ref('collabSessions/' + boardId);
 
-    // Choisir couleur en vérifiant celles déjà prises
-    const presenceSnap = await _sessionRef.child('presence').get();
-    const usedColors = new Set();
-    if (presenceSnap.exists()) {
-      presenceSnap.forEach((child) => {
-        const c = child.val().color;
-        if (c) usedColors.add(c);
-      });
-    }
-    _userColor =
-      COLORS.find((c) => !usedColors.has(c)) || COLORS[_hashStr(_userId) % COLORS.length];
-
-    // Écrire la présence
-    const presenceRef = _sessionRef.child('presence/' + _userId);
-    await presenceRef.set({
-      color: _userColor,
-      cursor: { x: 0, y: 0, visible: false },
-      selection: [],
-      selectionRect: { x: 0, y: 0, w: 0, h: 0, active: false },
-      timestamp: firebase.database.ServerValue.TIMESTAMP,
-    });
-    presenceRef.onDisconnect().remove();
-
-    if (isOwner) {
-      // Écrire les métadonnées de session
-      await _sessionRef.child('meta').set({
-        ownerId: _userId,
-        createdAt: firebase.database.ServerValue.TIMESTAMP,
-        active: true,
-        maxZ: 100,
-      });
-      // Sérialiser les éléments actuels du board dans Firebase
-      if (opts && opts.elements) {
-        const updates = {};
-        opts.elements.forEach((el) => {
-          if (el.type === 'connection') {
-            updates['connections/' + el.connId] = { from: el.from, to: el.to };
-          } else if (el.type === 'caption') {
-            const capId = 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-            updates['captions/' + capId] = {
-              parentId: el.parentId || '',
-              x: el.x,
-              y: el.y,
-              width: el.width || '',
-              text: el.text || '',
-            };
-          } else {
-            updates['elements/' + el.id] = {
-              x: el.x,
-              y: el.y,
-              w: el.w || null,
-              h: el.h || null,
-              z: el.z || 100,
-              type: el.type,
-              data: el.type === 'image' ? 'pending' : el.data || '',
-              version: 0,
-              lastEditBy: _userId,
-              lastEditAt: firebase.database.ServerValue.TIMESTAMP,
-              deleted: false,
-            };
-          }
+    try {
+      // Choisir couleur en vérifiant celles déjà prises
+      const presenceSnap = await _sessionRef.child('presence').get();
+      const usedColors = new Set();
+      if (presenceSnap.exists()) {
+        presenceSnap.forEach((child) => {
+          const c = child.val().color;
+          if (c) usedColors.add(c);
         });
-        if (Object.keys(updates).length) {
-          await _sessionRef.update(updates);
+      }
+      _userColor =
+        COLORS.find((c) => !usedColors.has(c)) || COLORS[_hashStr(_userId) % COLORS.length];
+
+      // Écrire la présence
+      const presenceRef = _sessionRef.child('presence/' + _userId);
+      await presenceRef.set({
+        color: _userColor,
+        cursor: { x: 0, y: 0, visible: false },
+        selection: [],
+        selectionRect: { x: 0, y: 0, w: 0, h: 0, active: false },
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+      });
+      presenceRef.onDisconnect().remove();
+
+      if (isOwner) {
+        await _sessionRef.child('meta').set({
+          ownerId: _userId,
+          createdAt: firebase.database.ServerValue.TIMESTAMP,
+          active: true,
+          maxZ: 100,
+        });
+        if (opts && opts.elements) {
+          const updates = {};
+          opts.elements.forEach((el) => {
+            if (el.type === 'connection') {
+              updates['connections/' + el.connId] = { from: el.from, to: el.to };
+            } else if (el.type === 'caption') {
+              const capId = 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+              updates['captions/' + capId] = {
+                parentId: el.parentId || '',
+                x: el.x,
+                y: el.y,
+                width: el.width || '',
+                text: el.text || '',
+              };
+            } else {
+              updates['elements/' + el.id] = {
+                x: el.x,
+                y: el.y,
+                w: el.w || null,
+                h: el.h || null,
+                z: el.z || 100,
+                type: el.type,
+                data: el.type === 'image' ? 'pending' : el.data || '',
+                version: 0,
+                lastEditBy: _userId,
+                lastEditAt: firebase.database.ServerValue.TIMESTAMP,
+                deleted: false,
+              };
+            }
+          });
+          if (Object.keys(updates).length) {
+            await _sessionRef.update(updates);
+          }
         }
       }
+    } catch (e) {
+      // Nettoyage propre en cas d'échec Firebase
+      _active = false;
+      _isOwner = false;
+      _sessionRef = null;
+      _userId = null;
+      App.toast('Erreur Firebase : ' + (e.code || e.message || 'connexion impossible'));
+      return false;
     }
 
-    // Attacher les listeners Firebase
+    // Attacher les listeners Firebase — seulement si tout a réussi
     _attachListeners();
-
-    // Écouter l'état de connexion
     document.addEventListener('fb-connection', _onConnectionChange);
-
-    // Écouter blur/focus pour le curseur
     window.addEventListener('blur', _onWindowBlur);
     window.addEventListener('focus', _onWindowFocus);
-
     _updateStatusBar();
     return true;
   }

@@ -1,0 +1,46 @@
+Contexte Extension Moodboard
+Quoi : Extension Chrome (Manifest V3) de moodboarding — canvas infini type Figma/Milanote pour organiser images, notes, couleurs, liens, vidéos et fichiers.
+
+Fichiers clés
+app.js (~5700 lignes) — logique principale dans une IIFE const App = (function() { ... })() exposant 60+ méthodes publiques
+index.html — UI unique (tous les écrans + CSS inline) : écran d'accueil (board cards), écran board (canvas + toolbar + panneau bibliothèque)
+collab.js (~1130 lignes) — module window.Collab pour la collaboration temps réel via Firebase (curseurs, locks, sync éléments, présence)
+background.js (~176 lignes) — service worker pour le menu contextuel "Ajouter au Moodboard" (clic droit sur image web)
+manifest.json — permissions : contextMenus, storage, unlimitedStorage, activeTab, tabs, <all_urls>
+Stockage
+IndexedDB (primaire) : DB MoodboardDB, store boards_store, clé mb_boards → Array<Board>
+_imgStore (Map session) : id → base64src — garde les grosses data URLs hors DOM
+Board : { id, name, savedAt, thumbnail, elements: [{id, type, x, y, w, h, z, data}], library: {image:[], couleur:[], ...} }
+Architecture app.js (sections principales)
+State (lignes 1-48) : boards, zoom, pan, selection, multiSelected
+IndexedDB (~50-226) : getDB, saveBoards, loadBoardsFromStorage
+Init (~228-336) : init(), détecte mode share/collab
+UI Events (~339-534) : setupUIEvents(), boutons, modales
+Boards CRUD (~536-1038) : renderHome(), openBoard(), createBoard()
+Canvas Transform (~1040-1215) : zoom/pan, fitElementsToScreen, clampPan (Milanote-like avec 5% marge)
+Canvas Events (~1217-1620) : wheel, touch, drag-drop, selection-rect
+Keyboard (~1658-1781) : Ctrl+Z/Y, Delete, Escape, Space (pan)
+History (~1782-2068) : dual — innerHTML snapshots (solo) + actions structurées (collab)
+Drag RAFs (~2700-3387) : dragRAF (lerp single), groupDragRAF (lerp multi), snap guides
+Éléments (~3576-5200) : createImageElement, createNoteElement, createColorElement, createLinkElement, createVideoElement, createFileElement
+Bibliothèque (~4931-5262) : panneau latéral avec dossiers, recherche, Shift+clic range, drag multi
+Export (~5265-5485) : PNG/PDF via html2canvas + jsPDF avec optimisation taille fichier
+Collab Bridge (~5550-5708) : helpers _collab* pour collab.js
+Patterns importants
+RAF loops avec lerp + auto-stop quand convergence < 0.1px
+Event cleanup : mousemove/mouseup ajoutés au mousedown, retirés dans onUp + cancelAnimationFrame
+Guard listeners : if (el._noteEventsAttached) return pour éviter les doublons
+_imgStore remap : dans restoreElement, remap _imgStore[tempId] → _imgStore[s.id] avant d'écraser dataset.id
+Coordonnées : canvasX = (clientX - rect.left - panX) / zoomLevel
+Taille min resize par type : link 103×73, color 80×80, file 120×50, default 60×40
+Collaboration (Firebase Realtime DB)
+Structure : collabSessions/{boardId}/ → meta, presence, locks, elements, connections, captions
+Curseurs distants : lerp RAF, palette 8 couleurs (première = #ff3c00 orange projet)
+Locks : transaction Firebase avant édition, auto-release onDisconnect
+Sync : position throttle 66ms, texte debounce 300ms, version increment par edit
+Conventions
+Pas de console.log dans app.js
+Pas de boucle while non bornée
+Orange projet : #ff3c00
+Curseur custom SVG orange sur canvas-wrapper et board-element
+CSS tout inline dans index.html, fonts HelveticaRoman/HelveticaBold via @font-face

@@ -11,7 +11,6 @@
     <script src="firebase-database-compat.js"></script>
     <script src="firebase-init.js"></script>
     <script src="app.js"></script>
-    <script src="collab.js"></script>
 
     <style>
       /* ===== FONTS ===== */
@@ -120,7 +119,7 @@
         object-fit: cover;
         display: block;
         flex-shrink: 0;
-        background: #ff3c00;
+        background: #cc3000;
       }
       .board-card .board-info {
         width: 180px;
@@ -191,7 +190,7 @@
       }
       .board-action-btn.delete:hover {
         background: #fee2e2;
-        color: #ff3c00;
+        color: #ef4444;
       }
 
       /* ── Cover placeholder ── */
@@ -251,32 +250,10 @@
         margin: 4px 0;
       }
       .home-ctx-menu .ctx-danger {
-        color: #ff3c00;
+        color: #ef4444;
       }
       .home-ctx-menu .ctx-danger:hover {
         background: #fee2e2;
-      }
-
-      /* ── Edit board modal image editor ── */
-      #edit-board-preview {
-        position: relative;
-        width: 100%;
-        padding-top: 75%; /* 4:3 ratio */
-        background: #111;
-        overflow: hidden;
-        cursor: grab;
-        border-radius: 2px;
-        user-select: none;
-      }
-      #edit-board-preview.dragging {
-        cursor: grabbing;
-      }
-      #edit-board-img {
-        position: absolute;
-        top: 0;
-        left: 0;
-        transform-origin: center center;
-        pointer-events: none;
       }
 
       /* ── Cover editor modal ── */
@@ -356,7 +333,7 @@
       #new-board-btn {
         position: fixed;
         bottom: 36px;
-        left: calc(50% - 36px);
+        left: 50%;
         transform: translateX(-50%);
         width: 56px;
         height: 56px;
@@ -378,46 +355,8 @@
           transform 0.15s;
       }
       #new-board-btn:hover {
-        background: #ff3c00;
+        background: #e03500;
         transform: translateX(-50%) scale(1.08);
-      }
-      #join-board-btn {
-        position: fixed;
-        bottom: 36px;
-        left: calc(50% + 36px);
-        transform: translateX(-50%);
-        width: 56px;
-        height: 56px;
-        background: #1a1a2e;
-        color: #fff;
-        border: none;
-        border-radius: 0;
-        cursor: pointer;
-        z-index: 1010;
-        font-size: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 4px 20px rgba(26, 26, 46, 0.25);
-        transition:
-          background 0.15s,
-          transform 0.15s;
-      }
-      #join-board-btn:hover {
-        background: #2a2a4e;
-        transform: translateX(-50%) scale(1.08);
-      }
-      .collab-badge {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        background: #ff3c00;
-        color: #fff;
-        font-family: 'HelveticaBold', sans-serif;
-        font-size: 9px;
-        padding: 2px 6px;
-        letter-spacing: 0.5px;
-        z-index: 2;
       }
 
       /* ===== INTERFACE BOARD ===== */
@@ -474,7 +413,7 @@
         gap: 6px;
       }
       .share-btn:hover {
-        background: #ff3c00;
+        background: #e03500;
       }
       #board-header .board-title-display {
         font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -518,7 +457,7 @@
       .fit-screen-btn:hover,
       .preview-btn:hover,
       .refresh-save-btn:hover {
-        background: #ff3c00;
+        background: #e03500;
       }
       #autosave-menu {
         position: fixed;
@@ -818,13 +757,18 @@
       #lib-toggle-btn:hover {
         background: #f5f5fb;
       }
-      #lib-toggle-btn img {
+      #lib-toggle-btn svg {
         width: 18px;
         height: 18px;
+        stroke: #888;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
         transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
         flex-shrink: 0;
       }
-      #lib-panel.open #lib-toggle-btn img {
+      #lib-panel.open #lib-toggle-btn svg {
         transform: rotate(180deg);
       }
       #lib-panel-content {
@@ -975,7 +919,7 @@
         display: block;
       }
       .lib-panel-item .lib-item-delete:hover {
-        background: #ff3c00;
+        background: #ef4444;
       }
       .lib-panel-item .lib-item-name {
         position: absolute;
@@ -1294,8 +1238,6 @@
         border: 1px solid #eaeaf0;
         width: 100%;
         height: 100%;
-        min-width: 103px;
-        min-height: 73px;
         cursor: pointer;
         display: flex;
         flex-direction: column;
@@ -1617,7 +1559,7 @@
         transition: background 0.15s;
       }
       .add-color-btn:hover {
-        background: #ff3c00;
+        background: #e03500;
       }
 
       .form-wrap {
@@ -1711,7 +1653,7 @@
         background: #f5f5fb;
       }
       .ctx-item.danger {
-        color: #ff3c00;
+        color: #ef4444;
       }
       .ctx-item.danger:hover {
         background: #fee2e2;
@@ -1764,15 +1706,9 @@
 
       /* ===== ANIMATIONS ÉLÉMENTS ===== */
       @keyframes dropSnap {
-        0% {
-          transform: translateZ(0) scale(0.95);
-        }
-        50% {
-          transform: translateZ(0) scale(1.05);
-        }
-        100% {
-          transform: translateZ(0) scale(1);
-        }
+        0%   { transform: translateZ(0) scale(0.95); }
+        50%  { transform: translateZ(0) scale(1.05); }
+        100% { transform: translateZ(0) scale(1); }
       }
       .element-drop-snap {
         transform-origin: center center;
@@ -1786,20 +1722,12 @@
         transform: translate(-50%, -50%);
         object-fit: cover;
         opacity: 1;
-        transition:
-          width 0.2s ease-out,
-          height 0.2s ease-out;
+        transition: width 0.2s ease-out, height 0.2s ease-out;
       }
       @keyframes previewSnap {
-        0% {
-          transform: translate(-50%, -50%) scale(0.9);
-        }
-        50% {
-          transform: translate(-50%, -50%) scale(1.05);
-        }
-        100% {
-          transform: translate(-50%, -50%) scale(1);
-        }
+        0%   { transform: translate(-50%, -50%) scale(0.9); }
+        50%  { transform: translate(-50%, -50%) scale(1.05); }
+        100% { transform: translate(-50%, -50%) scale(1); }
       }
       .preview-active-snap {
         animation: previewSnap 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
@@ -1807,33 +1735,15 @@
 
       /* ===== LOADER OVERLAY ===== */
       @keyframes playFrames {
-        0% {
-          background-image: url('loading/frame1.png');
-        }
-        10% {
-          background-image: url('loading/frame2.png');
-        }
-        20% {
-          background-image: url('loading/frame3.png');
-        }
-        30% {
-          background-image: url('loading/frame4.png');
-        }
-        40% {
-          background-image: url('loading/frame5.png');
-        }
-        50% {
-          background-image: url('loading/frame6.png');
-        }
-        60% {
-          background-image: url('loading/frame7.png');
-        }
-        77% {
-          background-image: url('loading/frame8.png');
-        }
-        100% {
-          background-image: url('loading/frame9.png');
-        }
+        0%   { background-image: url('loading/frame1.png'); }
+        10%  { background-image: url('loading/frame2.png'); }
+        20%  { background-image: url('loading/frame3.png'); }
+        30%  { background-image: url('loading/frame4.png'); }
+        40%  { background-image: url('loading/frame5.png'); }
+        50%  { background-image: url('loading/frame6.png'); }
+        60%  { background-image: url('loading/frame7.png'); }
+        77%  { background-image: url('loading/frame8.png'); }
+        100% { background-image: url('loading/frame9.png'); }
       }
       #loader-overlay {
         position: fixed;
@@ -1851,9 +1761,7 @@
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
-        transition:
-          opacity 0.3s ease-out,
-          visibility 0.3s; /* uniquement à la fermeture */
+        transition: opacity 0.3s ease-out, visibility 0.3s; /* uniquement à la fermeture */
       }
       .loader-frame {
         width: 100%;
@@ -1973,95 +1881,10 @@
         font-weight: 400;
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
       }
-
-      /* ===== COLLABORATION ===== */
-      .collab-btn {
-        background: #ff3c00;
-        color: #fff;
-        border: none;
-        padding: 5.75px 14px;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 700;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        transition: background 0.15s;
-        white-space: nowrap;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .collab-btn:hover {
-        background: #e03500;
-      }
-      .collab-btn.active {
-        background: #e94f37;
-      }
-      .collab-btn.active:hover {
-        background: #d13e28;
-      }
-
-      #collab-cursors,
-      #collab-sel-rects {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-        z-index: 99998;
-        overflow: visible;
-      }
-      .collab-cursor {
-        position: absolute;
-        top: 0;
-        left: 0;
-        pointer-events: none;
-        z-index: 99999;
-        transition: opacity 0.3s;
-        will-change: transform;
-      }
-      .collab-sel-rect {
-        position: absolute;
-        border: 1.5px dashed;
-        pointer-events: none;
-        z-index: 9998;
-        opacity: 0.5;
-      }
-
-      .board-element.collab-selected-by-other {
-        outline: 2px solid var(--collab-color, #888);
-        outline-offset: 3px;
-      }
-      .board-element.collab-locked {
-        outline: 2px dashed var(--lock-color, #888);
-        outline-offset: 2px;
-      }
-      .board-element.collab-locked .resize-handle,
-      .board-element.collab-locked .element-toolbar {
-        display: none !important;
-      }
-
-      #collab-status-bar {
-        position: fixed;
-        bottom: 12px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.75);
-        color: #fff;
-        padding: 6px 16px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        z-index: 100000;
-        pointer-events: none;
-      }
-      #collab-status-bar.hidden {
-        display: none;
-      }
     </style>
   </head>
   <body>
-    <img id="drag-custom-preview" src="" alt="" />
+    <img id="drag-custom-preview" src="" alt="">
     <div id="loader-overlay" class="hidden">
       <div class="loader-frame"></div>
     </div>
@@ -2071,44 +1894,20 @@
         <div class="boards-canvas" id="boards-canvas"></div>
       </div>
       <button id="new-board-btn" title="Nouveau Moodboard">+</button>
-      <button id="join-board-btn" title="Rejoindre un board collaboratif">
-        <img
-          src="PNG/collaborer.png"
-          alt=""
-          style="width: 20px; height: 20px; pointer-events: none"
-        />
-      </button>
     </div>
 
     <div id="board-screen">
       <header id="board-header">
-        <button class="back-btn" id="back-btn" title="Retour à l'accueil">
-          <img src="PNG/retour.png" alt="" style="width: 16px; height: 16px" />
-        </button>
+        <button class="back-btn" id="back-btn" title="Retour à l'accueil">&#8592;</button>
         <div class="board-title-display" id="board-title-display">Moodboard</div>
-        <div style="display: flex; align-items: center; gap: 6px">
-          <button id="share-btn" class="share-btn" title="Partager ce board" style="display: none">
-            <img src="PNG/partager.png" alt="" style="width: 14px; height: 14px; flex-shrink: 0" />
-            Partager
-          </button>
-          <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
-            <img
-              src="PNG/collaborer.png"
-              alt=""
-              style="width: 18px; height: 18px; flex-shrink: 0"
-            />
-            Collaborer
-          </button>
-        </div>
+        <button id="share-btn" class="share-btn" title="Partager ce board" style="display: none">
+          ⬆ Partager
+        </button>
       </header>
 
       <div class="fit-btn-group">
         <button id="refresh-save-btn" class="refresh-save-btn" title="Synchroniser (Ctrl+S)">
-          <img
-            src="PNG/sauvegarder.png"
-            alt="Sync"
-            style="width: 20px; height: 20px; object-fit: contain"
-          />
+          <img src="PNG/sauvegarder.png" alt="Sync" style="width:20px;height:20px;object-fit:contain;">
         </button>
         <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">⊡</button>
         <button
@@ -2200,8 +1999,6 @@
 
         <div class="canvas-wrapper" id="canvas-wrapper">
           <div id="canvas"></div>
-          <div id="collab-cursors"></div>
-          <div id="collab-sel-rects"></div>
           <div id="selection-rect"></div>
           <div id="multi-resize-handle"></div>
           <div id="group-bounding-box"></div>
@@ -2210,15 +2007,7 @@
 
         <div id="lib-panel">
           <button id="lib-toggle-btn" title="Bibliothèque d'images">
-            <img
-              src="PNG/retour.png"
-              alt=""
-              style="
-                width: 18px;
-                height: 18px;
-                transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
-              "
-            />
+            <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
 
           <div id="lib-panel-inner">
@@ -2408,7 +2197,7 @@
           <button id="close-export-modal" class="modal-close">&#x2715;</button>
         </div>
         <div style="padding: 24px 26px; display: flex; flex-direction: column; gap: 10px">
-          <button id="export-png-btn" class="form-submit">PNG — Haute résolution</button>
+          <button id="export-png-btn" class="form-submit">Exporter en PNG</button>
           <div style="border-top: 1px solid #eaeaf0; margin: 2px 0"></div>
           <button id="export-pdf-hr-btn" class="form-submit" style="background: #1a1a2e">
             PDF — Haute résolution
@@ -2478,12 +2267,7 @@
             <button id="cover-file-btn" class="form-submit" style="width: 100%">
               📁 Depuis votre appareil (JPEG, PNG, SVG)
             </button>
-            <input
-              id="cover-file-input"
-              type="file"
-              accept=".jpg,.jpeg,.png,.svg,image/svg+xml"
-              hidden
-            />
+            <input id="cover-file-input" type="file" accept=".jpg,.jpeg,.png,.svg,image/svg+xml" hidden />
           </div>
           <div id="cover-workspace">
             <img id="cover-img-dim" draggable="false" />
@@ -2496,7 +2280,7 @@
           <div class="cover-zoom-row" id="cover-zoom-row" style="display: none">
             <span>🔍</span>
             <input type="range" id="cover-zoom-slider" min="0" max="1" step="0.001" value="0" />
-            <span style="font-size: 18px; line-height: 1">+</span>
+            <span style="font-size:18px; line-height:1">+</span>
           </div>
           <div id="cover-gallery-wrap" style="display: none">
             <div style="font-size: 11px; color: #888; margin-bottom: 6px">Depuis ce moodboard</div>
@@ -2509,157 +2293,10 @@
 
     <!-- Home right-click context menu -->
     <div id="home-ctx-menu" class="home-ctx-menu">
-      <button data-action="edit">Modifier</button>
+      <button data-action="edit-cover">Modifier la couverture</button>
+      <button data-action="rename">Renommer</button>
       <div class="ctx-sep"></div>
       <button data-action="delete" class="ctx-danger">Supprimer</button>
-    </div>
-
-    <!-- Edit board modal -->
-    <div class="modal-overlay hidden" id="edit-board-modal">
-      <div class="modal" style="width: 460px">
-        <div class="modal-header">
-          <h2>Modifier le moodboard</h2>
-          <button class="modal-close" id="edit-board-close-btn">&#x2715;</button>
-        </div>
-        <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 16px">
-          <div>
-            <label
-              style="
-                font-size: 12px;
-                font-weight: 600;
-                color: #888;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                display: block;
-                margin-bottom: 6px;
-              "
-              >Nom</label
-            >
-            <input
-              id="edit-board-name"
-              type="text"
-              maxlength="45"
-              class="form-input"
-              style="width: 100%; box-sizing: border-box"
-            />
-          </div>
-          <div>
-            <label
-              style="
-                font-size: 12px;
-                font-weight: 600;
-                color: #888;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                display: block;
-                margin-bottom: 6px;
-              "
-              >Couverture</label
-            >
-            <button
-              id="edit-board-file-btn"
-              class="form-submit"
-              style="width: 100%; margin-bottom: 10px"
-            >
-              📁 Choisir une image
-            </button>
-            <input id="edit-board-file-input" type="file" accept=".jpg,.jpeg,.png,.webp" hidden />
-          </div>
-          <div id="edit-board-editor" style="display: none; flex-direction: column; gap: 10px">
-            <div id="edit-board-preview">
-              <img id="edit-board-img" draggable="false" />
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px">
-              <span style="font-size: 13px">🔍</span>
-              <input
-                type="range"
-                id="edit-board-zoom"
-                min="1"
-                max="3"
-                step="0.01"
-                value="1"
-                style="flex: 1"
-              />
-              <span style="font-size: 18px; line-height: 1">+</span>
-            </div>
-          </div>
-          <button class="form-submit" id="edit-board-save-btn">Enregistrer</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Join Board Modal -->
-    <div class="modal-overlay hidden" id="join-board-modal">
-      <div class="modal" style="width: 380px">
-        <div class="modal-header">
-          <h2>Rejoindre un board</h2>
-          <button id="close-join-board-modal" class="modal-close">&#x2715;</button>
-        </div>
-        <div class="form-wrap">
-          <div class="form-group">
-            <label for="join-board-input">ID du Board</label>
-            <input
-              class="form-input"
-              type="text"
-              id="join-board-input"
-              placeholder="Collez l'ID du board ici"
-              maxlength="80"
-            />
-          </div>
-          <button id="submit-join-board" class="form-submit">Rejoindre</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Collab Share Modal -->
-    <div class="modal-overlay hidden" id="collab-share-modal">
-      <div class="modal" style="width: 420px">
-        <div class="modal-header">
-          <h2>Collaboration</h2>
-          <button id="close-collab-share-modal" class="modal-close">&#x2715;</button>
-        </div>
-        <div class="form-wrap">
-          <div class="form-group">
-            <label>ID du Board</label>
-            <div style="display: flex; gap: 8px">
-              <input
-                class="form-input"
-                type="text"
-                id="collab-board-id-input"
-                readonly
-                style="flex: 1; user-select: all; cursor: text"
-              />
-              <button
-                id="copy-id-btn"
-                class="form-submit"
-                style="white-space: nowrap; flex-shrink: 0"
-              >
-                Copier l'ID
-              </button>
-            </div>
-          </div>
-          <p style="font-size: 12px; color: #888; margin: 8px 0 16px; line-height: 1.5">
-            Partagez cet ID pour qu'un ami puisse rejoindre ce board via le bouton
-            <strong>Rejoindre</strong> sur son accueil.
-          </p>
-          <div class="form-group">
-            <label>Lien lecture seule</label>
-            <button
-              id="copy-share-link-btn"
-              class="form-submit"
-              style="width: 100%; background: #1a1a2e"
-            >
-              Copier le lien de partage
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Collab status bar -->
-    <div id="collab-status-bar" class="hidden">
-      <span id="collab-user-count">0 utilisateurs</span>
-      <span id="collab-connection-status"></span>
     </div>
   </body>
 </html>

@@ -26,12 +26,13 @@ window.Collab = (function () {
   let _remoteLerpRAFRunning = false;
   let _pendingLocks = {}; // elId -> Promise resolve
   let _userCount = 0;
+  let _recentDataEdits = {}; // elId -> timestamp du dernier syncElementData local
 
-  // Palette de couleurs Figma-like (8 couleurs distinctes)
-  const COLORS = ['#ff3c00'];
+  
+  const COLORS = ['#0b36ed'];
 
-  const CURSOR_SEND_INTERVAL = 66; // ~15 Hz
-  const DRAG_SYNC_INTERVAL = 66; // ~15 Hz
+  const CURSOR_SEND_INTERVAL = 33; // ~30 Hz
+  const DRAG_SYNC_INTERVAL = 33; // ~30 Hz
   const TEXT_SYNC_DEBOUNCE = 300; // ms
 
   // ── UTILITAIRES ─────────────────────────────────────────────────────────
@@ -102,7 +103,8 @@ window.Collab = (function () {
 
     _boardId = boardId;
     _isOwner = isOwner;
-    _userId = _genUUID();
+    _userId = window._fbUid ? 'u_' + window._fbUid : _genUUID();
+    _userId = window._fbUid ? 'u_' + window._fbUid : _genUUID();
     _active = true;
     _sessionRef = window._fbDb.ref('collabSessions/' + boardId);
 
@@ -118,6 +120,17 @@ window.Collab = (function () {
       }
       _userColor =
         COLORS.find((c) => !usedColors.has(c)) || COLORS[_hashStr(_userId) % COLORS.length];
+
+      // Nettoyer les présences périmées (> 5 min)
+      if (presenceSnap.exists()) {
+        var now = Date.now();
+        presenceSnap.forEach(function (child) {
+          var pData = child.val();
+          if (pData.timestamp && now - pData.timestamp > 300000) {
+            _sessionRef.child('presence/' + child.key).remove();
+          }
+        });
+      }
 
       // Écrire la présence
       const presenceRef = _sessionRef.child('presence/' + _userId);
@@ -202,9 +215,8 @@ window.Collab = (function () {
       _sessionRef.child('presence/' + _userId).remove();
     }
 
-    // Si owner: merger les données dans le board local et désactiver la session
-    if (_isOwner && _sessionRef) {
-      _sessionRef.child('meta/active').set(false);
+    // Sauvegarder les données en local avant de quitter
+    if (_sessionRef) {
       _mergeSessionToLocal();
     }
 
@@ -253,6 +265,7 @@ window.Collab = (function () {
     _remoteSelRects = {};
     _remoteLerpTargets = {};
     _pendingLocks = {};
+    _recentDataEdits = {};
     _userCount = 0;
 
     _hideStatusBar();
@@ -386,16 +399,11 @@ window.Collab = (function () {
   function syncElementPosition(elId, x, y, isFinal) {
     if (!_active || !_sessionRef) return;
     if (isFinal) {
-      // Écriture finale avec incrémentation de version
-      const ref = _sessionRef.child('elements/' + elId);
-      ref.transaction((current) => {
-        if (!current || current.deleted) return current;
-        current.x = x;
-        current.y = y;
-        current.version = (current.version || 0) + 1;
-        current.lastEditBy = _userId;
-        current.lastEditAt = Date.now();
-        return current;
+      _sessionRef.child('elements/' + elId).update({
+        x: x,
+        y: y,
+        lastEditBy: _userId,
+        lastEditAt: firebase.database.ServerValue.TIMESTAMP,
       });
       delete _throttledPositionSync[elId];
     } else {
@@ -416,15 +424,11 @@ window.Collab = (function () {
   function syncElementSize(elId, w, h, isFinal) {
     if (!_active || !_sessionRef) return;
     if (isFinal) {
-      const ref = _sessionRef.child('elements/' + elId);
-      ref.transaction((current) => {
-        if (!current || current.deleted) return current;
-        current.w = w;
-        current.h = h;
-        current.version = (current.version || 0) + 1;
-        current.lastEditBy = _userId;
-        current.lastEditAt = Date.now();
-        return current;
+      _sessionRef.child('elements/' + elId).update({
+        w: w,
+        h: h,
+        lastEditBy: _userId,
+        lastEditAt: firebase.database.ServerValue.TIMESTAMP,
       });
     } else {
       _sessionRef.child('elements/' + elId).update({
@@ -437,22 +441,29 @@ window.Collab = (function () {
 
   const _debouncedDataSync = {};
 
-  function syncElementData(elId, data) {
+  function syncElementData(elId, data, immediate) {
     if (!_active || !_sessionRef) return;
+    _recentDataEdits[elId] = Date.now();
+    var _doSync = function (id, d) {
+      _sessionRef.child('elements/' + id).update({
+        data: d,
+        lastEditBy: _userId,
+        lastEditAt: firebase.database.ServerValue.TIMESTAMP,
+      });
+    };
+    if (immediate) {
+      _doSync(elId, data);
+      return;
+    }
     if (!_debouncedDataSync[elId]) {
-      _debouncedDataSync[elId] = _makeDebounce((id, d) => {
-        const ref = _sessionRef.child('elements/' + id);
-        ref.transaction((current) => {
-          if (!current || current.deleted) return current;
-          current.data = d;
-          current.version = (current.version || 0) + 1;
-          current.lastEditBy = _userId;
-          current.lastEditAt = Date.now();
-          return current;
-        });
-      }, TEXT_SYNC_DEBOUNCE);
+      _debouncedDataSync[elId] = _makeDebounce(_doSync, TEXT_SYNC_DEBOUNCE);
     }
     _debouncedDataSync[elId](elId, data);
+  }
+
+  function syncElementStyle(elId, styleObj) {
+    if (!_active || !_sessionRef) return;
+    _sessionRef.child('elements/' + elId + '/style').set(styleObj);
   }
 
   function syncElementCreate(elId, type, x, y, w, h, data, z) {
@@ -464,7 +475,7 @@ window.Collab = (function () {
       h: h || null,
       z: z || 100,
       type: type,
-      data: type === 'image' ? 'pending' : data || '',
+      data: data || '',
       version: 0,
       lastEditBy: _userId,
       lastEditAt: firebase.database.ServerValue.TIMESTAMP,
@@ -512,6 +523,11 @@ window.Collab = (function () {
   function syncCaptionDelete(captionId) {
     if (!_active || !_sessionRef) return;
     _sessionRef.child('captions/' + captionId).remove();
+  }
+
+  function syncCaptionStyle(capId, styleObj) {
+    if (!_active || !_sessionRef) return;
+    _sessionRef.child('captions/' + capId + '/style').set(styleObj);
   }
 
   // ── UNDO SUPPORT ───────────────────────────────────────────────────────
@@ -578,9 +594,7 @@ window.Collab = (function () {
     }
 
     // Selection update
-    if (data.selection !== undefined) {
-      _updateRemoteSelection(uid, data.selection || [], data.color);
-    }
+    _updateRemoteSelection(uid, Array.isArray(data.selection) ? data.selection : [], data.color);
 
     // Selection rectangle
     if (data.selectionRect) {
@@ -687,7 +701,26 @@ window.Collab = (function () {
     }
 
     const el = document.querySelector('[data-id="' + elId + '"]');
-    if (!el) return;
+    if (!el) {
+      // L'élément n'existe pas dans le DOM — le créer (fallback)
+      if (
+        data.type &&
+        typeof App !== 'undefined' &&
+        typeof App._collabRestoreElement === 'function'
+      ) {
+        App._collabRestoreElement({
+          id: elId,
+          type: data.type,
+          x: data.x,
+          y: data.y,
+          w: data.w,
+          h: data.h,
+          z: data.z,
+          data: data.data || '',
+        });
+      }
+      return;
+    }
 
     // Position → lerp
     const curX = parseFloat(el.style.left) || 0;
@@ -713,9 +746,39 @@ window.Collab = (function () {
       el.style.zIndex = data.z;
     }
 
-    // Data (texte, couleur, etc.) — seulement pour les types non-image
-    if (data.data !== undefined && data.type !== 'image') {
-      _applyRemoteData(el, data.type, data.data);
+    // Data — protéger contre l'écrasement
+    if (data.data !== undefined) {
+      // Skip si on a nous-même édité les données de cet élément récemment (< 3 secondes)
+      // Cela évite qu'un child_changed déclenché par un move distant
+      // ne réécrive nos données locales pas encore confirmées par Firebase
+      var recentLocalEdit = _recentDataEdits[elId] && Date.now() - _recentDataEdits[elId] < 3000;
+      if (recentLocalEdit) {
+        // On a récemment édité cet élément, ignorer les données distantes
+      } else {
+        var isBeingEditedLocally = false;
+        if (el.dataset.editing) {
+          isBeingEditedLocally = true;
+        }
+        var ta = el.querySelector('textarea');
+        if (ta && document.activeElement === ta) {
+          isBeingEditedLocally = true;
+        }
+        var hexInput = el.querySelector('.color-hex-input');
+        if (hexInput && document.activeElement === hexInput) {
+          isBeingEditedLocally = true;
+        }
+        if (!isBeingEditedLocally) {
+          _applyRemoteData(el, data.type, data.data);
+        }
+      }
+    }
+    // Style (police, taille, alignement)
+    if (data.style) {
+      var target = el.querySelector('textarea') || el;
+      if (data.style.fontSize) target.style.fontSize = data.style.fontSize;
+      if (data.style.fontFamily) target.style.fontFamily = data.style.fontFamily;
+      if (data.style.fontWeight) target.style.fontWeight = data.style.fontWeight;
+      if (data.style.textAlign) target.style.textAlign = data.style.textAlign;
     }
   }
 
@@ -763,6 +826,13 @@ window.Collab = (function () {
       if (hexInput && document.activeElement !== hexInput) {
         hexInput.value = data.replace('#', '');
       }
+    } else if (type === 'image') {
+      if (data && data !== 'pending') {
+        var img = el.querySelector('img');
+        if (img) {
+          img.src = data;
+        }
+      }
     } else {
       el.dataset.savedata = data;
     }
@@ -778,7 +848,7 @@ window.Collab = (function () {
     if (document.querySelector('[data-conn-id="' + connId + '"]')) return;
     // Créer via App
     if (typeof App !== 'undefined' && typeof App._collabCreateConnection === 'function') {
-      setTimeout(() => App._collabCreateConnection(data.from, data.to), 100);
+      setTimeout(() => App._collabCreateConnection(data.from, data.to, connId), 100);
     }
   }
 
@@ -819,6 +889,13 @@ window.Collab = (function () {
       cap.style.left = data.x + 'px';
       cap.style.top = data.y + 'px';
       if (data.width) cap.style.width = data.width;
+      // Style
+      if (data.style) {
+        if (data.style.fontSize) cap.style.fontSize = data.style.fontSize;
+        if (data.style.fontFamily) cap.style.fontFamily = data.style.fontFamily;
+        if (data.style.fontWeight) cap.style.fontWeight = data.style.fontWeight;
+        if (data.style.textAlign) cap.style.textAlign = data.style.textAlign;
+      }
     }
   }
 
@@ -830,13 +907,8 @@ window.Collab = (function () {
 
   // ── META HANDLER ──────────────────────────────────────────────────────
 
-  function _onMetaActiveChanged(snap) {
-    const isSessionActive = snap.val();
-    if (isSessionActive === false && !_isOwner && _active) {
-      App.toast('Le propriétaire a fermé la session collaborative');
-      // Passer en lecture seule
-      document.body.classList.add('readonly-mode');
-    }
+  function _onMetaActiveChanged() {
+    // La session est toujours active — ne rien faire
   }
 
   // ── CURSEURS DISTANTS (DOM + RAF) ─────────────────────────────────────
@@ -903,8 +975,8 @@ window.Collab = (function () {
       const screenTargetX = c.targetX * zoomLevel + panX;
       const screenTargetY = c.targetY * zoomLevel + panY;
 
-      c.curX = _lerp(c.curX, screenTargetX, 0.15);
-      c.curY = _lerp(c.curY, screenTargetY, 0.15);
+      c.curX = _lerp(c.curX, screenTargetX, 0.35);
+      c.curY = _lerp(c.curY, screenTargetY, 0.35);
 
       if (Math.abs(c.curX - screenTargetX) > 0.5 || Math.abs(c.curY - screenTargetY) > 0.5) {
         anyActive = true;
@@ -1013,8 +1085,8 @@ window.Collab = (function () {
       const target = _remoteLerpTargets[elId];
       const curX = parseFloat(el.style.left) || 0;
       const curY = parseFloat(el.style.top) || 0;
-      const newX = _lerp(curX, target.x, 0.2);
-      const newY = _lerp(curY, target.y, 0.2);
+      const newX = _lerp(curX, target.x, 0.35);
+      const newY = _lerp(curY, target.y, 0.35);
 
       if (Math.abs(newX - target.x) < 0.5 && Math.abs(newY - target.y) < 0.5) {
         el.style.left = target.x + 'px';
@@ -1161,6 +1233,7 @@ window.Collab = (function () {
     syncElementPosition: syncElementPosition,
     syncElementSize: syncElementSize,
     syncElementData: syncElementData,
+    syncElementStyle: syncElementStyle,
     syncElementCreate: syncElementCreate,
     syncElementDelete: syncElementDelete,
     syncElementZ: syncElementZ,
@@ -1168,6 +1241,7 @@ window.Collab = (function () {
     syncConnectionDelete: syncConnectionDelete,
     syncCaption: syncCaption,
     syncCaptionDelete: syncCaptionDelete,
+    syncCaptionStyle: syncCaptionStyle,
 
     // Undo support
     getElementVersion: getElementVersion,

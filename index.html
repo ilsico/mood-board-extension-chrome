@@ -8,6 +8,7 @@
     <script src="jspdf.umd.min.js"></script>
     <!-- Firebase compat v9 (local, compatible IIFE) -->
     <script src="firebase-app-compat.js"></script>
+    <script src="firebase-auth-compat.js"></script>
     <script src="firebase-database-compat.js"></script>
     <script src="firebase-init.js"></script>
     <script src="app.js"></script>
@@ -97,7 +98,6 @@
         animation: zoomIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
       }
       .board-card {
-        background: #ff3c00;
         color: #fff;
         width: 180px;
         border: none;
@@ -120,7 +120,6 @@
         object-fit: cover;
         display: block;
         flex-shrink: 0;
-        background: #ff3c00;
       }
       .board-card .board-info {
         width: 180px;
@@ -132,6 +131,7 @@
         display: flex;
         flex-direction: column;
         justify-content: flex-start;
+        background: #ff3c00;
       }
       .board-card .board-name {
         font-size: 12px;
@@ -1075,12 +1075,12 @@
           default;
       }
       .board-element.selected {
-        outline: 2.5px solid black;
-        outline-offset: 0px;
+        outline: 2px solid black;
+        outline-offset: 3px;
         z-index: 1000 !important;
       }
       .board-element.multi-selected {
-        outline: 2.5px solid black;
+        outline: 1px solid black;
         outline-offset: 0px;
       }
 
@@ -1978,13 +1978,16 @@
       .collab-btn {
         background: #ff3c00;
         color: #fff;
-        border: none;
-        padding: 5.75px 14px;
+        border: 2px solid transparent;
+        padding: 3.75px 14px;
         cursor: pointer;
         font-size: 13px;
         font-weight: 700;
         font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        transition: background 0.15s;
+        transition:
+          background 0.15s,
+          border-color 0.15s,
+          color 0.15s;
         white-space: nowrap;
         display: flex;
         align-items: center;
@@ -1993,11 +1996,10 @@
       .collab-btn:hover {
         background: #e03500;
       }
-      .collab-btn.active {
-        background: #e94f37;
-      }
-      .collab-btn.active:hover {
-        background: #d13e28;
+      #collab-btn.collab-active {
+        background-color: #ffffff !important;
+        color: #ff3c00 !important;
+        border: 2px solid #ff3c00 !important;
       }
 
       #collab-cursors,
@@ -2438,6 +2440,8 @@
       <div class="ctx-item" id="ctx-img-caption" style="display: none">💬 Commentaire</div>
       <div class="ctx-divider" id="ctx-connect-divider" style="display: none"></div>
       <div class="ctx-item" id="ctx-connect" style="display: none">— Connecter</div>
+      <div id="ctx-disconnect-divider" class="ctx-divider" style="display: none"></div>
+      <div id="ctx-disconnect" class="ctx-item" style="display: none">Déconnecter</div>
       <div class="ctx-divider"></div>
       <div class="ctx-item danger" id="ctx-delete">
         <img
@@ -2607,51 +2611,6 @@
             />
           </div>
           <button id="submit-join-board" class="form-submit">Rejoindre</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Collab Share Modal -->
-    <div class="modal-overlay hidden" id="collab-share-modal">
-      <div class="modal" style="width: 420px">
-        <div class="modal-header">
-          <h2>Collaboration</h2>
-          <button id="close-collab-share-modal" class="modal-close">&#x2715;</button>
-        </div>
-        <div class="form-wrap">
-          <div class="form-group">
-            <label>ID du Board</label>
-            <div style="display: flex; gap: 8px">
-              <input
-                class="form-input"
-                type="text"
-                id="collab-board-id-input"
-                readonly
-                style="flex: 1; user-select: all; cursor: text"
-              />
-              <button
-                id="copy-id-btn"
-                class="form-submit"
-                style="white-space: nowrap; flex-shrink: 0"
-              >
-                Copier l'ID
-              </button>
-            </div>
-          </div>
-          <p style="font-size: 12px; color: #888; margin: 8px 0 16px; line-height: 1.5">
-            Partagez cet ID pour qu'un ami puisse rejoindre ce board via le bouton
-            <strong>Rejoindre</strong> sur son accueil.
-          </p>
-          <div class="form-group">
-            <label>Lien lecture seule</label>
-            <button
-              id="copy-share-link-btn"
-              class="form-submit"
-              style="width: 100%; background: #1a1a2e"
-            >
-              Copier le lien de partage
-            </button>
-          </div>
         </div>
       </div>
     </div>

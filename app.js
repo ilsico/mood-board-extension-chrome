@@ -467,12 +467,15 @@ const App = (function () {
       const btn = document.getElementById('collab-btn');
 
       if (Collab.isActive()) {
-        Collab.endSession();
-        if (btn) btn.classList.remove('collab-active');
-        toast('Session collaborative terminée');
+        // Session déjà active : juste copier l'ID
+        navigator.clipboard
+          .writeText(currentBoardId)
+          .then(() => toast('ID du board copié !'))
+          .catch(() => toast('ID : ' + currentBoardId));
         return;
       }
 
+      // Première activation : démarrer la session et marquer le board comme collaboratif
       try {
         saveCurrentBoard();
         const elements = _collabGetBoardElements();
@@ -480,6 +483,12 @@ const App = (function () {
         if (!ok) {
           toast('Impossible de démarrer la session');
           return;
+        }
+        // Marquer ce board comme collaboratif pour les prochaines ouvertures
+        const board = boards.find((b) => b.id === currentBoardId);
+        if (board) {
+          board.isCollaborative = true;
+          saveBoards();
         }
         navigator.clipboard
           .writeText(currentBoardId)
@@ -603,6 +612,7 @@ const App = (function () {
     addEvt('ctx-img-replace', 'click', () => ctxReplaceImage());
     addEvt('ctx-img-caption', 'click', () => ctxAddCaption());
     addEvt('ctx-connect', 'click', () => ctxConnect());
+    addEvt('ctx-disconnect', 'click', () => ctxDisconnect());
     addEvt('ctx-delete', 'click', () => ctxDelete());
 
     // Lightbox vidéo
@@ -948,9 +958,23 @@ const App = (function () {
     });
   }
 
-  function openBoard(id) {
+  async function openBoard(id) {
     const board = boards.find((b) => b.id === id);
     if (!board) return;
+
+    // Si le board a une session collab dans Firebase, le traiter comme collaboratif
+    if (!board.isCollaborative && window._fbDb) {
+      try {
+        if (window._fbAuthReady) await window._fbAuthReady;
+        var collabCheck = await window._fbDb.ref('collabSessions/' + id + '/elements').get();
+        if (collabCheck.exists()) {
+          board.isCollaborative = true;
+          saveBoards();
+          _openCollabBoard(board);
+          return;
+        }
+      } catch(e) { /* pas grave, continuer en local */ }
+    }
 
     // Board collaboratif : auto-reconnexion via Firebase
     if (board.isCollaborative) {
@@ -975,6 +999,13 @@ const App = (function () {
           shareBtn.style.display = '';
         const collabBtn = document.getElementById('collab-btn');
         if (collabBtn) collabBtn.classList.remove('collab-active');
+        var btnImg2 = collabBtn ? collabBtn.querySelector('img') : null;
+        if (btnImg2) btnImg2.src = 'PNG/collaborer.png';
+        if (collabBtn)
+          collabBtn.childNodes.forEach(function (n) {
+            if (n.nodeType === 3 && n.textContent.trim())
+              n.textContent = '\n            Collaborer\n          ';
+          });
         document.getElementById('home-screen').style.display = 'none';
         document.getElementById('board-screen').style.display = 'flex';
         // Réattacher les listeners pinch maintenant que canvas-wrapper est visible
@@ -1003,17 +1034,15 @@ const App = (function () {
   }
 
   function goHome() {
-    // Snapshot des éléments si board collaboratif avant de quitter
+    // Sauvegarder l'état courant pour les boards collaboratifs
     if (typeof Collab !== 'undefined' && Collab.isActive()) {
       const board = boards.find((b) => b.id === currentBoardId);
-      if (board && board.isCollaborative) {
+      if (board) {
         board.elements = _collabGetBoardElements();
         board.savedAt = Date.now();
         saveBoards();
       }
       Collab.endSession();
-      const collabBtn = document.getElementById('collab-btn');
-      if (collabBtn) collabBtn.classList.remove('collab-active');
     }
     // Retirer le mode lecture seule (potentiellement mis par _openCollabBoardLocal)
     document.body.classList.remove('readonly-mode');
@@ -1689,13 +1718,27 @@ const App = (function () {
             }
             const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
             const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 30;
-            createImageElement(libItem.src, x, y, w, h);
+            var libImgEl = createImageElement(libItem.src, x, y, w, h);
+            if (libImgEl) _collabSyncCreatedEl(libImgEl);
+            if (libImgEl)
+              pushAction({
+                type: 'create',
+                elId: libImgEl.dataset.id,
+                after: _captureElState(libImgEl),
+              });
             pushHistory();
           };
           tmpImg.onerror = () => {
             const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 30;
             const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 30;
-            createImageElement(libItem.src, x, y, 220, 170);
+            var libImgEl = createImageElement(libItem.src, x, y, 220, 170);
+            if (libImgEl) _collabSyncCreatedEl(libImgEl);
+            if (libImgEl)
+              pushAction({
+                type: 'create',
+                elId: libImgEl.dataset.id,
+                after: _captureElState(libImgEl),
+              });
             pushHistory();
           };
           tmpImg.src = libItem.src;
@@ -1708,7 +1751,14 @@ const App = (function () {
         const h = _pvH;
         const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2;
         const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2;
-        createImageElement(src, x, y, w, h);
+        var previewImgEl = createImageElement(src, x, y, w, h);
+        if (previewImgEl) _collabSyncCreatedEl(previewImgEl);
+        if (previewImgEl)
+          pushAction({
+            type: 'create',
+            elId: previewImgEl.dataset.id,
+            after: _captureElState(previewImgEl),
+          });
         pushHistory();
 
         return;
@@ -1728,13 +1778,29 @@ const App = (function () {
                 const h = tmpImg.naturalHeight || 170;
                 const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 24;
                 const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 24;
-                applyDropSnap(createImageElement(src, x, y, w, h));
+                var droppedImgEl = createImageElement(src, x, y, w, h);
+                applyDropSnap(droppedImgEl);
+                if (droppedImgEl) _collabSyncCreatedEl(droppedImgEl);
+                if (droppedImgEl)
+                  pushAction({
+                    type: 'create',
+                    elId: droppedImgEl.dataset.id,
+                    after: _captureElState(droppedImgEl),
+                  });
                 pushHistory();
               };
               tmpImg.onerror = () => {
                 const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 24;
                 const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 24;
-                applyDropSnap(createImageElement(src, x, y, 220, 170));
+                var droppedImgEl = createImageElement(src, x, y, 220, 170);
+                applyDropSnap(droppedImgEl);
+                if (droppedImgEl) _collabSyncCreatedEl(droppedImgEl);
+                if (droppedImgEl)
+                  pushAction({
+                    type: 'create',
+                    elId: droppedImgEl.dataset.id,
+                    after: _captureElState(droppedImgEl),
+                  });
                 pushHistory();
               };
               tmpImg.src = src;
@@ -1870,11 +1936,25 @@ const App = (function () {
             tmpImg.onload = () => {
               const w = tmpImg.naturalWidth || 220;
               const h = tmpImg.naturalHeight || 170;
-              createImageElement(src, c.x - w / 2, c.y - h / 2, w, h);
+              var pastedImgEl = createImageElement(src, c.x - w / 2, c.y - h / 2, w, h);
+              if (pastedImgEl) _collabSyncCreatedEl(pastedImgEl);
+              if (pastedImgEl)
+                pushAction({
+                  type: 'create',
+                  elId: pastedImgEl.dataset.id,
+                  after: _captureElState(pastedImgEl),
+                });
               pushHistory();
             };
             tmpImg.onerror = () => {
-              createImageElement(src, c.x - 110, c.y - 85, 220, 170);
+              var pastedImgEl = createImageElement(src, c.x - 110, c.y - 85, 220, 170);
+              if (pastedImgEl) _collabSyncCreatedEl(pastedImgEl);
+              if (pastedImgEl)
+                pushAction({
+                  type: 'create',
+                  elId: pastedImgEl.dataset.id,
+                  after: _captureElState(pastedImgEl),
+                });
               pushHistory();
             };
             tmpImg.src = src;
@@ -2019,9 +2099,12 @@ const App = (function () {
         if (el) {
           removeConnectionsForEl(el);
           removeCaptionsForEl(el);
+          if (selectedEl === el) selectedEl = null;
+          multiSelected.delete(el);
           el.remove();
         }
         if (isCollab) Collab.syncElementDelete(action.elId);
+        deselectAll();
         break;
       }
       case 'delete': {
@@ -2042,6 +2125,20 @@ const App = (function () {
           if (isCollab)
             Collab.syncElementPosition(id, action.before[i].x, action.before[i].y, true);
         });
+        break;
+      }
+      case 'groupCreate': {
+        if (!Array.isArray(action.elId)) break;
+        action.elId.forEach(function (id) {
+          var el = document.querySelector('[data-id="' + id + '"]');
+          if (el) {
+            removeConnectionsForEl(el);
+            removeCaptionsForEl(el);
+            el.remove();
+          }
+          if (isCollab) Collab.syncElementDelete(id);
+        });
+        deselectAll();
         break;
       }
     }
@@ -2115,6 +2212,25 @@ const App = (function () {
         });
         break;
       }
+      case 'groupCreate': {
+        if (!Array.isArray(action.elId) || !Array.isArray(action.after)) break;
+        action.elId.forEach(function (id, i) {
+          var state = action.after[i];
+          if (!state) return;
+          var restored = restoreElement({
+            id: id,
+            type: state.type,
+            x: state.x,
+            y: state.y,
+            w: state.w,
+            h: state.h,
+            z: state.z,
+            data: state.data,
+          });
+          if (isCollab && restored) _collabSyncCreatedEl(restored);
+        });
+        break;
+      }
     }
   }
 
@@ -2127,7 +2243,12 @@ const App = (function () {
       while (_actionIndex >= 0 && skipped < 5) {
         const action = _actionHistory[_actionIndex];
         // Vérifier les conflits (sauf pour create/delete)
-        if (action.type !== 'create' && action.type !== 'delete' && action.type !== 'generic') {
+        if (
+          action.type !== 'create' &&
+          action.type !== 'delete' &&
+          action.type !== 'groupCreate' &&
+          action.type !== 'generic'
+        ) {
           const elId = Array.isArray(action.elId) ? action.elId[0] : action.elId;
           if (elId && Collab.isLockedByOther(elId)) {
             _actionIndex--;
@@ -2260,6 +2381,10 @@ const App = (function () {
       ta.style.cursor = 'move';
       delete el.dataset.editing;
       hideTextEditPanel();
+      // Collab: force une synchro immédiate du texte avant de libérer le lock
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(el.dataset.id, ta.value, true);
+      }
       // Collab: libérer le lock
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.releaseLock(el.dataset.id);
@@ -2326,9 +2451,18 @@ const App = (function () {
     } else if (wrap) {
       wrap.addEventListener('dblclick', (e) => {
         e.stopPropagation();
-        if (document.body.classList.contains('readonly-mode')) return;
-        fileReplaceTarget = el;
-        document.getElementById('file-input-file').click();
+        var d = {};
+        try {
+          d = JSON.parse(el.dataset.savedata || '{}');
+        } catch (_) {}
+        if (d.fileData) {
+          var a = document.createElement('a');
+          a.href = d.fileData;
+          a.download = d.name || 'fichier';
+          a.click();
+        } else {
+          toast('Aucun fichier attaché');
+        }
       });
     }
   }
@@ -2486,7 +2620,13 @@ const App = (function () {
     if (!id) return;
     const canvas = document.getElementById('canvas');
     canvas.querySelectorAll('.el-connection').forEach((svg) => {
-      if (svg.dataset.from === id || svg.dataset.to === id) svg.remove();
+      if (svg.dataset.from === id || svg.dataset.to === id) {
+        // Collab: sync suppression de connexion
+        if (typeof Collab !== 'undefined' && Collab.isActive() && svg.dataset.connId) {
+          Collab.syncConnectionDelete(svg.dataset.connId);
+        }
+        svg.remove();
+      }
     });
   }
 
@@ -2496,7 +2636,13 @@ const App = (function () {
     if (!id) return;
     const canvas = document.getElementById('canvas');
     canvas.querySelectorAll('.el-caption').forEach((cap) => {
-      if (cap.dataset.parentId === id) cap.remove();
+      if (cap.dataset.parentId === id) {
+        // Collab: sync suppression de caption
+        if (typeof Collab !== 'undefined' && Collab.isActive() && cap.dataset.capId) {
+          Collab.syncCaptionDelete(cap.dataset.capId);
+        }
+        cap.remove();
+      }
     });
   }
 
@@ -2727,10 +2873,10 @@ const App = (function () {
     // Dessiner le cadre de sélection englobant tout le groupe
     if (bbox) {
       bbox.style.display = 'block';
-      bbox.style.left = minL + 'px';
-      bbox.style.top = minT + 'px';
-      bbox.style.width = maxR - minL + 'px';
-      bbox.style.height = maxB - minT + 'px';
+      bbox.style.left = minL - 6 + 'px';
+      bbox.style.top = minT - 6 + 'px';
+      bbox.style.width = maxR - minL + 12 + 'px';
+      bbox.style.height = maxB - minT + 12 + 'px';
     }
   }
 
@@ -2913,16 +3059,16 @@ const App = (function () {
       function doDuplicate() {
         if (duplicated) return;
         duplicated = true;
+        _collabLockAcquired = false;
         const copy = el.cloneNode(true);
         copy.dataset.id = 'el_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
         if (el.dataset.type === 'image' && _imgStore.has(el.dataset.id))
           _imgStore.set(copy.dataset.id, _imgStore.get(el.dataset.id));
         copy.style.zIndex = ++nextZ;
-        // Position copy at current visual position (curX/curY), not frozen style.left/top
         copy.style.left = curX + 'px';
         copy.style.top = curY + 'px';
         copy.style.transform = '';
-        // Restore original element to its pre-drag position and clear its transform
+        // Restore original element to its pre-drag position
         el.style.left = origLeft + 'px';
         el.style.top = origTop + 'px';
         el.style.transform = '';
@@ -2931,12 +3077,19 @@ const App = (function () {
         if (copy.dataset.type === 'color') reattachColorEvents(copy);
         if (copy.dataset.type === 'note') reattachNoteEvents(copy);
         if (copy.dataset.type === 'file') reattachFileEvents(copy);
+        // Marquer la copie comme "en cours de création" pour bloquer les .update() de position
+        copy._collabPendingCreate = true;
         dragEl = copy;
         selectEl(dragEl);
         excludeSet.add(dragEl);
-        // startLeft/startTop reset to current position so translate3d offset starts at 0
         startLeft = curX;
         startTop = curY;
+        // Collab: sync la position de l'original (retour à sa place) pour le remote
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.syncElementPosition(el.dataset.id, origLeft, origTop, true);
+          Collab.releaseLock(el.dataset.id);
+          Collab.sendSelection([]);
+        }
       }
 
       if (isAltDown) doDuplicate();
@@ -3055,8 +3208,7 @@ const App = (function () {
           duplicated = false;
           dragEl = el;
           selectEl(el);
-          excludeSet.delete(dragEl); // dragEl était la copie, on la retire
-          // L'original reprend la position courante de la copie
+          excludeSet.delete(dragEl);
           el.style.left = copyLeft + 'px';
           el.style.top = copyTop + 'px';
           curX = copyLeft;
@@ -3067,6 +3219,12 @@ const App = (function () {
           startTop = copyTop;
           currentStartMX = (ev.clientX - canvasRect.left) / zoomLevel;
           currentStartMY = (ev.clientY - canvasRect.top) / zoomLevel;
+          // Collab: re-acquérir le lock sur l'original pour reprendre le sync position
+          if (typeof Collab !== 'undefined' && Collab.isActive() && !_collabLockAcquired) {
+            Collab.acquireLock(el.dataset.id).then(function (ok) {
+              if (ok) _collabLockAcquired = true;
+            });
+          }
         }
         moved = true;
         const cx = (ev.clientX - canvasRect.left) / zoomLevel;
@@ -3087,8 +3245,13 @@ const App = (function () {
         targetX = startLeft + dx;
         targetY = startTop + dy;
 
-        // Collab: sync position throttlée pendant le drag
-        if (typeof Collab !== 'undefined' && Collab.isActive() && _collabLockAcquired) {
+        // Collab: sync position throttlée pendant le drag (pas pour les éléments en cours de création)
+        if (
+          typeof Collab !== 'undefined' &&
+          Collab.isActive() &&
+          _collabLockAcquired &&
+          !dragEl._collabPendingCreate
+        ) {
           Collab.syncElementPosition(dragEl.dataset.id, targetX, targetY, false);
         }
       };
@@ -3141,20 +3304,29 @@ const App = (function () {
                 w: parseFloat(d.style.width) || null,
                 h: parseFloat(d.style.height) || null,
                 z: parseInt(d.style.zIndex) || 100,
-                data: d.dataset.type === 'image' ? 'pending' : d.dataset.savedata || '',
+                data:
+                  d.dataset.type === 'image'
+                    ? _imgStore.get(d.dataset.id) || ''
+                    : d.dataset.savedata || '',
               },
             });
           }
-          // Collab: sync position finale + libérer le lock
-          if (typeof Collab !== 'undefined' && Collab.isActive() && _collabLockAcquired) {
+          // Collab: sync la création si duplication (avec la position finale)
+          if (duplicated && typeof Collab !== 'undefined' && Collab.isActive()) {
+            delete dragEl._collabPendingCreate;
+            _collabSyncCreatedEl(dragEl);
+          }
+          // Collab: sync position finale + libérer le lock (seulement pour un move, pas une duplication)
+          if (
+            !duplicated &&
+            typeof Collab !== 'undefined' &&
+            Collab.isActive() &&
+            _collabLockAcquired
+          ) {
             const fx = parseFloat(dragEl.style.left) || 0;
             const fy = parseFloat(dragEl.style.top) || 0;
             Collab.syncElementPosition(dragEl.dataset.id, fx, fy, true);
             Collab.releaseLock(dragEl.dataset.id);
-          }
-          // Collab: sync la création si duplication
-          if (duplicated && typeof Collab !== 'undefined' && Collab.isActive()) {
-            _collabSyncCreatedEl(dragEl);
           }
           dragEl.dataset.justDragged = '1';
           setTimeout(() => delete dragEl.dataset.justDragged, 150);
@@ -3171,6 +3343,7 @@ const App = (function () {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       if (el.dataset.justDragged) return;
+      if (_justGroupDragged) return;
       if (!e.shiftKey) selectEl(el);
     });
 
@@ -3218,9 +3391,11 @@ const App = (function () {
         resizeStartH = parseFloat(el.style.height) || el.offsetHeight;
         resizeStartX = e.clientX;
         resizeStartY = e.clientY;
-        // Pour les images : resize proportionnel
+        // Pour les images et fichiers : resize proportionnel
         resizeRatio =
-          el.dataset.type === 'image' && el.dataset.ratio ? parseFloat(el.dataset.ratio) : null;
+          (el.dataset.type === 'image' || el.dataset.type === 'file') && el.dataset.ratio
+            ? parseFloat(el.dataset.ratio)
+            : null;
       });
     }
   }
@@ -3250,6 +3425,12 @@ const App = (function () {
     let duplicated = false;
     let moved = false;
 
+    // Lerp state pour le multi-drag (déclaré ici pour être accessible dans doDuplicateGroup)
+    let targetDX = 0,
+      targetDY = 0;
+    let curDX = 0,
+      curDY = 0;
+
     function doDuplicateGroup() {
       if (duplicated) return;
       duplicated = true;
@@ -3273,10 +3454,22 @@ const App = (function () {
         const cur = curPositions.get(el);
         copy.style.left = cur.left + 'px';
         copy.style.top = cur.top + 'px';
+        copy.style.transform = '';
         document.getElementById('canvas').appendChild(copy);
         attachElementEvents(copy);
+        if (copy.dataset.type === 'color') reattachColorEvents(copy);
+        if (copy.dataset.type === 'note') reattachNoteEvents(copy);
+        if (copy.dataset.type === 'file') reattachFileEvents(copy);
+        copy._collabPendingCreate = true;
         copies.add(copy);
       });
+      // Collab: libérer les locks sur les originaux + vider sélection
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        activeGroup.forEach(function (el) {
+          Collab.releaseLock(el.dataset.id);
+        });
+        Collab.sendSelection([]);
+      }
       // Les originaux restent, on déplace les copies
       activeGroup = copies;
       starts = new Map();
@@ -3298,11 +3491,6 @@ const App = (function () {
     // Alt déjà enfoncé au départ
     if (isAltDown) doDuplicateGroup();
 
-    // Lerp state pour le multi-drag
-    let targetDX = 0,
-      targetDY = 0;
-    let curDX = 0,
-      curDY = 0;
     let groupDragActive = true;
     let groupRafId = null;
     const lerpFactor = 0.12;
@@ -3434,15 +3622,44 @@ const App = (function () {
             afterArr.push({ x: s.left + targetDX, y: s.top + targetDY });
           });
           pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr });
-        }
-        // Collab: sync positions finales + libérer les locks
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          activeGroup.forEach((el) => {
-            const fx = parseFloat(el.style.left) || 0;
-            const fy = parseFloat(el.style.top) || 0;
-            Collab.syncElementPosition(el.dataset.id, fx, fy, true);
-            Collab.releaseLock(el.dataset.id);
+        } else if (duplicated) {
+          // Enregistrer le groupe dupliqué comme UNE seule action
+          var groupIds = [];
+          var groupAfter = [];
+          activeGroup.forEach(function (el) {
+            groupIds.push(el.dataset.id);
+            groupAfter.push({
+              type: el.dataset.type,
+              x: parseFloat(el.style.left) || 0,
+              y: parseFloat(el.style.top) || 0,
+              w: parseFloat(el.style.width) || null,
+              h: parseFloat(el.style.height) || null,
+              z: parseInt(el.style.zIndex) || 100,
+              data:
+                el.dataset.type === 'image'
+                  ? _imgStore.get(el.dataset.id) || ''
+                  : el.dataset.savedata || '',
+            });
           });
+          pushAction({ type: 'groupCreate', elId: groupIds, after: groupAfter });
+        }
+        // Collab: sync
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          if (duplicated) {
+            // Sync la création de chaque copie (avec position finale)
+            activeGroup.forEach(function (el) {
+              delete el._collabPendingCreate;
+              _collabSyncCreatedEl(el);
+            });
+          } else {
+            // Sync positions finales + libérer les locks
+            activeGroup.forEach((el) => {
+              const fx = parseFloat(el.style.left) || 0;
+              const fy = parseFloat(el.style.top) || 0;
+              Collab.syncElementPosition(el.dataset.id, fx, fy, true);
+              Collab.releaseLock(el.dataset.id);
+            });
+          }
         }
       }
     };
@@ -3468,7 +3685,7 @@ const App = (function () {
     const t = el && el.dataset ? el.dataset.type : '';
     if (t === 'link') return { w: 103, h: 73 };
     if (t === 'color') return { w: 80, h: 80 };
-    if (t === 'file') return { w: 120, h: 50 };
+    if (t === 'file') return { w: 260, h: 76 };
     return { w: 60, h: 40 };
   }
 
@@ -3491,6 +3708,16 @@ const App = (function () {
 
     resizeEl.style.width = fw + 'px';
     resizeEl.style.height = fh + 'px';
+
+    // Carte fichier : scaler le contenu proportionnellement
+    if (resizeEl.dataset.type === 'file') {
+      var fileWrap = resizeEl.querySelector('.el-file');
+      if (fileWrap) {
+        var scaleFactor = fw / 260;
+        fileWrap.style.transform = 'scale(' + scaleFactor + ')';
+        fileWrap.style.transformOrigin = 'top left';
+      }
+    }
 
     // ── Snap pendant le resize (seulement si Ctrl) ──────────────────────────
     if (ctrlSnap) {
@@ -3602,6 +3829,19 @@ const App = (function () {
       return cap;
     }
     if (el && s.z) el.style.zIndex = s.z;
+    if (el && s.type === 'file') {
+      el.style.overflow = 'hidden';
+      var fileWrap = el.querySelector('.el-file');
+      if (fileWrap) {
+        fileWrap.style.width = '260px';
+        fileWrap.style.height = '76px';
+        fileWrap.style.overflow = 'hidden';
+        if (s.w && s.w > 260) {
+          fileWrap.style.transform = 'scale(' + s.w / 260 + ')';
+          fileWrap.style.transformOrigin = 'top left';
+        }
+      }
+    }
     if (el && s.id) {
       // Remap _imgStore: createImageElement a stocké sous un ID temporaire,
       // il faut le déplacer vers l'ID original sauvegardé avant de l'écraser.
@@ -3637,9 +3877,8 @@ const App = (function () {
       await window._fbAuthReady;
     }
     try {
-      // Vérifier que la session collab existe et est active
-      const metaSnap = await window._fbDb.ref('collabSessions/' + boardId + '/meta').get();
-      if (!metaSnap.exists() || !metaSnap.val().active) {
+      const elemCheck = await window._fbDb.ref('collabSessions/' + boardId + '/elements').get();
+      if (!elemCheck.exists()) {
         errPage("Cette session collaborative n'existe plus ou est terminée.");
         return;
       }
@@ -3708,11 +3947,11 @@ const App = (function () {
       currentBoardId = boardId;
       await Collab.startSession(boardId, false);
 
-      // Masquer les éléments UI non pertinents pour les guests
-      const shareBtn = document.getElementById('share-btn');
-      if (shareBtn) shareBtn.style.display = 'none';
-      const collabBtn = document.getElementById('collab-btn');
-      if (collabBtn) collabBtn.style.display = 'none';
+      var collabBtn = document.getElementById('collab-btn');
+      if (collabBtn) {
+        collabBtn.style.display = '';
+        collabBtn.classList.add('collab-active');
+      }
 
       setupUIEvents();
     } catch (e) {
@@ -3750,10 +3989,9 @@ const App = (function () {
       await window._fbAuthReady;
     }
     try {
-      // Vérifier que la session collab existe et est active
-      const metaSnap = await window._fbDb.ref('collabSessions/' + boardId + '/meta').get();
-      if (!metaSnap.exists() || !metaSnap.val().active) {
-        toast("Cette session collaborative n'est pas active");
+      const elemSnap0 = await window._fbDb.ref('collabSessions/' + boardId + '/elements').get();
+      if (!elemSnap0.exists()) {
+        toast("Cette session collaborative n'existe pas");
         return;
       }
 
@@ -3805,8 +4043,8 @@ const App = (function () {
       await window._fbAuthReady;
     }
     try {
-      const metaSnap = await window._fbDb.ref('collabSessions/' + board.id + '/meta').get();
-      const isActive = metaSnap.exists() && metaSnap.val().active;
+      const elemCheck = await window._fbDb.ref('collabSessions/' + board.id + '/elements').get();
+      const isActive = elemCheck.exists();
 
       if (isActive) {
         // Session active : charger depuis Firebase et démarrer collab
@@ -3879,15 +4117,38 @@ const App = (function () {
 
         await Collab.startSession(board.id, false);
 
-        // Masquer boutons owner-only pour les guests
-        const shareBtn = document.getElementById('share-btn');
-        if (shareBtn) shareBtn.style.display = 'none';
+        // Afficher le bouton collab pour que le guest puisse copier l'ID
         const collabBtn = document.getElementById('collab-btn');
-        if (collabBtn) collabBtn.style.display = 'none';
+        if (collabBtn) {
+          collabBtn.style.display = '';
+          collabBtn.classList.add('collab-active');
+        }
       } else {
-        // Session inactive : charger la copie locale
-        toast('Session inactive — copie locale en lecture seule');
-        _openCollabBoardLocal(board);
+        // Pas de session Firebase : créer une nouvelle session depuis les données locales
+        currentBoardId = board.id;
+        document.getElementById('home-screen').style.display = 'none';
+        document.getElementById('board-screen').style.display = 'flex';
+        document.getElementById('board-title-display').textContent = board.name;
+        if (window._reattachPinch) window._reattachPinch();
+        document.getElementById('canvas').innerHTML = '';
+        zoomLevel = 1; panX = 0; panY = 0; nextZ = 100;
+        history = []; historyIndex = -1;
+        selectedEl = null; multiSelected.clear();
+        applyTransform(); updateZoomDisplay();
+        if (board.elements && board.elements.length) {
+          board.elements.forEach(function(e) { restoreElement(e); });
+          setTimeout(function() { fitElementsToScreen(); }, 120);
+        }
+        pushHistory();
+        renderPanelLib();
+        // Démarrer une session collab comme owner avec les éléments locaux
+        var localElements = _collabGetBoardElements();
+        await Collab.startSession(board.id, true, { elements: localElements });
+        var collabBtn2 = document.getElementById('collab-btn');
+        if (collabBtn2) {
+          collabBtn2.style.display = '';
+          collabBtn2.classList.add('collab-active');
+        }
       }
     } catch (e) {
       console.warn('_openCollabBoard error:', e);
@@ -4024,12 +4285,18 @@ const App = (function () {
         w = Math.round((w * 350) / h);
         h = 350;
       }
-      createImageElement(src, c.x - w / 2, c.y - h / 2, w, h);
+      var imgEl = createImageElement(src, c.x - w / 2, c.y - h / 2, w, h);
+      if (imgEl) _collabSyncCreatedEl(imgEl);
+      if (imgEl)
+        pushAction({ type: 'create', elId: imgEl.dataset.id, after: _captureElState(imgEl) });
       pushHistory();
     };
     tmpImg.onerror = () => {
       const c = getCenter();
-      createImageElement(src, c.x - 110, c.y - 85, 220, 170);
+      var imgEl = createImageElement(src, c.x - 110, c.y - 85, 220, 170);
+      if (imgEl) _collabSyncCreatedEl(imgEl);
+      if (imgEl)
+        pushAction({ type: 'create', elId: imgEl.dataset.id, after: _captureElState(imgEl) });
       pushHistory();
     };
     tmpImg.src = src;
@@ -4058,12 +4325,25 @@ const App = (function () {
     ta.style.cursor = 'move';
     ta.addEventListener('input', () => {
       el.dataset.savedata = ta.value;
+      // Collab: sync texte debounced
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(el.dataset.id, ta.value);
+      }
     });
     // Valeur au moment de l'entrée en édition — pour détecter un changement au blur
     let _noteValueOnFocus = '';
     // Double-clic sur le wrapper ou le textarea : activer l'édition + panneau texte
     function activateNoteEdit(e) {
       if (document.body.classList.contains('readonly-mode')) return;
+      // Collab: vérifier le lock
+      if (
+        typeof Collab !== 'undefined' &&
+        Collab.isActive() &&
+        Collab.isLockedByOther(el.dataset.id)
+      ) {
+        toast("Élément en cours d'édition");
+        return;
+      }
       e.stopPropagation();
       e.preventDefault();
       ta.style.pointerEvents = 'auto';
@@ -4072,6 +4352,10 @@ const App = (function () {
       _noteValueOnFocus = ta.value; // mémoriser pour comparer au blur
       ta.focus();
       showTextEditPanel(el);
+      // Collab: acquérir le lock
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.acquireLock(el.dataset.id);
+      }
     }
     wrap.addEventListener('dblclick', activateNoteEdit);
     ta.addEventListener('dblclick', activateNoteEdit);
@@ -4090,8 +4374,20 @@ const App = (function () {
       ta.style.cursor = 'move';
       delete el.dataset.editing;
       hideTextEditPanel();
+      // Collab: force une synchro immédiate du texte avant de libérer le lock
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(el.dataset.id, ta.value, true);
+      }
+      // Collab: libérer le lock
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.releaseLock(el.dataset.id);
+      }
       if (!ta.value.trim()) {
         el.remove();
+        // Collab: sync suppression
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.syncElementDelete(el.dataset.id);
+        }
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
         pushHistory();
@@ -4637,7 +4933,21 @@ const App = (function () {
           txt: '📃',
         };
         const icon = icns[ext] || 'file';
-        createFileElement(file.name, size, icon, baseX, baseY);
+        var fileEl = createFileElement(file.name, size, icon, baseX, baseY);
+        // Lire le contenu du fichier pour le stocker et permettre le téléchargement
+        (function (targetEl, fileName, fileSize, fileIcon) {
+          readFileAsBase64(file).then(function (b64) {
+            targetEl.dataset.savedata = JSON.stringify({
+              name: fileName,
+              size: fileSize,
+              icon: fileIcon,
+              fileData: b64,
+            });
+            if (typeof Collab !== 'undefined' && Collab.isActive()) {
+              _collabSyncCreatedEl(targetEl);
+            }
+          });
+        })(fileEl, file.name, size, icon);
       }
     });
     pendingToolDropPos = null;
@@ -4658,18 +4968,42 @@ const App = (function () {
 
   function createFileElement(name, size, icon, x, y) {
     const el = makeElement('file', x || 100, y || 100, 260, 76);
+    el.style.overflow = 'hidden';
     el.dataset.savedata = JSON.stringify({ name, size, icon });
     const wrap = document.createElement('div');
     wrap.className = 'el-file';
+    wrap.style.width = '260px';
+    wrap.style.height = '76px';
+    wrap.style.overflow = 'hidden';
     const iconDiv = document.createElement('div');
     iconDiv.className = 'file-icon';
-    iconDiv.textContent = icon === 'file' ? '📎' : icon;
+    var iconImg = document.createElement('img');
+    iconImg.src = 'PNG/fichier-carte.png';
+    iconImg.style.cssText = 'width:36px;height:36px;object-fit:contain;pointer-events:none;';
+    iconDiv.appendChild(iconImg);
     wrap.appendChild(iconDiv);
     const info = document.createElement('div');
     info.className = 'file-info';
     info.innerHTML = `<div class="file-name">${escHtml(name)}</div><div class="file-size">${escHtml(size)}</div>`;
     wrap.appendChild(info);
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
+    // Double-clic : télécharger le fichier si les données existent
+    wrap.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      var d = {};
+      try {
+        d = JSON.parse(el.dataset.savedata || '{}');
+      } catch (_) {}
+      if (d.fileData) {
+        var a = document.createElement('a');
+        a.href = d.fileData;
+        a.download = d.name || 'fichier';
+        a.click();
+      } else {
+        toast('Aucun fichier attaché');
+      }
+    });
+    el.dataset.ratio = (260 / 76).toFixed(6);
     return el;
   }
 
@@ -4875,9 +5209,13 @@ const App = (function () {
           y: parseFloat(e.style.top) + 24,
           w: parseFloat(e.style.width) || null,
           h: parseFloat(e.style.height) || null,
-          data: e.dataset.savedata,
+          data:
+            e.dataset.type === 'image'
+              ? _imgStore.get(e.dataset.id) || ''
+              : e.dataset.savedata || '',
         };
-        restoreElement(s);
+        var dup = restoreElement(s);
+        if (dup && typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(dup);
       });
       pushHistory();
 
@@ -4889,10 +5227,14 @@ const App = (function () {
       y: parseFloat(el.style.top) + 24,
       w: parseFloat(el.style.width) || null,
       h: parseFloat(el.style.height) || null,
-      data: el.dataset.savedata,
+      data:
+        el.dataset.type === 'image'
+          ? _imgStore.get(el.dataset.id) || ''
+          : el.dataset.savedata || '',
     };
     const newEl = restoreElement(s);
     if (newEl) {
+      if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(newEl);
       selectEl(newEl);
       pushHistory();
     }
@@ -4910,6 +5252,21 @@ const App = (function () {
     document.getElementById('ctx-img-caption').style.display = isImage ? '' : 'none';
     document.getElementById('ctx-connect-divider').style.display = canConnect ? '' : 'none';
     document.getElementById('ctx-connect').style.display = canConnect ? '' : 'none';
+    // Déconnecter : visible si au moins un élément sélectionné a une connexion
+    var hasConnections = false;
+    var allSelIds = new Set();
+    if (ctxTargetEl) allSelIds.add(ctxTargetEl.dataset.id);
+    multiSelected.forEach(function (el) {
+      allSelIds.add(el.dataset.id);
+    });
+    if (selectedEl) allSelIds.add(selectedEl.dataset.id);
+    document.querySelectorAll('.el-connection').forEach(function (svg) {
+      if (allSelIds.has(svg.dataset.from) || allSelIds.has(svg.dataset.to)) {
+        hasConnections = true;
+      }
+    });
+    document.getElementById('ctx-disconnect-divider').style.display = hasConnections ? '' : 'none';
+    document.getElementById('ctx-disconnect').style.display = hasConnections ? '' : 'none';
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
     menu.style.display = 'block';
@@ -4946,6 +5303,7 @@ const App = (function () {
         const src = await compressImage(ev.target.result);
         const img = replaceTargetEl.querySelector('img');
         if (img) {
+          var oldSrc = _imgStore.get(replaceTargetEl.dataset.id) || '';
           img.src = src;
           _imgStore.set(replaceTargetEl.dataset.id, src);
           replaceTargetEl.dataset.savedata = '';
@@ -4962,6 +5320,17 @@ const App = (function () {
             replaceTargetEl.style.height = newH + 'px';
             replaceTargetEl.dataset.ratio = ratio.toFixed(6);
             pushHistory();
+            pushAction({
+              type: 'editText',
+              elId: replaceTargetEl.dataset.id,
+              before: { data: oldSrc },
+              after: { data: src },
+            });
+            // Collab: sync la nouvelle image et les nouvelles dimensions
+            if (typeof Collab !== 'undefined' && Collab.isActive()) {
+              Collab.syncElementData(replaceTargetEl.dataset.id, src);
+              Collab.syncElementSize(replaceTargetEl.dataset.id, currentW, newH, true);
+            }
           };
           tmpImg.src = src;
         }
@@ -5001,7 +5370,39 @@ const App = (function () {
     // Connecter chaque paire consecutive
     for (let i = 0; i < ids.length - 1; i++) {
       createConnection(ids[i], ids[i + 1]);
+      // Collab: sync la connexion
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        var connSvg = document.querySelector(
+          '.el-connection[data-from="' + ids[i] + '"][data-to="' + ids[i + 1] + '"]'
+        );
+        if (connSvg && connSvg.dataset.connId) {
+          Collab.syncConnection(connSvg.dataset.connId, ids[i], ids[i + 1]);
+        }
+      }
     }
+    pushHistory();
+  }
+
+  function ctxDisconnect() {
+    hideContextMenu();
+    var allSelIds = new Set();
+    if (ctxTargetEl) allSelIds.add(ctxTargetEl.dataset.id);
+    multiSelected.forEach(function (el) {
+      allSelIds.add(el.dataset.id);
+    });
+    if (selectedEl) allSelIds.add(selectedEl.dataset.id);
+    var toRemove = [];
+    document.querySelectorAll('.el-connection').forEach(function (svg) {
+      if (allSelIds.has(svg.dataset.from) || allSelIds.has(svg.dataset.to)) {
+        toRemove.push(svg);
+      }
+    });
+    toRemove.forEach(function (svg) {
+      if (typeof Collab !== 'undefined' && Collab.isActive() && svg.dataset.connId) {
+        Collab.syncConnectionDelete(svg.dataset.connId);
+      }
+      svg.remove();
+    });
     pushHistory();
   }
 
@@ -5078,6 +5479,19 @@ const App = (function () {
     cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
     document.getElementById('canvas').appendChild(cap);
     cap.focus();
+    // Collab: sync création de caption
+    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+      var capId = 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      cap.dataset.capId = capId;
+      Collab.syncCaption(
+        capId,
+        cap.dataset.parentId || '',
+        parseFloat(cap.style.left) || 0,
+        parseFloat(cap.style.top) || 0,
+        cap.style.width || '',
+        cap.textContent || ''
+      );
+    }
     pushHistory();
   }
 
@@ -5133,8 +5547,29 @@ const App = (function () {
 
     hideTextEditPanel();
 
+    // Collab: sync contenu de la caption après édition
+    if (
+      typeof Collab !== 'undefined' &&
+      Collab.isActive() &&
+      cap.dataset.capId &&
+      cap.textContent.trim()
+    ) {
+      Collab.syncCaption(
+        cap.dataset.capId,
+        cap.dataset.parentId || '',
+        parseFloat(cap.style.left) || 0,
+        parseFloat(cap.style.top) || 0,
+        cap.style.width || '',
+        cap.textContent
+      );
+    }
+
     // Si le commentaire est vide après l'édition, on le supprime
     if (!cap.textContent.trim()) {
+      // Collab: sync suppression de caption vide
+      if (typeof Collab !== 'undefined' && Collab.isActive() && cap.dataset.capId) {
+        Collab.syncCaptionDelete(cap.dataset.capId);
+      }
       cap.remove();
       pushHistory();
     }
@@ -5164,6 +5599,7 @@ const App = (function () {
     document.querySelectorAll('.text-font-btn').forEach((b) => b.classList.remove('active'));
     const activeBtn = document.getElementById(val === 'helvetica-bold' ? 'tp-bold' : 'tp-roman');
     if (activeBtn) activeBtn.classList.add('active');
+    _collabSyncStyle();
   }
   function applyTextSizeDelta(delta) {
     if (!textEditTarget) return;
@@ -5174,6 +5610,7 @@ const App = (function () {
     ta.style.fontSize = next + 'px';
     const sizeVal = document.getElementById('text-size-val');
     if (sizeVal) sizeVal.textContent = next;
+    _collabSyncStyle();
   }
   function applyTextAlign(align) {
     if (!textEditTarget) return;
@@ -5183,6 +5620,7 @@ const App = (function () {
     const id = { left: 'ta-left', center: 'ta-center', right: 'ta-right' }[align];
     const btn = document.getElementById(id);
     if (btn) btn.classList.add('active');
+    _collabSyncStyle();
   }
 
   function ctxBringFront() {
@@ -5212,10 +5650,16 @@ const App = (function () {
           y: parseFloat(el.style.top) + 24,
           w: parseFloat(el.style.width) || null,
           h: parseFloat(el.style.height) || null,
-          data: el.dataset.savedata,
+          data:
+            el.dataset.type === 'image'
+              ? _imgStore.get(el.dataset.id) || ''
+              : el.dataset.savedata || '',
         };
         const newEl = restoreElement(s);
-        if (newEl) copies.push(newEl);
+        if (newEl) {
+          if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(newEl);
+          copies.push(newEl);
+        }
       });
       if (copies.length) {
         pushHistory();
@@ -5227,10 +5671,14 @@ const App = (function () {
         y: parseFloat(ctxTargetEl.style.top) + 24,
         w: parseFloat(ctxTargetEl.style.width) || null,
         h: parseFloat(ctxTargetEl.style.height) || null,
-        data: ctxTargetEl.dataset.savedata,
+        data:
+          ctxTargetEl.dataset.type === 'image'
+            ? _imgStore.get(ctxTargetEl.dataset.id) || ''
+            : ctxTargetEl.dataset.savedata || '',
       };
       const el = restoreElement(s);
       if (el) {
+        if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(el);
         selectEl(el);
         pushHistory();
       }
@@ -6198,18 +6646,45 @@ const App = (function () {
   }
 
   // ── COLLAB HELPERS ─────────────────────────────────────────────────────
+  function _collabSyncStyle() {
+    if (typeof Collab === 'undefined' || !Collab.isActive() || !textEditTarget) return;
+    var ta = textEditTarget.querySelector('textarea') || textEditTarget;
+    if (!ta) return;
+    var styleObj = {
+      fontFamily: ta.style.fontFamily || '',
+      fontWeight: ta.style.fontWeight || '',
+      fontSize: ta.style.fontSize || '',
+      textAlign: ta.style.textAlign || '',
+    };
+    // Si c'est une caption (a un data-cap-id), sync via syncCaptionStyle
+    if (textEditTarget.classList.contains('el-caption') && textEditTarget.dataset.capId) {
+      Collab.syncCaptionStyle(textEditTarget.dataset.capId, styleObj);
+    } else if (textEditTarget.dataset.id) {
+      // C'est un board-element (note)
+      Collab.syncElementStyle(textEditTarget.dataset.id, styleObj);
+    }
+  }
+
   /** Sync un élément nouvellement créé vers Firebase */
   function _collabSyncCreatedEl(el) {
     if (typeof Collab === 'undefined' || !Collab.isActive()) return;
     if (!el || !el.dataset || !el.dataset.id) return;
+    var elId = el.dataset.id;
+    var elType = el.dataset.type;
+    var elData;
+    if (elType === 'image') {
+      elData = _imgStore.get(elId) || 'pending';
+    } else {
+      elData = el.dataset.savedata || '';
+    }
     Collab.syncElementCreate(
-      el.dataset.id,
-      el.dataset.type,
+      elId,
+      elType,
       parseFloat(el.style.left) || 0,
       parseFloat(el.style.top) || 0,
       parseFloat(el.style.width) || null,
       parseFloat(el.style.height) || null,
-      el.dataset.type === 'image' ? 'pending' : el.dataset.savedata || '',
+      elData,
       parseInt(el.style.zIndex) || 100
     );
   }

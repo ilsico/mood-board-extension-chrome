@@ -4,16 +4,13 @@
   "version": "1.0",
   "description": "Clic droit sur n'importe quelle image pour l'ajouter directement à un board Moodboard.",
 
-  "permissions": [
-    "contextMenus",
-    "storage",
-    "unlimitedStorage",
-    "activeTab",
-    "tabs"
-  ],
+  "permissions": ["contextMenus", "storage", "unlimitedStorage", "activeTab", "tabs"],
 
   "host_permissions": ["<all_urls>"],
 
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com https://*.firebaseio.com;"
+  },
   "icons": {
     "16": "icon extension/icon16.png",
     "48": "icon extension/icon48.png",

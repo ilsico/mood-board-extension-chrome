@@ -1192,12 +1192,13 @@
       #resize-corner-ne,
       #resize-corner-sw,
       #resize-corner-se {
-        position: absolute;
+        position: fixed;
         width: 16px;
         height: 16px;
-        z-index: 9000;
+        z-index: 2147483647;
         display: none;
         transform: translate(-50%, -50%);
+        pointer-events: auto;
       }
       #resize-corner-nw { cursor: nw-resize; }
       #resize-corner-ne { cursor: ne-resize; }
@@ -2532,10 +2533,6 @@
           <div id="collab-cursors"></div>
           <div id="collab-sel-rects"></div>
           <div id="selection-rect"></div>
-          <div id="resize-corner-nw"></div>
-          <div id="resize-corner-ne"></div>
-          <div id="resize-corner-sw"></div>
-          <div id="resize-corner-se"></div>
           <div id="multi-resize-handle"></div>
           <div id="group-bounding-box"></div>
           <div id="zoom-toast"></div>
@@ -2998,5 +2995,9 @@
       <span id="collab-user-count">0 utilisateurs</span>
       <span id="collab-connection-status"></span>
     </div>
+  <div id="resize-corner-nw"></div>
+  <div id="resize-corner-ne"></div>
+  <div id="resize-corner-sw"></div>
+  <div id="resize-corner-se"></div>
   </body>
 </html>

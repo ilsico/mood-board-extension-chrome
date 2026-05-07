@@ -1311,12 +1311,11 @@ const App = (function () {
     }
     _cornerHandlesTarget = target;
     const r = target.getBoundingClientRect();
-    const wRect = document.getElementById('canvas-wrapper').getBoundingClientRect();
     const pos = {
-      nw: { left: r.left - wRect.left, top: r.top - wRect.top },
-      ne: { left: r.right - wRect.left, top: r.top - wRect.top },
-      sw: { left: r.left - wRect.left, top: r.bottom - wRect.top },
-      se: { left: r.right - wRect.left, top: r.bottom - wRect.top },
+      nw: { left: r.left,  top: r.top    },
+      ne: { left: r.right, top: r.top    },
+      sw: { left: r.left,  top: r.bottom },
+      se: { left: r.right, top: r.bottom },
     };
     corners.forEach((c) => {
       const h = document.getElementById('resize-corner-' + c);

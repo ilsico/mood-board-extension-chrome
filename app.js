@@ -34,6 +34,7 @@ const App = (function () {
   let _resizeRafId = null;
   let _resizeTargetW = 0, _resizeTargetH = 0;
   let _resizeTargetLeft = 0, _resizeTargetTop = 0;
+  let hoveredEl = null;
   let snapThreshold = 8; // pixels canvas pour déclencher le snap
   let isAltDown = false; // état de la touche Alt
   let ctrlSnap = false; // Ctrl enfoncé → snap actif
@@ -1298,14 +1299,15 @@ const App = (function () {
 
   function updateCornerHandles() {
     const corners = ['nw', 'ne', 'sw', 'se'];
-    if (!selectedEl || multiSelected.size > 0) {
+    const target = multiSelected.size > 0 ? null : (hoveredEl || selectedEl);
+    if (!target) {
       corners.forEach((c) => {
         const h = document.getElementById('resize-corner-' + c);
         if (h) h.style.display = 'none';
       });
       return;
     }
-    const r = selectedEl.getBoundingClientRect();
+    const r = target.getBoundingClientRect();
     const wRect = document.getElementById('canvas-wrapper').getBoundingClientRect();
     const pos = {
       nw: { left: r.left - wRect.left, top: r.top - wRect.top },
@@ -1330,21 +1332,22 @@ const App = (function () {
         if (e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
-        if (!selectedEl) return;
+        const _target = hoveredEl || selectedEl;
+        if (!_target) return;
         if (document.body.classList.contains('readonly-mode')) return;
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          if (Collab.isLockedByOther(selectedEl.dataset.id)) {
+          if (Collab.isLockedByOther(_target.dataset.id)) {
             toast('Élément verrouillé');
             return;
           }
-          Collab.acquireLock(selectedEl.dataset.id);
+          Collab.acquireLock(_target.dataset.id);
         }
         isResizing = true;
-        resizeEl = selectedEl;
-        resizeStartW = parseFloat(selectedEl.style.width) || selectedEl.offsetWidth;
-        resizeStartH = parseFloat(selectedEl.style.height) || selectedEl.offsetHeight;
-        resizeStartLeft = parseFloat(selectedEl.style.left) || 0;
-        resizeStartTop = parseFloat(selectedEl.style.top) || 0;
+        resizeEl = _target;
+        resizeStartW = parseFloat(_target.style.width) || _target.offsetWidth;
+        resizeStartH = parseFloat(_target.style.height) || _target.offsetHeight;
+        resizeStartLeft = parseFloat(_target.style.left) || 0;
+        resizeStartTop = parseFloat(_target.style.top) || 0;
         _resizeTargetW    = resizeStartW;
         _resizeTargetH    = resizeStartH;
         _resizeTargetLeft = resizeStartLeft;
@@ -1352,11 +1355,11 @@ const App = (function () {
         resizeStartX = e.clientX;
         resizeStartY = e.clientY;
         resizeCorner = corner;
-        const t = selectedEl.dataset.type;
+        const t = _target.dataset.type;
         if (t === 'note' || t === 'color') {
           resizeRatio = null;
-        } else if (selectedEl.dataset.ratio) {
-          resizeRatio = parseFloat(selectedEl.dataset.ratio);
+        } else if (_target.dataset.ratio) {
+          resizeRatio = parseFloat(_target.dataset.ratio);
         } else {
           resizeRatio = resizeStartH > 0 ? resizeStartW / resizeStartH : null;
         }
@@ -3895,6 +3898,17 @@ const App = (function () {
       }
       ctxTargetEl = el;
       showContextMenu(e.clientX, e.clientY);
+    });
+
+    el.addEventListener('mouseenter', () => {
+      hoveredEl = el;
+      updateCornerHandles();
+    });
+    el.addEventListener('mouseleave', () => {
+      if (hoveredEl === el) {
+        hoveredEl = null;
+        updateCornerHandles();
+      }
     });
   }
 

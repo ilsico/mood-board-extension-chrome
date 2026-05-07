@@ -2459,10 +2459,16 @@ const App = (function () {
       case 'resize': {
         const el = document.querySelector('[data-id="' + action.elId + '"]');
         if (!el) break;
-        if (action.before.w) el.style.width = action.before.w + 'px';
+        if (action.before.w) el.style.width  = action.before.w + 'px';
         if (action.before.h) el.style.height = action.before.h + 'px';
+        if (action.before.x != null) el.style.left = action.before.x + 'px';
+        if (action.before.y != null) el.style.top  = action.before.y + 'px';
         updateConnectionsForEl(el);
-        if (isCollab) Collab.syncElementSize(action.elId, action.before.w, action.before.h, true);
+        if (isCollab) {
+          Collab.syncElementSize(action.elId, action.before.w, action.before.h, true);
+          if (action.before.x != null)
+            Collab.syncElementPosition(action.elId, action.before.x, action.before.y, true);
+        }
         break;
       }
       case 'editText':
@@ -2565,10 +2571,16 @@ const App = (function () {
       case 'resize': {
         const el = document.querySelector('[data-id="' + action.elId + '"]');
         if (!el) break;
-        if (action.after.w) el.style.width = action.after.w + 'px';
+        if (action.after.w) el.style.width  = action.after.w + 'px';
         if (action.after.h) el.style.height = action.after.h + 'px';
+        if (action.after.x != null) el.style.left = action.after.x + 'px';
+        if (action.after.y != null) el.style.top  = action.after.y + 'px';
         updateConnectionsForEl(el);
-        if (isCollab) Collab.syncElementSize(action.elId, action.after.w, action.after.h, true);
+        if (isCollab) {
+          Collab.syncElementSize(action.elId, action.after.w, action.after.h, true);
+          if (action.after.x != null)
+            Collab.syncElementPosition(action.elId, action.after.x, action.after.y, true);
+        }
         break;
       }
       case 'editText':

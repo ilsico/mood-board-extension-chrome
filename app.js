@@ -1968,6 +1968,7 @@ const App = (function () {
         resizeEl = null;
         clearSnapGuides();
         pushHistory();
+        updateCornerHandles();
       }
       if (isSelecting) {
         isSelecting = false;

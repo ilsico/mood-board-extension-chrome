@@ -4207,50 +4207,76 @@ const App = (function () {
     return { w: 60, h: 40 };
   }
 
+  function _scheduleResizeFrame() {
+    if (_resizeRafId) return;
+    _resizeRafId = requestAnimationFrame(() => {
+      _resizeRafId = null;
+      if (!isResizing || !resizeEl) return;
+      resizeEl.style.width  = _resizeTargetW    + 'px';
+      resizeEl.style.height = _resizeTargetH    + 'px';
+      resizeEl.style.left   = _resizeTargetLeft + 'px';
+      resizeEl.style.top    = _resizeTargetTop  + 'px';
+      if (resizeEl.dataset.type === 'file') {
+        const fw = resizeEl.querySelector('.el-file');
+        if (fw) {
+          fw.style.transform = 'scale(' + _resizeTargetW / 260 + ')';
+          fw.style.transformOrigin = 'top left';
+        }
+      }
+      const _rId = resizeEl.dataset.id;
+      if (_rId) {
+        document.querySelectorAll(`.el-caption[data-parent-id="${_rId}"]`).forEach((cap) => {
+          cap.style.width = _resizeTargetW    + 'px';
+          cap.style.left  = _resizeTargetLeft + 'px';
+          cap.style.top   = (_resizeTargetTop + _resizeTargetH) + 'px';
+        });
+      }
+      updateConnectionsForEl(resizeEl);
+      updateCornerHandles();
+    });
+  }
+
   function handleResizeMouse(e) {
     const dx = (e.clientX - resizeStartX) / zoomLevel;
     const dy = (e.clientY - resizeStartY) / zoomLevel;
     const mins = _getMinSize(resizeEl);
-    let fw, fh;
 
+    const rawW = (resizeCorner === 'se' || resizeCorner === 'ne')
+      ? resizeStartW + dx : resizeStartW - dx;
+    const rawH = (resizeCorner === 'se' || resizeCorner === 'sw')
+      ? resizeStartH + dy : resizeStartH - dy;
+
+    let fw, fh;
     if (resizeRatio) {
-      const newW = Math.max(mins.w, resizeStartW + dx);
-      const newH = Math.max(mins.h, resizeStartH + dy);
-      const scale = Math.max(newW / resizeStartW, newH / resizeStartH);
+      const scale = Math.max(
+        rawW / resizeStartW,
+        rawH / resizeStartH,
+        mins.w / resizeStartW
+      );
       fw = Math.max(mins.w, Math.round(resizeStartW * scale));
       fh = Math.max(mins.h, Math.round(fw / resizeRatio));
     } else {
-      fw = Math.max(mins.w, resizeStartW + dx);
-      fh = Math.max(mins.h, resizeStartH + dy);
+      fw = Math.max(mins.w, rawW);
+      fh = Math.max(mins.h, rawH);
     }
 
-    resizeEl.style.width = fw + 'px';
-    resizeEl.style.height = fh + 'px';
+    const newLeft = resizeStartLeft +
+      (resizeCorner === 'sw' || resizeCorner === 'nw' ? resizeStartW - fw : 0);
+    const newTop  = resizeStartTop  +
+      (resizeCorner === 'ne' || resizeCorner === 'nw' ? resizeStartH - fh : 0);
 
-    // Carte fichier : scaler le contenu proportionnellement
-    if (resizeEl.dataset.type === 'file') {
-      var fileWrap = resizeEl.querySelector('.el-file');
-      if (fileWrap) {
-        var scaleFactor = fw / 260;
-        fileWrap.style.transform = 'scale(' + scaleFactor + ')';
-        fileWrap.style.transformOrigin = 'top left';
-      }
-    }
-
-    // ── Snap pendant le resize (seulement si Ctrl) ──────────────────────────
-    if (ctrlSnap) {
+    // Snap: only SE corner, unchanged behaviour
+    if (ctrlSnap && resizeCorner === 'se') {
       const T = snapThreshold / zoomLevel;
       const others = getAllElements(new Set([resizeEl]));
       if (others.length) {
-        const elL = parseFloat(resizeEl.style.left) || 0;
-        const elT = parseFloat(resizeEl.style.top) || 0;
+        const elL = newLeft;
+        const elT = newTop;
         let elR = elL + fw;
         let elB = elT + fh;
 
-        let snapDX = null,
-          snapDY = null;
-        const guidesH = [],
-          guidesV = [];
+        let snapDX = null, snapDY = null;
+        const guidesH = [], guidesV = [];
 
         others.forEach((other) => {
           const or = getRect(other);
@@ -4275,23 +4301,14 @@ const App = (function () {
         if (snapDX) {
           const snappedW = Math.max(resizeRatio ? 40 : 60, fw + snapDX);
           if (resizeRatio) {
-            const snappedH = Math.round(snappedW / resizeRatio);
-            resizeEl.style.width = snappedW + 'px';
-            resizeEl.style.height = snappedH + 'px';
+            fw = snappedW;
+            fh = Math.round(snappedW / resizeRatio);
           } else {
-            resizeEl.style.width = snappedW + 'px';
-          }
-          // Resync scale fichier sur la largeur snappée
-          if (resizeEl.dataset.type === 'file') {
-            var _fw = resizeEl.querySelector('.el-file');
-            if (_fw) {
-              _fw.style.transform = 'scale(' + snappedW / 260 + ')';
-              _fw.style.transformOrigin = 'top left';
-            }
+            fw = snappedW;
           }
         }
         if (snapDY && !resizeRatio) {
-          resizeEl.style.height = Math.max(40, fh + snapDY) + 'px';
+          fh = Math.max(40, fh + snapDY);
         }
 
         clearSnapGuides();
@@ -4302,18 +4319,11 @@ const App = (function () {
       clearSnapGuides();
     }
 
-    // Synchroniser les captions attachées lors du resize
-    const _rElId = resizeEl.dataset.id;
-    if (_rElId) {
-      document.querySelectorAll(`.el-caption[data-parent-id="${_rElId}"]`).forEach((cap) => {
-        cap.style.width = resizeEl.style.width;
-        cap.style.left = resizeEl.style.left;
-        cap.style.top = parseFloat(resizeEl.style.top) + resizeEl.offsetHeight + 'px';
-      });
-    }
-    // Mettre à jour les connecteurs en temps réel
-    updateConnectionsForEl(resizeEl);
-    updateCornerHandles();
+    _resizeTargetW    = fw;
+    _resizeTargetH    = fh;
+    _resizeTargetLeft = newLeft;
+    _resizeTargetTop  = newTop;
+    _scheduleResizeFrame();
   }
 
   // ── RESTORE ──────────────────────────────────────────────────────────────

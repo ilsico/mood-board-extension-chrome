@@ -316,7 +316,7 @@ const App = (function () {
     setupCanvasEvents();
     setupKeyboard();
     setupMultiResizeHandle();
-    setupSingleResizeHandle();
+    setupCornerHandles();
     setupConnectorTool();
     document.querySelectorAll('.modal-overlay').forEach((ov) => {
       ov.addEventListener('mousedown', (e) => {
@@ -1322,35 +1322,44 @@ const App = (function () {
     });
   }
 
-  function setupSingleResizeHandle() {
-    const handle = document.getElementById('single-resize-handle');
-    if (!handle) return;
-    handle.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      e.stopPropagation();
-      e.preventDefault();
-      if (!selectedEl) return;
-      if (document.body.classList.contains('readonly-mode')) return;
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        if (Collab.isLockedByOther(selectedEl.dataset.id)) {
-          toast('Élément verrouillé');
-          return;
+  function setupCornerHandles() {
+    ['nw', 'ne', 'sw', 'se'].forEach((corner) => {
+      const handle = document.getElementById('resize-corner-' + corner);
+      if (!handle) return;
+      handle.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        e.preventDefault();
+        if (!selectedEl) return;
+        if (document.body.classList.contains('readonly-mode')) return;
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          if (Collab.isLockedByOther(selectedEl.dataset.id)) {
+            toast('Élément verrouillé');
+            return;
+          }
+          Collab.acquireLock(selectedEl.dataset.id);
         }
-        Collab.acquireLock(selectedEl.dataset.id);
-      }
-      isResizing = true;
-      resizeEl = selectedEl;
-      resizeStartW = parseFloat(selectedEl.style.width) || selectedEl.offsetWidth;
-      resizeStartH = parseFloat(selectedEl.style.height) || selectedEl.offsetHeight;
-      resizeStartX = e.clientX;
-      resizeStartY = e.clientY;
-      resizeRatio =
-        (selectedEl.dataset.type === 'image' || selectedEl.dataset.type === 'file') &&
-        selectedEl.dataset.ratio
-          ? parseFloat(selectedEl.dataset.ratio)
-          : null;
+        isResizing = true;
+        resizeEl = selectedEl;
+        resizeStartW = parseFloat(selectedEl.style.width) || selectedEl.offsetWidth;
+        resizeStartH = parseFloat(selectedEl.style.height) || selectedEl.offsetHeight;
+        resizeStartLeft = parseFloat(selectedEl.style.left) || 0;
+        resizeStartTop = parseFloat(selectedEl.style.top) || 0;
+        resizeStartX = e.clientX;
+        resizeStartY = e.clientY;
+        resizeCorner = corner;
+        const t = selectedEl.dataset.type;
+        if (t === 'note' || t === 'color') {
+          resizeRatio = null;
+        } else if (selectedEl.dataset.ratio) {
+          resizeRatio = parseFloat(selectedEl.dataset.ratio);
+        } else {
+          resizeRatio = resizeStartH > 0 ? resizeStartW / resizeStartH : null;
+        }
+      });
     });
   }
+
   function updateZoomDisplay() {}
   function zoomIn() {
     zoomLevel = Math.min(zoomLevel + 0.1, 4);

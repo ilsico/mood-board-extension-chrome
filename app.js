@@ -31,9 +31,9 @@ const App = (function () {
   let snapThreshold = 8; // pixels canvas pour déclencher le snap
   let isAltDown = false; // état de la touche Alt
   let ctrlSnap = false; // Ctrl enfoncé → snap actif
+  let _justGroupDragged = false; // guard : empêche le click après un group drag
   let renamingBoardId = null;
   let ctxTargetEl = null;
-  let videoTabMode = 'url';
   let nextZ = 100;
   let _syncIntervalId = null;
   // Stockage hors-DOM des données base64 des images (évite des attributs HTML massifs)
@@ -142,6 +142,17 @@ const App = (function () {
     if (!board) return;
     const elements = [];
     document.querySelectorAll('#canvas .board-element').forEach((el) => {
+      const _elStyle = (() => {
+        if (el.dataset.type !== 'note') return null;
+        const ta = el.querySelector('textarea');
+        if (!ta) return null;
+        return {
+          fontFamily: ta.style.fontFamily || '',
+          fontWeight: ta.style.fontWeight || '',
+          fontSize: ta.style.fontSize || '',
+          textAlign: ta.style.textAlign || '',
+        };
+      })();
       elements.push({
         id: el.dataset.id,
         type: el.dataset.type,
@@ -154,6 +165,7 @@ const App = (function () {
           el.dataset.type === 'image'
             ? _imgStore.get(el.dataset.id) || el.dataset.savedata || ''
             : el.dataset.savedata || '',
+        style: _elStyle,
       });
     });
     // Sauvegarder les connexions
@@ -174,6 +186,12 @@ const App = (function () {
         width: cap.style.width,
         parentId: cap.dataset.parentId || '',
         text: cap.textContent || '',
+        style: {
+          fontFamily: cap.style.fontFamily || '',
+          fontWeight: cap.style.fontWeight || '',
+          fontSize: cap.style.fontSize || '',
+          textAlign: cap.style.textAlign || '',
+        },
       });
     });
     board.elements = elements;
@@ -182,6 +200,7 @@ const App = (function () {
     // Sync Firebase (fire-and-forget, silencieux)
     if (window._fbDb) {
       const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
+      if (board.thumbnail) payload.thumbnail = board.thumbnail;
       const payloadSize = new Blob([JSON.stringify(payload)]).size;
       if (payloadSize > 8 * 1024 * 1024) {
         toast(
@@ -229,6 +248,12 @@ const App = (function () {
           if (board) {
             board.thumbnail = thumb;
             saveBoards();
+            if (window._fbDb && currentBoardId) {
+              window._fbDb
+                .ref('boards/' + currentBoardId + '/thumbnail')
+                .set(thumb)
+                .catch(() => {});
+            }
           }
           toast('Moodboard synchronized!');
         };
@@ -285,15 +310,17 @@ const App = (function () {
     setupCanvasEvents();
     setupKeyboard();
     setupMultiResizeHandle();
+    setupSingleResizeHandle();
+    setupConnectorTool();
     document.querySelectorAll('.modal-overlay').forEach((ov) => {
       ov.addEventListener('mousedown', (e) => {
         if (e.target === ov) ov.classList.add('hidden');
       });
     });
-    document.addEventListener('click', (e) => {
+    document.addEventListener('click', () => {
       hideContextMenu();
       const am = document.getElementById('autosave-menu');
-      if (am && e.target.id !== 'refresh-save-btn') am.style.display = 'none';
+      if (am) am.style.display = 'none';
     });
     // Fermer le panneau texte au clic en dehors d'une note en édition
     document.addEventListener(
@@ -342,7 +369,7 @@ const App = (function () {
       };
       _ae('fit-screen-btn', () => fitElementsToScreen());
       _ae('preview-btn', () => togglePreviewMode());
-      _ae('refresh-save-btn', () => triggerManualSync());
+      _ae('exit-preview-btn', () => togglePreviewMode());
       // Charger le board depuis Firebase et rejoindre en tant que guest
       await _loadCollabBoard(_collabId);
       return;
@@ -358,6 +385,7 @@ const App = (function () {
       };
       _ae('fit-screen-btn', () => fitElementsToScreen());
       _ae('preview-btn', () => togglePreviewMode());
+      _ae('exit-preview-btn', () => togglePreviewMode());
       await _loadSharedBoard(_sharedId);
       return;
     }
@@ -419,30 +447,33 @@ const App = (function () {
     addEvt('back-btn', 'click', () => goHome());
     addEvt('fit-screen-btn', 'click', () => fitElementsToScreen());
     addEvt('preview-btn', 'click', () => togglePreviewMode());
-    addEvt('refresh-save-btn', 'click', () => triggerManualSync());
+    addEvt('exit-preview-btn', 'click', () => togglePreviewMode());
 
-    const refreshSaveBtn = document.getElementById('refresh-save-btn');
-    const autosaveMenu = document.getElementById('autosave-menu');
-    if (refreshSaveBtn && autosaveMenu) {
-      refreshSaveBtn.addEventListener('contextmenu', function (e) {
-        e.preventDefault();
-        const rect = this.getBoundingClientRect();
-        autosaveMenu.style.left = rect.left + 'px';
-        autosaveMenu.style.top = rect.bottom + 4 + 'px';
-        autosaveMenu.style.display = 'block';
+    // Auto-hide du groupe fit/aperçu : fade-in au hover, fade-out 2s après la sortie
+    const fitGroup = document.querySelector('.fit-btn-group');
+    if (fitGroup) {
+      let fitHideTimer = null;
+      fitGroup.addEventListener('mouseenter', () => {
+        clearTimeout(fitHideTimer);
+        fitGroup.classList.add('fit-visible');
       });
-      autosaveMenu.querySelectorAll('.ctx-item[data-interval]').forEach((item) => {
-        item.addEventListener('click', () => {
-          const ms = parseInt(item.dataset.interval, 10);
-          clearInterval(_syncIntervalId);
-          _syncIntervalId = setInterval(triggerManualSync, ms);
-          autosaveMenu.style.display = 'none';
-        });
+      fitGroup.addEventListener('mouseleave', () => {
+        clearTimeout(fitHideTimer);
+        fitHideTimer = setTimeout(() => {
+          fitGroup.classList.remove('fit-visible');
+        }, 2000);
       });
     }
-    addEvt('share-btn', 'click', () => {
+    addEvt('share-btn', 'click', (e) => {
       if (!currentBoardId) {
         toast('Aucun board ouvert');
+        return;
+      }
+      const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+      if (isCollab) {
+        e.stopPropagation();
+        const menu = document.getElementById('share-menu');
+        if (menu) menu.classList.toggle('hidden');
         return;
       }
       saveCurrentBoard();
@@ -451,6 +482,48 @@ const App = (function () {
         .writeText(shareUrl)
         .then(() => toast('Lien de lecture seule copié !'))
         .catch(() => toast('URL : ' + shareUrl));
+    });
+    addEvt('share-copy-id', 'click', (e) => {
+      e.stopPropagation();
+      if (!currentBoardId) return;
+      navigator.clipboard
+        .writeText(currentBoardId)
+        .then(() => toast('ID du board copié !'))
+        .catch(() => toast('ID : ' + currentBoardId));
+      const menu = document.getElementById('share-menu');
+      if (menu) menu.classList.add('hidden');
+    });
+    addEvt('share-copy-url', 'click', (e) => {
+      e.stopPropagation();
+      if (!currentBoardId) return;
+      saveCurrentBoard();
+      const shareUrl = SHARE_BASE_URL + '/?board=' + currentBoardId;
+      navigator.clipboard
+        .writeText(shareUrl)
+        .then(() => toast('Lien de lecture seule copié !'))
+        .catch(() => toast('URL : ' + shareUrl));
+      const menu = document.getElementById('share-menu');
+      if (menu) menu.classList.add('hidden');
+    });
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('share-wrap');
+      const menu = document.getElementById('share-menu');
+      if (!menu || !wrap) return;
+      if (menu.classList.contains('hidden')) return;
+      if (!wrap.contains(e.target)) menu.classList.add('hidden');
+    });
+    addEvt('broken-delete-all', 'click', () => {
+      const brokens = document.querySelectorAll('#canvas .board-element.image-broken');
+      if (!brokens.length) return;
+      multiSelected.clear();
+      selectedEl = null;
+      brokens.forEach((el) => multiSelected.add(el));
+      deleteSelected();
+      setTimeout(_updateBrokenBanner, 600);
+    });
+    addEvt('broken-banner-close', 'click', () => {
+      const b = document.getElementById('broken-images-banner');
+      if (b) b.classList.add('hidden');
     });
 
     // Bouton Collaborer
@@ -467,11 +540,7 @@ const App = (function () {
       const btn = document.getElementById('collab-btn');
 
       if (Collab.isActive()) {
-        // Session déjà active : juste copier l'ID
-        navigator.clipboard
-          .writeText(currentBoardId)
-          .then(() => toast('ID du board copié !'))
-          .catch(() => toast('ID : ' + currentBoardId));
+        if (btn) btn.style.display = 'none';
         return;
       }
 
@@ -492,35 +561,35 @@ const App = (function () {
         }
         navigator.clipboard
           .writeText(currentBoardId)
-          .then(() => toast('ID du board copié !'))
-          .catch(() => toast('ID : ' + currentBoardId));
-        if (btn) btn.classList.add('collab-active');
+          .then(() => toast('Session collaborative démarrée — ID copié !'))
+          .catch(() => toast('Session collaborative démarrée'));
+        if (btn) btn.style.display = 'none';
+        const shareWrap = document.getElementById('share-wrap');
+        if (shareWrap && window._fbDb && !document.body.classList.contains('readonly-mode'))
+          shareWrap.style.display = '';
       } catch (e) {
         toast('Erreur lors du démarrage de la session');
-        if (btn) btn.classList.remove('collab-active');
       }
     });
 
-    // Toolbar — outils (clic + drag)
-    document.getElementById('tool-note')?.addEventListener('click', () => addNote());
+    // Toolbar — outils (drag uniquement)
     document
       .getElementById('tool-note')
       ?.addEventListener('dragstart', (e) => toolDragStart(e, 'note'));
 
-    document.getElementById('tool-color')?.addEventListener('click', () => addColorDirect());
     document
       .getElementById('tool-color')
       ?.addEventListener('dragstart', (e) => toolDragStart(e, 'color'));
 
-    document.getElementById('tool-link')?.addEventListener('click', () => openLinkModal());
     document
       .getElementById('tool-link')
       ?.addEventListener('dragstart', (e) => toolDragStart(e, 'link'));
 
-    document.getElementById('tool-file')?.addEventListener('click', () => addFile());
     document
       .getElementById('tool-file')
       ?.addEventListener('dragstart', (e) => toolDragStart(e, 'file'));
+
+    addEvt('tool-connector', 'click', () => toggleConnectorMode());
 
     addEvt('tool-export', 'click', () => openExportModal());
 
@@ -553,26 +622,10 @@ const App = (function () {
     // Inputs fichiers cachés
     addEvt('file-input-images', 'change', (e) => handleImageUpload(e));
     addEvt('file-input-file', 'change', (e) => handleFileUpload(e));
-    addEvt('file-input-video', 'change', (e) => handleVideoUpload(e));
-
-    // Modale couleur
-    addEvt('close-color-modal', 'click', () => closeColorModal());
-    addEvt('color-picker-input', 'input', (e) => syncHex(e.target.value));
-    addEvt('hex-input', 'input', (e) => syncColor(e.target.value));
-    addEvt('add-color-btn', 'click', () => addColorElement());
 
     // Modale lien
     addEvt('close-link-modal', 'click', () => closeLinkModal());
     addEvt('submit-link', 'click', () => addLinkElement());
-
-    // Modale vidéo
-    addEvt('close-video-modal', 'click', () => closeVideoModal());
-    addEvt('vt-url', 'click', () => switchVideoTab('url'));
-    addEvt('vt-local', 'click', () => switchVideoTab('local'));
-    addEvt('submit-video-url', 'click', () => addVideoURL());
-    addEvt('submit-video-local', 'click', () =>
-      document.getElementById('file-input-video')?.click()
-    );
 
     // Modale rename
     addEvt('close-rename-modal', 'click', () => closeRenameModal());
@@ -591,17 +644,27 @@ const App = (function () {
 
     // Modale export
     addEvt('close-export-modal', 'click', () => closeExportModal());
-    addEvt('export-png-btn', 'click', () => {
-      exportPNG();
-      closeExportModal();
+    // Mettre à jour le style des labels format au clic
+    document.querySelectorAll('input[name="export-format"]').forEach((radio) => {
+      radio.addEventListener('change', () => {
+        document.querySelectorAll('input[name="export-format"]').forEach((r) => {
+          const lbl = r.closest('label');
+          if (r.checked) {
+            lbl.style.borderColor = '#ff3c00';
+            lbl.style.color = '#ff3c00';
+          } else {
+            lbl.style.borderColor = '#eaeaf0';
+            lbl.style.color = '#888';
+          }
+        });
+      });
     });
-    addEvt('export-pdf-hr-btn', 'click', () => {
-      exportPDF(2);
+    addEvt('export-do-btn', 'click', () => {
+      const quality = parseInt(document.getElementById('export-quality-slider').value);
+      const format = document.querySelector('input[name="export-format"]:checked').value;
       closeExportModal();
-    });
-    addEvt('export-pdf-lr-btn', 'click', () => {
-      exportPDF(1);
-      closeExportModal();
+      if (format === 'pdf') exportPDF(quality);
+      else exportPNG(quality);
     });
 
     // Menu contextuel
@@ -856,9 +919,10 @@ const App = (function () {
         'wheel',
         (e) => {
           e.preventDefault();
-          if (e.altKey) {
-            const delta = e.deltaY > 0 ? -0.08 : 0.08;
-            const newZ = Math.min(Math.max(homeZoom + delta, 0.15), 4);
+          if (e.altKey || e.ctrlKey) {
+            const rawMul = Math.exp(-e.deltaY * 0.01);
+            const cappedMul = Math.min(Math.max(rawMul, 0.5), 2.0);
+            const newZ = Math.min(Math.max(homeZoom * cappedMul, 0.15), 4);
             const rect = container.getBoundingClientRect();
             const mx = e.clientX - rect.left,
               my = e.clientY - rect.top;
@@ -921,7 +985,10 @@ const App = (function () {
         const t1 = e.touches[0],
           t2 = e.touches[1];
         const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-        const newZ = Math.min(Math.max(hPinchZoom * (dist / hPinchDist), 0.15), 4);
+        // Sensibilité basée sur le delta en pixels — uniforme à tout zoom
+        const deltaPx = dist - hPinchDist;
+        hPinchDist = dist;
+        const newZ = Math.min(Math.max(homeZoom * Math.exp(deltaPx * 0.04), 0.15), 4);
         const rect = container.getBoundingClientRect();
         const mx = hPinchMX - rect.left,
           my = hPinchMY - rect.top;
@@ -973,7 +1040,9 @@ const App = (function () {
           _openCollabBoard(board);
           return;
         }
-      } catch(e) { /* pas grave, continuer en local */ }
+      } catch (e) {
+        /* pas grave, continuer en local */
+      }
     }
 
     // Board collaboratif : auto-reconnexion via Firebase
@@ -994,18 +1063,16 @@ const App = (function () {
         currentBoardId = id;
         loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
         document.getElementById('board-title-display').textContent = board.name;
-        const shareBtn = document.getElementById('share-btn');
-        if (shareBtn && window._fbDb && !document.body.classList.contains('readonly-mode'))
-          shareBtn.style.display = '';
+        const shareWrap = document.getElementById('share-wrap');
+        if (shareWrap && window._fbDb && !document.body.classList.contains('readonly-mode'))
+          shareWrap.style.display = '';
+        const shareMenu = document.getElementById('share-menu');
+        if (shareMenu) shareMenu.classList.add('hidden');
         const collabBtn = document.getElementById('collab-btn');
-        if (collabBtn) collabBtn.classList.remove('collab-active');
-        var btnImg2 = collabBtn ? collabBtn.querySelector('img') : null;
-        if (btnImg2) btnImg2.src = 'PNG/collaborer.png';
-        if (collabBtn)
-          collabBtn.childNodes.forEach(function (n) {
-            if (n.nodeType === 3 && n.textContent.trim())
-              n.textContent = '\n            Collaborer\n          ';
-          });
+        if (collabBtn) {
+          collabBtn.classList.remove('collab-active');
+          collabBtn.style.display = '';
+        }
         document.getElementById('home-screen').style.display = 'none';
         document.getElementById('board-screen').style.display = 'flex';
         // Réattacher les listeners pinch maintenant que canvas-wrapper est visible
@@ -1024,18 +1091,21 @@ const App = (function () {
         if (board.elements && board.elements.length) {
           board.elements.forEach((e) => restoreElement(e));
           // Attendre le rendu (les images sont asynchrones), puis centrer
-          setTimeout(() => fitElementsToScreen(), 120);
+          setTimeout(() => fitElementsToScreen(true), 120);
         }
         pushHistory();
         renderPanelLib();
+        setTimeout(_updateBrokenBanner, 200);
         setTimeout(() => loaderOverlay.classList.add('hidden'), 2000);
       }, 0)
     );
   }
 
   function goHome() {
+    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+
     // Sauvegarder l'état courant pour les boards collaboratifs
-    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+    if (isCollab) {
       const board = boards.find((b) => b.id === currentBoardId);
       if (board) {
         board.elements = _collabGetBoardElements();
@@ -1053,8 +1123,12 @@ const App = (function () {
     }
     document.getElementById('board-screen').style.display = 'none';
     document.getElementById('home-screen').style.display = 'flex';
-    const shareBtn = document.getElementById('share-btn');
-    if (shareBtn) shareBtn.style.display = 'none';
+    const shareWrap = document.getElementById('share-wrap');
+    if (shareWrap) shareWrap.style.display = 'none';
+    const shareMenu = document.getElementById('share-menu');
+    if (shareMenu) shareMenu.classList.add('hidden');
+    const brokenBanner = document.getElementById('broken-images-banner');
+    if (brokenBanner) brokenBanner.classList.add('hidden');
     currentBoardId = null;
     selectedEl = null;
     multiSelected.clear();
@@ -1212,22 +1286,54 @@ const App = (function () {
     document.getElementById('canvas').style.transform =
       `translate(${panX}px,${panY}px) scale(${zoomLevel})`;
 
-    // Compenser le zoom sur les poignées de resize pour qu'elles restent constantes à l'écran
-    const invScale = 1 / zoomLevel;
-    document.querySelectorAll('#canvas .resize-handle').forEach((h) => {
-      h.style.transform = `scale(${invScale})`;
-    });
     updateMultiResizeHandle();
+    updateSingleResizeHandle();
   }
-  let zoomToastTimer;
-  function updateZoomDisplay() {
-    const t = document.getElementById('zoom-toast');
-    if (!t) return;
-    t.textContent = Math.round(zoomLevel * 100) + '%';
-    t.classList.add('show');
-    clearTimeout(zoomToastTimer);
-    zoomToastTimer = setTimeout(() => t.classList.remove('show'), 1200);
+
+  function updateSingleResizeHandle() {
+    const handle = document.getElementById('single-resize-handle');
+    if (!handle) return;
+    if (!selectedEl || multiSelected.size > 0) {
+      handle.style.display = 'none';
+      return;
+    }
+    const r = selectedEl.getBoundingClientRect();
+    const wRect = document.getElementById('canvas-wrapper').getBoundingClientRect();
+    handle.style.display = 'block';
+    handle.style.left = r.right - wRect.left + 'px';
+    handle.style.top = r.bottom - wRect.top + 'px';
   }
+
+  function setupSingleResizeHandle() {
+    const handle = document.getElementById('single-resize-handle');
+    if (!handle) return;
+    handle.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      if (!selectedEl) return;
+      if (document.body.classList.contains('readonly-mode')) return;
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        if (Collab.isLockedByOther(selectedEl.dataset.id)) {
+          toast('Élément verrouillé');
+          return;
+        }
+        Collab.acquireLock(selectedEl.dataset.id);
+      }
+      isResizing = true;
+      resizeEl = selectedEl;
+      resizeStartW = parseFloat(selectedEl.style.width) || selectedEl.offsetWidth;
+      resizeStartH = parseFloat(selectedEl.style.height) || selectedEl.offsetHeight;
+      resizeStartX = e.clientX;
+      resizeStartY = e.clientY;
+      resizeRatio =
+        (selectedEl.dataset.type === 'image' || selectedEl.dataset.type === 'file') &&
+        selectedEl.dataset.ratio
+          ? parseFloat(selectedEl.dataset.ratio)
+          : null;
+    });
+  }
+  function updateZoomDisplay() {}
   function zoomIn() {
     zoomLevel = Math.min(zoomLevel + 0.1, 4);
     applyTransform();
@@ -1253,7 +1359,9 @@ const App = (function () {
     updateZoomDisplay();
   }
 
-  function fitElementsToScreen() {
+  let _fitRaf = null;
+
+  function fitElementsToScreen(instant = false) {
     const els = document.querySelectorAll('#canvas .board-element');
     if (!els.length) return;
     // Bounding box de tous les éléments en coordonnées canvas
@@ -1288,29 +1396,130 @@ const App = (function () {
     // Zoom pour que le contenu + 5% de marge tiennent dans la fenêtre
     const scaleX = vw / totalW;
     const scaleY = vh / totalH;
-    zoomLevel = Math.min(Math.max(Math.min(scaleX, scaleY), 0.1), 3);
+    const targetZoom = Math.min(Math.max(Math.min(scaleX, scaleY), 0.1), 3);
 
     // Pan pour centrer le bounding box + marge dans la fenêtre
     const zoneLeft = minL - marginX;
     const zoneTop = minT - marginY;
-    panX = (vw - totalW * zoomLevel) / 2 - zoneLeft * zoomLevel;
-    panY = (vh - totalH * zoomLevel) / 2 - zoneTop * zoomLevel;
+    const targetPanX = (vw - totalW * targetZoom) / 2 - zoneLeft * targetZoom;
+    const targetPanY = (vh - totalH * targetZoom) / 2 - zoneTop * targetZoom;
 
-    applyTransform();
-    updateZoomDisplay();
+    if (instant) {
+      zoomLevel = targetZoom;
+      panX = targetPanX;
+      panY = targetPanY;
+      applyTransform();
+      updateZoomDisplay();
+      return;
+    }
+
+    // Animation fluide vers la cible
+    if (_fitRaf) cancelAnimationFrame(_fitRaf);
+    const startZoom = zoomLevel;
+    const startPanX = panX;
+    const startPanY = panY;
+    const duration = 420;
+    const startTime = performance.now();
+
+    function easeOutCubic(t) {
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function step(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = easeOutCubic(progress);
+
+      zoomLevel = startZoom + (targetZoom - startZoom) * ease;
+      panX = startPanX + (targetPanX - startPanX) * ease;
+      panY = startPanY + (targetPanY - startPanY) * ease;
+
+      applyTransform();
+      if (progress < 1) {
+        _fitRaf = requestAnimationFrame(step);
+      } else {
+        zoomLevel = targetZoom;
+        panX = targetPanX;
+        panY = targetPanY;
+        applyTransform();
+        updateZoomDisplay();
+        _fitRaf = null;
+      }
+    }
+
+    _fitRaf = requestAnimationFrame(step);
   }
 
   // ── MODE APERÇU PLEIN ÉCRAN ─────────────────────────────────────────────
   let previewMode = false;
-  let previewToastTimer = null;
+
+  function _exitPreviewAnimated() {
+    // Toujours fermer le panneau bibliothèque à la sortie du preview
+    if (libPanelOpen) {
+      libPanelOpen = false;
+      document.getElementById('lib-panel').classList.remove('open');
+    }
+
+    const header = document.getElementById('board-header');
+    const toolbar = document.getElementById('toolbar');
+    const libPanel = document.getElementById('lib-panel');
+    const fitGroup = document.querySelector('.fit-btn-group');
+    const delay = 180;
+    const duration = 380;
+    const ease = 'cubic-bezier(0.4, 0, 0.2, 1)';
+
+    // Pré-positionner les éléments hors-écran (invisibles : couverts par le canvas ou display:none)
+    header.style.transform = 'translateY(-100%)';
+    toolbar.style.transform = 'translateX(-100%)';
+    // lib-panel (fermé, width:0) : l'onglet dépasse de 38px à gauche → le cacher vers la droite
+    libPanel.style.transform = 'translateX(38px)';
+    if (fitGroup) fitGroup.style.opacity = '0';
+
+    // Supprimer preview-mode : éléments redeviennent visibles à leur position de départ
+    previewMode = false;
+    document.body.classList.remove('preview-mode');
+
+    // Forcer le reflow avant de démarrer la transition
+    void toolbar.offsetWidth;
+
+    const t = `transform ${duration}ms ${ease} ${delay}ms`;
+    header.style.transition = t;
+    toolbar.style.transition = t;
+    libPanel.style.transition = `transform ${duration}ms ${ease} ${delay}ms, width 0.32s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.32s cubic-bezier(0.4, 0, 0.2, 1)`;
+    header.style.transform = '';
+    toolbar.style.transform = '';
+    libPanel.style.transform = '';
+
+    // Fade-in du groupe fit-btn avec décalage
+    if (fitGroup) {
+      fitGroup.style.transition = `opacity ${Math.round(duration * 0.6)}ms ease ${delay + Math.round(duration * 0.3)}ms`;
+      fitGroup.style.opacity = '';
+    }
+
+    const cleanup = delay + duration + 60;
+    setTimeout(() => {
+      header.style.transition = '';
+      toolbar.style.transition = '';
+      libPanel.style.transition = '';
+      libPanel.style.transform = '';
+      if (fitGroup) {
+        fitGroup.style.transition = '';
+        fitGroup.style.opacity = '';
+      }
+    }, cleanup);
+
+    requestAnimationFrame(() => fitElementsToScreen());
+  }
 
   // Synchroniser previewMode si l'utilisateur quitte le plein écran via Échap/F11 natif
   document.addEventListener('fullscreenchange', () => {
     const isFs = !!document.fullscreenElement;
     if (!isFs && previewMode) {
-      // Le plein écran a été quitté sans passer par togglePreviewMode → sortir du mode preview aussi
-      previewMode = false;
-      document.body.classList.remove('preview-mode');
+      // Le plein écran a été quitté sans passer par togglePreviewMode → animation de sortie
+      _exitPreviewAnimated();
+    } else if (isFs && previewMode) {
+      // Fullscreen effectif : recalculer le fit avec les vraies dimensions plein écran
+      requestAnimationFrame(() => fitElementsToScreen(true));
     }
   });
 
@@ -1318,27 +1527,23 @@ const App = (function () {
     previewMode = !previewMode;
     document.body.classList.toggle('preview-mode', previewMode);
     if (previewMode) {
+      // Fermer le panneau bibliothèque avant d'entrer en preview
+      if (libPanelOpen) {
+        libPanelOpen = false;
+        document.getElementById('lib-panel').classList.remove('open');
+      }
       // Demander le plein écran natif (F11) — navigationUI:'hide' masque la vignette Chrome
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
       }
-      // Ajuster la vue pour remplir le plein écran
-      requestAnimationFrame(() => {
-        fitElementsToScreen();
-      });
-      // Toast "Échap pour sortir" — utilise #preview-toast (position:fixed, non masqué par preview-mode CSS)
-      const pt = document.getElementById('preview-toast');
-      if (pt) {
-        pt.textContent = 'Échap pour sortir';
-        pt.classList.add('show');
-        clearTimeout(previewToastTimer);
-        previewToastTimer = setTimeout(() => pt.classList.remove('show'), 2800);
-      }
+      // Ajuster la vue (fallback si fullscreen refusé — sinon géré par fullscreenchange)
+      requestAnimationFrame(() => requestAnimationFrame(() => fitElementsToScreen(true)));
     } else {
       // Quitter le plein écran natif si actif
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
       }
+      _exitPreviewAnimated();
     }
   }
 
@@ -1352,20 +1557,51 @@ const App = (function () {
 
     // Alt+molette = zoom, molette seule = pan
     // Alt+molette OU Pavé tactile (pinch) = zoom, molette seule = pan
+    const _isBoardLoading = () => {
+      const ov = document.getElementById('loader-overlay');
+      return !!(ov && !ov.classList.contains('hidden'));
+    };
+    // Bloquer wheel et touchmove pendant le chargement du board, peu importe
+    // l'élément cible (le loader-overlay couvre l'écran et n'est pas dans
+    // la chaîne d'ancêtres de wrapper, donc le early-return sur wrapper seul
+    // ne suffit pas).
+    document.addEventListener(
+      'wheel',
+      (e) => {
+        if (_isBoardLoading()) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      },
+      { capture: true, passive: false }
+    );
+    document.addEventListener(
+      'touchmove',
+      (e) => {
+        if (_isBoardLoading()) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      },
+      { capture: true, passive: false }
+    );
     wrapper.addEventListener(
       'wheel',
       (e) => {
+        if (_isBoardLoading()) {
+          e.preventDefault();
+          return;
+        }
         e.preventDefault();
 
         // Détecte soit Alt + Molette, soit le Pinch du pavé tactile
         if (e.altKey || e.ctrlKey) {
-          // Utilisation du delta réel pour gérer le trackpad en douceur
-          let zoomDelta = -(e.deltaY * 0.002);
-
-          // Plafond de vitesse pour les souris classiques
-          zoomDelta = Math.max(-0.15, Math.min(0.15, zoomDelta));
-
-          const newZ = Math.min(Math.max(zoomLevel + zoomDelta, 0.15), 4);
+          // Formule multiplicative : sensibilité uniforme à tous les niveaux de zoom.
+          // Plafond du multiplicateur par event pour éviter un saut énorme avec
+          // un cran de molette de souris classique.
+          const rawMul = Math.exp(-e.deltaY * 0.01);
+          const cappedMul = Math.min(Math.max(rawMul, 0.5), 2.0);
+          const newZ = Math.min(Math.max(zoomLevel * cappedMul, 0.15), 4);
 
           if (Math.abs(newZ - zoomLevel) > 0.001) {
             const rect = wrapper.getBoundingClientRect();
@@ -1436,6 +1672,10 @@ const App = (function () {
       'touchmove',
       (e) => {
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+        if (_isBoardLoading()) {
+          e.preventDefault();
+          return;
+        }
 
         if (isTouchPanning && e.touches.length === 2) {
           e.preventDefault();
@@ -1449,13 +1689,15 @@ const App = (function () {
           panY = initialPanY + (currentY - touchStartY);
           clampPan();
 
-          // Pinch-to-zoom
+          // Pinch-to-zoom — sensibilité basée sur le delta en pixels
+          // (indépendant de l'écartement absolu des doigts et du zoom courant)
           if (initialPinchDist > 0) {
             const dx = e.touches[1].clientX - e.touches[0].clientX;
             const dy = e.touches[1].clientY - e.touches[0].clientY;
             const newDist = Math.sqrt(dx * dx + dy * dy);
-            const ratio = newDist / initialPinchDist;
-            const newZ = Math.min(Math.max(initialZoomForPinch * ratio, 0.15), 4);
+            const deltaPx = newDist - initialPinchDist;
+            initialPinchDist = newDist;
+            const newZ = Math.min(Math.max(zoomLevel * Math.exp(deltaPx * 0.08), 0.15), 4);
 
             if (Math.abs(newZ - zoomLevel) > 0.001) {
               const rect = wrapper.getBoundingClientRect();
@@ -1496,6 +1738,37 @@ const App = (function () {
       true
     );
 
+    // Pan global (clic molette ou espace + clic gauche) — capturé AVANT les handlers
+    // d'éléments enfants pour fonctionner même si le curseur est au-dessus d'un élément.
+    let _wasJustPanning = false;
+    wrapper.addEventListener(
+      'mousedown',
+      (e) => {
+        if (e.button === 1 || (isPanningMode && e.button === 0)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          isPanning = true;
+          _wasJustPanning = true;
+          panStart = { x: e.clientX - panX, y: e.clientY - panY };
+          document.body.classList.add('is-panning');
+        }
+      },
+      true
+    );
+    // Bloquer le click qui suit immédiatement un pan (sinon le trackpad
+    // déclenche un click natif qui sélectionne l'élément cliqué).
+    wrapper.addEventListener(
+      'click',
+      (e) => {
+        if (_wasJustPanning) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          _wasJustPanning = false;
+        }
+      },
+      true
+    );
+
     // Clic molette (button 1) sur n'importe quelle zone = pan
     wrapper.addEventListener('mousedown', (e) => {
       if (e.button === 1) {
@@ -1527,7 +1800,17 @@ const App = (function () {
 
       // Rectangle de sélection
       hideContextMenu();
-      if (!e.shiftKey) {
+      // Désélectionner les items du panneau bibliothèque
+      libSelectedIds.clear();
+      document
+        .querySelectorAll('.lib-panel-item.selected-lib-item')
+        .forEach((d) => d.classList.remove('selected-lib-item'));
+      // Blur tout input actif hors canvas pour débloquer isTyping
+      const ae = document.activeElement;
+      if (ae && ae !== document.body && !document.getElementById('canvas').contains(ae)) {
+        ae.blur();
+      }
+      if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
         deselectAll();
         multiSelected.clear();
       }
@@ -1583,6 +1866,12 @@ const App = (function () {
       if (isPanning) {
         isPanning = false;
         wrapper.style.cursor = '';
+        document.body.classList.remove('is-panning');
+        // Reset différé : laisse passer un éventuel click event natif (consommé
+        // par le capture handler), puis libère le flag pour les clicks suivants.
+        setTimeout(() => {
+          _wasJustPanning = false;
+        }, 0);
       }
       if (isResizing) {
         // Collab: sync taille finale + libérer le lock
@@ -1591,6 +1880,22 @@ const App = (function () {
           const fh = parseFloat(resizeEl.style.height) || null;
           Collab.syncElementSize(resizeEl.dataset.id, fw, fh, true);
           Collab.releaseLock(resizeEl.dataset.id);
+          // Collab: sync la nouvelle position des captions attachées
+          const _rElId = resizeEl.dataset.id;
+          if (_rElId) {
+            document.querySelectorAll(`.el-caption[data-parent-id="${_rElId}"]`).forEach((cap) => {
+              if (cap.dataset.capId) {
+                Collab.syncCaption(
+                  cap.dataset.capId,
+                  _rElId,
+                  parseFloat(cap.style.left) || 0,
+                  parseFloat(cap.style.top) || 0,
+                  cap.style.width || '',
+                  cap.textContent || ''
+                );
+              }
+            });
+          }
         }
         // Action-based undo for resize
         if (resizeEl) {
@@ -1699,6 +2004,18 @@ const App = (function () {
         const rect = wrapper.getBoundingClientRect();
         const items = draggedLibItems.slice();
         draggedLibItems = [];
+        const createdEls = new Array(items.length).fill(null);
+        let pending = items.length;
+        const onAllLoaded = () => {
+          const validEls = createdEls.filter(Boolean);
+          if (!validEls.length) return;
+          pushAction({
+            type: 'groupCreate',
+            elId: validEls.map((el) => el.dataset.id),
+            after: validEls.map((el) => _captureElState(el)),
+          });
+          pushHistory();
+        };
         items.forEach((libItem, i) => {
           const tmpImg = new Image();
           tmpImg.onload = () => {
@@ -1719,27 +2036,21 @@ const App = (function () {
             const x = (e.clientX - rect.left - panX) / zoomLevel - w / 2 + i * 30;
             const y = (e.clientY - rect.top - panY) / zoomLevel - h / 2 + i * 30;
             var libImgEl = createImageElement(libItem.src, x, y, w, h);
-            if (libImgEl) _collabSyncCreatedEl(libImgEl);
-            if (libImgEl)
-              pushAction({
-                type: 'create',
-                elId: libImgEl.dataset.id,
-                after: _captureElState(libImgEl),
-              });
-            pushHistory();
+            if (libImgEl) {
+              _collabSyncCreatedEl(libImgEl);
+              createdEls[i] = libImgEl;
+            }
+            if (--pending === 0) onAllLoaded();
           };
           tmpImg.onerror = () => {
             const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 30;
             const y = (e.clientY - rect.top - panY) / zoomLevel - 85 + i * 30;
             var libImgEl = createImageElement(libItem.src, x, y, 220, 170);
-            if (libImgEl) _collabSyncCreatedEl(libImgEl);
-            if (libImgEl)
-              pushAction({
-                type: 'create',
-                elId: libImgEl.dataset.id,
-                after: _captureElState(libImgEl),
-              });
-            pushHistory();
+            if (libImgEl) {
+              _collabSyncCreatedEl(libImgEl);
+              createdEls[i] = libImgEl;
+            }
+            if (--pending === 0) onAllLoaded();
           };
           tmpImg.src = libItem.src;
         });
@@ -1860,7 +2171,7 @@ const App = (function () {
       if (e.code === 'Space' && !isTyping(e)) {
         e.preventDefault();
         isPanningMode = true;
-        document.getElementById('canvas-wrapper').style.cursor = 'grab';
+        document.body.classList.add('is-pan-mode');
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -1889,17 +2200,43 @@ const App = (function () {
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isTyping(e)) {
         if (document.body.classList.contains('readonly-mode')) return;
         e.preventDefault();
-        deleteSelected();
+        if (libSelectedIds.size > 0) {
+          _deleteSelectedLibItems();
+        } else {
+          deleteSelected();
+        }
       }
       if (e.key === 'Escape') {
         if (previewMode) {
           togglePreviewMode();
           return;
         }
+        if (connectorMode) {
+          setConnectorMode(false);
+          return;
+        }
         deselectAll();
         multiSelected.clear();
         hideContextMenu();
         closeAllModals();
+      }
+      if (
+        (e.key === 'n' || e.key === 'N') &&
+        !isTyping(e) &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.shiftKey
+      ) {
+        e.preventDefault();
+        toggleLibPanel();
+      }
+      if ((e.key === 'a' || e.key === 'A') && !isTyping(e) && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          togglePreviewMode();
+        } else {
+          fitElementsToScreen();
+        }
       }
       // (Ctrl+V géré par l'événement 'paste' ci-dessous, sans demande de permission)
     });
@@ -1908,7 +2245,7 @@ const App = (function () {
       if (e.key === 'Control') ctrlSnap = false;
       if (e.code === 'Space') {
         isPanningMode = false;
-        document.getElementById('canvas-wrapper').style.cursor = '';
+        document.body.classList.remove('is-pan-mode');
       }
     });
     // Sécurité : reset Alt/Ctrl si la fenêtre perd le focus
@@ -2089,7 +2426,7 @@ const App = (function () {
           const swatch = el.querySelector('.color-swatch');
           if (swatch) swatch.style.backgroundColor = action.before.data;
           const hexInput = el.querySelector('.color-hex-input');
-          if (hexInput) hexInput.value = action.before.data.replace('#', '');
+          if (hexInput) hexInput.value = action.before.data;
         }
         if (isCollab) Collab.syncElementData(action.elId, action.before.data);
         break;
@@ -2125,6 +2462,7 @@ const App = (function () {
           if (isCollab)
             Collab.syncElementPosition(id, action.before[i].x, action.before[i].y, true);
         });
+        deselectAll();
         break;
       }
       case 'groupCreate': {
@@ -2139,6 +2477,20 @@ const App = (function () {
           if (isCollab) Collab.syncElementDelete(id);
         });
         deselectAll();
+        break;
+      }
+      case 'libDelete': {
+        if (!Array.isArray(action.before)) break;
+        // Réinsérer du plus petit index au plus grand pour retrouver l'ordre original
+        const sorted = action.before.slice().sort((a, b) => a.index - b.index);
+        sorted.forEach((entry) => {
+          if (!library[entry.folder]) library[entry.folder] = [];
+          const arr = library[entry.folder];
+          const idx = Math.min(entry.index, arr.length);
+          arr.splice(idx, 0, entry.item);
+        });
+        saveLibrary();
+        renderPanelLib();
         break;
       }
     }
@@ -2180,7 +2532,7 @@ const App = (function () {
           const swatch = el.querySelector('.color-swatch');
           if (swatch) swatch.style.backgroundColor = action.after.data;
           const hexInput = el.querySelector('.color-hex-input');
-          if (hexInput) hexInput.value = action.after.data.replace('#', '');
+          if (hexInput) hexInput.value = action.after.data;
         }
         if (isCollab) Collab.syncElementData(action.elId, action.after.data);
         break;
@@ -2231,6 +2583,16 @@ const App = (function () {
         });
         break;
       }
+      case 'libDelete': {
+        if (!Array.isArray(action.before)) break;
+        const ids = new Set(action.before.map((e) => e.item && e.item.id).filter(Boolean));
+        Object.keys(library).forEach((folder) => {
+          library[folder] = library[folder].filter((it) => !ids.has(it.id));
+        });
+        saveLibrary();
+        renderPanelLib();
+        break;
+      }
     }
   }
 
@@ -2263,6 +2625,7 @@ const App = (function () {
         }
         _applyReverse(action);
         _actionIndex--;
+        updateSingleResizeHandle();
         toast('Annulé');
         return;
       }
@@ -2282,8 +2645,7 @@ const App = (function () {
     historyIndex--;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
-    selectedEl = null;
-    multiSelected.clear();
+    deselectAll();
     toast('Annulé');
   }
 
@@ -2299,6 +2661,7 @@ const App = (function () {
       _actionIndex++;
       const action = _actionHistory[_actionIndex];
       _applyForward(action);
+      updateSingleResizeHandle();
       toast('Rétabli');
       return;
     }
@@ -2311,8 +2674,7 @@ const App = (function () {
     historyIndex++;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
-    selectedEl = null;
-    multiSelected.clear();
+    deselectAll();
     toast('Rétabli');
   }
   function reattachAllEvents() {
@@ -2456,10 +2818,18 @@ const App = (function () {
           d = JSON.parse(el.dataset.savedata || '{}');
         } catch (_) {}
         if (d.fileData) {
-          var a = document.createElement('a');
-          a.href = d.fileData;
-          a.download = d.name || 'fichier';
-          a.click();
+          if (typeof chrome !== 'undefined' && chrome.downloads) {
+            chrome.downloads.download({
+              url: d.fileData,
+              filename: d.name || 'fichier',
+              saveAs: true,
+            });
+          } else {
+            var a = document.createElement('a');
+            a.href = d.fileData;
+            a.download = d.name || 'fichier';
+            a.click();
+          }
         } else {
           toast('Aucun fichier attaché');
         }
@@ -2483,9 +2853,17 @@ const App = (function () {
       swatch.style.background = el.dataset.savedata;
     }
     let _colorValueOnFocus = el.dataset.savedata || '#000000';
+    // Readonly par défaut, éditable au double-clic
+    hexInput.readOnly = true;
     // Bloquer le drag depuis l'input
     hexInput.addEventListener('mousedown', (e) => e.stopPropagation());
     hexInput.addEventListener('pointerdown', (e) => e.stopPropagation());
+    hexInput.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      hexInput.readOnly = false;
+      hexInput.focus();
+      hexInput.select();
+    });
     hexInput.addEventListener('focus', () => {
       _colorValueOnFocus = el.dataset.savedata || '#000000';
       // Collab: vérifier et acquérir le lock
@@ -2499,7 +2877,8 @@ const App = (function () {
       }
     });
     function applyHexColor(val) {
-      const v = val.trim().toUpperCase();
+      let v = val.trim().toUpperCase();
+      if (!v.startsWith('#')) v = '#' + v;
       if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) {
         swatch.style.background = v;
         el.dataset.savedata = v;
@@ -2532,6 +2911,7 @@ const App = (function () {
     hexInput.addEventListener('blur', () => {
       if (!applyHexColor(hexInput.value))
         hexInput.value = (el.dataset.savedata || '#000000').toUpperCase();
+      hexInput.readOnly = true;
       // Collab: libérer le lock
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.releaseLock(el.dataset.id);
@@ -2539,9 +2919,16 @@ const App = (function () {
     });
     hexInput.addEventListener('input', () => {
       hexInput.value = hexInput.value.toUpperCase();
-      const v = hexInput.value.trim();
+      let v = hexInput.value.trim();
+      if (!v.startsWith('#')) v = '#' + v;
       if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) swatch.style.background = v;
     });
+    // Empêcher le drag natif de l'image pipette
+    const eyeImg = eyeBtn.querySelector('img');
+    if (eyeImg) {
+      eyeImg.draggable = false;
+      eyeImg.style.pointerEvents = 'none';
+    }
     eyeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
     eyeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     eyeBtn.addEventListener('click', (e) => {
@@ -2578,11 +2965,21 @@ const App = (function () {
     selectedEl = null;
     multiSelected.clear();
     updateMultiResizeHandle();
+    updateSingleResizeHandle();
     updateAllConnections();
     _collabSyncSelection();
   }
 
   function selectEl(el, addToMulti = false) {
+    // Désélectionner les images de la bibliothèque pour éviter qu'un Suppr
+    // ultérieur ne les efface alors que l'intention vise un élément du board.
+    if (libSelectedIds.size) {
+      libSelectedIds.clear();
+      _libLastClickedId = null;
+      document
+        .querySelectorAll('.lib-panel-item.selected-lib-item')
+        .forEach((d) => d.classList.remove('selected-lib-item'));
+    }
     if (addToMulti) {
       // Shift+clic : toggle dans la sélection multiple
       if (multiSelected.has(el)) {
@@ -2611,6 +3008,7 @@ const App = (function () {
       }
     }
     updateMultiResizeHandle();
+    updateSingleResizeHandle();
     _collabSyncSelection();
   }
 
@@ -2664,6 +3062,18 @@ const App = (function () {
     }, 180);
   }
 
+  function _updateBrokenBanner() {
+    const banner = document.getElementById('broken-images-banner');
+    if (!banner) return;
+    const count = document.querySelectorAll('#canvas .board-element.image-broken').length;
+    if (count > 0) {
+      const cEl = document.getElementById('broken-count');
+      if (cEl) cEl.textContent = count;
+      banner.classList.remove('hidden');
+    } else {
+      banner.classList.add('hidden');
+    }
+  }
   function deleteSelected() {
     const toDelete = [];
     multiSelected.forEach((el) => {
@@ -2852,6 +3262,8 @@ const App = (function () {
       maxR = -Infinity,
       maxB = -Infinity;
 
+    const selectedIds = new Set(group.map((el) => el.dataset.id));
+
     group.forEach((el) => {
       const r = el.getBoundingClientRect();
       const left = r.left - wrapperRect.left;
@@ -2859,6 +3271,20 @@ const App = (function () {
       const right = r.right - wrapperRect.left;
       const bottom = r.bottom - wrapperRect.top;
 
+      if (left < minL) minL = left;
+      if (top < minT) minT = top;
+      if (right > maxR) maxR = right;
+      if (bottom > maxB) maxB = bottom;
+    });
+
+    // Inclure les captions attachées aux éléments sélectionnés
+    document.querySelectorAll('.el-caption').forEach((cap) => {
+      if (!selectedIds.has(cap.dataset.parentId)) return;
+      const r = cap.getBoundingClientRect();
+      const left = r.left - wrapperRect.left;
+      const top = r.top - wrapperRect.top;
+      const right = r.right - wrapperRect.left;
+      const bottom = r.bottom - wrapperRect.top;
       if (left < minL) minL = left;
       if (top < minT) minT = top;
       if (right > maxR) maxR = right;
@@ -2959,6 +3385,17 @@ const App = (function () {
       const onUp = () => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
+        // Collab : sync taille + position finale de chaque élément du groupe
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          group.forEach((el) => {
+            const x = parseFloat(el.style.left) || 0;
+            const y = parseFloat(el.style.top) || 0;
+            const w = parseFloat(el.style.width) || null;
+            const h = parseFloat(el.style.height) || null;
+            Collab.syncElementPosition(el.dataset.id, x, y, true);
+            Collab.syncElementSize(el.dataset.id, w, h, true);
+          });
+        }
         pushHistory();
       };
       window.addEventListener('mousemove', onMove);
@@ -2984,28 +3421,6 @@ const App = (function () {
     if (h) el.style.height = h + 'px';
     el.style.zIndex = ++nextZ;
 
-    const tb = document.createElement('div');
-    tb.className = 'element-toolbar';
-    tb.innerHTML = `
-      <button class="el-tool-btn btn-duplicate" title="Dupliquer"><img src="PNG/dupliquer.png"></button>
-      <button class="el-tool-btn danger btn-delete" title="Supprimer"><img src="PNG/supprimer.png"></button>`;
-
-    // Ajout des événements via JS pur pour respecter la CSP
-    tb.querySelector('.btn-duplicate').addEventListener('click', function (e) {
-      e.stopPropagation();
-      duplicateEl(this);
-    });
-    tb.querySelector('.btn-delete').addEventListener('click', function (e) {
-      e.stopPropagation();
-      removeEl(this);
-    });
-
-    el.appendChild(tb);
-
-    const rh = document.createElement('div');
-    rh.className = 'resize-handle';
-    el.appendChild(rh);
-
     attachElementEvents(el);
     document.getElementById('canvas').appendChild(el);
     return el;
@@ -3030,7 +3445,13 @@ const App = (function () {
       e.stopPropagation();
       e.preventDefault();
 
-      if (e.shiftKey) {
+      // Blur tout input actif hors canvas (ex: barre de recherche) pour débloquer isTyping
+      const ae = document.activeElement;
+      if (ae && ae !== document.body && !document.getElementById('canvas').contains(ae)) {
+        ae.blur();
+      }
+
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
         selectEl(el, true);
         return;
       }
@@ -3041,6 +3462,8 @@ const App = (function () {
       }
 
       selectEl(el);
+      const _srhInit = document.getElementById('single-resize-handle');
+      if (_srhInit) _srhInit.style.display = 'none';
       const canvasRect = document.getElementById('canvas').getBoundingClientRect();
       const startMX = (e.clientX - canvasRect.left) / zoomLevel;
       const startMY = (e.clientY - canvasRect.top) / zoomLevel;
@@ -3055,6 +3478,8 @@ const App = (function () {
       let startTop = parseFloat(dragEl.style.top) || 0;
       let curX = startLeft,
         curY = startTop;
+      let targetX = startLeft,
+        targetY = startTop;
 
       function doDuplicate() {
         if (duplicated) return;
@@ -3065,8 +3490,8 @@ const App = (function () {
         if (el.dataset.type === 'image' && _imgStore.has(el.dataset.id))
           _imgStore.set(copy.dataset.id, _imgStore.get(el.dataset.id));
         copy.style.zIndex = ++nextZ;
-        copy.style.left = curX + 'px';
-        copy.style.top = curY + 'px';
+        copy.style.left = targetX + 'px';
+        copy.style.top = targetY + 'px';
         copy.style.transform = '';
         // Restore original element to its pre-drag position
         el.style.left = origLeft + 'px';
@@ -3080,10 +3505,14 @@ const App = (function () {
         // Marquer la copie comme "en cours de création" pour bloquer les .update() de position
         copy._collabPendingCreate = true;
         dragEl = copy;
+        const _srh = document.getElementById('single-resize-handle');
+        if (_srh) _srh.style.display = 'none';
         selectEl(dragEl);
         excludeSet.add(dragEl);
-        startLeft = curX;
-        startTop = curY;
+        startLeft = targetX;
+        startTop = targetY;
+        curX = targetX;
+        curY = targetY;
         // Collab: sync la position de l'original (retour à sa place) pour le remote
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
           Collab.syncElementPosition(el.dataset.id, origLeft, origTop, true);
@@ -3097,8 +3526,6 @@ const App = (function () {
       let currentStartMY = startMY;
       let moved = false;
 
-      let targetX = startLeft,
-        targetY = startTop;
       let rafId = null;
       let dragActive = true;
       let shiftAxisX = null;
@@ -3143,6 +3570,8 @@ const App = (function () {
           }
 
           dragEl.style.transform = `translate3d(${vx}px,${vy}px,0)`;
+          const _srh2 = document.getElementById('single-resize-handle');
+          if (_srh2 && _srh2.style.display !== 'none') _srh2.style.display = 'none';
 
           // Throttle: update connections every other frame
           if (++_frameCount % 2 === 0) {
@@ -3200,26 +3629,31 @@ const App = (function () {
           targetY = startTop;
           shiftAxisX = prevAxis;
         }
-        // Alt relâché après duplication → annuler la copie, continuer avec l'original
+        // Alt relâché → copie supprimée, original reprend drag depuis position du curseur
         if (!isAltDown && duplicated && dragEl !== el) {
-          const copyLeft = curX,
-            copyTop = curY;
+          const copyX = targetX,
+            copyY = targetY;
           dragEl.remove();
           duplicated = false;
           dragEl = el;
           selectEl(el);
-          excludeSet.delete(dragEl);
-          el.style.left = copyLeft + 'px';
-          el.style.top = copyTop + 'px';
-          curX = copyLeft;
-          curY = copyTop;
-          targetX = copyLeft;
-          targetY = copyTop;
-          startLeft = copyLeft;
-          startTop = copyTop;
+          const _srh3 = document.getElementById('single-resize-handle');
+          if (_srh3) _srh3.style.display = 'none';
+          el.style.left = copyX + 'px';
+          el.style.top = copyY + 'px';
+          el.style.transform = '';
+          curX = copyX;
+          curY = copyY;
+          targetX = copyX;
+          targetY = copyY;
+          startLeft = copyX;
+          startTop = copyY;
           currentStartMX = (ev.clientX - canvasRect.left) / zoomLevel;
           currentStartMY = (ev.clientY - canvasRect.top) / zoomLevel;
-          // Collab: re-acquérir le lock sur l'original pour reprendre le sync position
+          // Collab: sync la nouvelle position (curseur, pas P0)
+          if (typeof Collab !== 'undefined' && Collab.isActive()) {
+            Collab.syncElementPosition(el.dataset.id, copyX, copyY, true);
+          }
           if (typeof Collab !== 'undefined' && Collab.isActive() && !_collabLockAcquired) {
             Collab.acquireLock(el.dataset.id).then(function (ok) {
               if (ok) _collabLockAcquired = true;
@@ -3259,7 +3693,7 @@ const App = (function () {
       const onUp = () => {
         dragActive = false;
         document.body.classList.remove('is-dragging-el'); // <-- RETRAIT ICI
-
+        dragEl.classList.remove('is-dragging');
         cancelAnimationFrame(rafId);
         // Appliquer la position finale exacte et enlever le tilt
         dragEl.style.left = targetX + 'px';
@@ -3267,6 +3701,7 @@ const App = (function () {
         dragEl.style.transform = '';
         if (ctrlSnap) applySnap(dragEl, excludeSet);
         updateConnectionsForEl(dragEl); // position finale après snap éventuel
+        updateSingleResizeHandle();
         clearSnapGuides();
         // Repositionner les captions attachées sur la position finale
         const _elId2 = dragEl.dataset.id;
@@ -3276,6 +3711,17 @@ const App = (function () {
           document.querySelectorAll(`.el-caption[data-parent-id="${_elId2}"]`).forEach((cap) => {
             cap.style.left = finalLeft + 'px';
             cap.style.top = finalTop + dragEl.offsetHeight + 'px';
+            // Collab: sync la nouvelle position de la caption
+            if (typeof Collab !== 'undefined' && Collab.isActive() && cap.dataset.capId) {
+              Collab.syncCaption(
+                cap.dataset.capId,
+                _elId2,
+                finalLeft,
+                finalTop + dragEl.offsetHeight,
+                cap.style.width || '',
+                cap.textContent || ''
+              );
+            }
           });
         }
         window.removeEventListener('mousemove', onMove);
@@ -3334,6 +3780,9 @@ const App = (function () {
       };
 
       document.body.classList.add('is-dragging-el'); // <-- AJOUT ICI
+      dragEl.classList.add('is-dragging');
+      const _srh = document.getElementById('single-resize-handle');
+      if (_srh) _srh.style.display = 'none';
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
       // Démarrer la boucle RAF
@@ -3344,7 +3793,7 @@ const App = (function () {
       e.stopPropagation();
       if (el.dataset.justDragged) return;
       if (_justGroupDragged) return;
-      if (!e.shiftKey) selectEl(el);
+      if (!e.shiftKey && !e.ctrlKey && !e.metaKey) selectEl(el);
     });
 
     // Double-clic sur image → lightbox
@@ -3361,7 +3810,7 @@ const App = (function () {
       e.stopPropagation();
       if (document.body.classList.contains('readonly-mode')) return;
       // Si l'élément fait partie d'une multi-sélection, ne pas désélectionner
-      if (!e.shiftKey && !multiSelected.has(el)) selectEl(el);
+      if (!e.shiftKey && !e.ctrlKey && !e.metaKey && !multiSelected.has(el)) selectEl(el);
       // Ajouter l'élément à la multi-sélection si pas encore dedans
       if (multiSelected.size > 0 && !multiSelected.has(el)) {
         el.classList.add('multi-selected');
@@ -3370,34 +3819,6 @@ const App = (function () {
       ctxTargetEl = el;
       showContextMenu(e.clientX, e.clientY);
     });
-
-    const rh = el.querySelector('.resize-handle');
-    if (rh) {
-      rh.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        if (document.body.classList.contains('readonly-mode')) return;
-        // Collab: vérifier et acquérir le lock
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          if (Collab.isLockedByOther(el.dataset.id)) {
-            toast('Élément verrouillé');
-            return;
-          }
-          Collab.acquireLock(el.dataset.id);
-        }
-        isResizing = true;
-        resizeEl = el;
-        resizeStartW = parseFloat(el.style.width) || el.offsetWidth;
-        resizeStartH = parseFloat(el.style.height) || el.offsetHeight;
-        resizeStartX = e.clientX;
-        resizeStartY = e.clientY;
-        // Pour les images et fichiers : resize proportionnel
-        resizeRatio =
-          (el.dataset.type === 'image' || el.dataset.type === 'file') && el.dataset.ratio
-            ? parseFloat(el.dataset.ratio)
-            : null;
-      });
-    }
   }
 
   function startGroupDrag(e, group) {
@@ -3412,8 +3833,8 @@ const App = (function () {
     }
 
     const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-    const startMX = (e.clientX - canvasRect.left) / zoomLevel;
-    const startMY = (e.clientY - canvasRect.top) / zoomLevel;
+    let startMX = (e.clientX - canvasRect.left) / zoomLevel;
+    let startMY = (e.clientY - canvasRect.top) / zoomLevel;
 
     // Groupe actif (peut changer si duplication)
     let activeGroup = new Set(group);
@@ -3424,6 +3845,13 @@ const App = (function () {
     let excludeSet = new Set(activeGroup);
     let duplicated = false;
     let moved = false;
+    // Position initiale capturée une seule fois — jamais modifiée
+    const trueInitialStarts = new Map(starts);
+    // Sauvegardés lors de la duplication pour pouvoir annuler avec Alt-release
+    let originalGroup = null;
+    let originalStarts = null;
+    let frozenDX = 0,
+      frozenDY = 0;
 
     // Lerp state pour le multi-drag (déclaré ici pour être accessible dans doDuplicateGroup)
     let targetDX = 0,
@@ -3434,6 +3862,20 @@ const App = (function () {
     function doDuplicateGroup() {
       if (duplicated) return;
       duplicated = true;
+      // Sauvegarder les originaux et figer le delta courant pour pouvoir annuler (Alt-release)
+      originalGroup = new Set(activeGroup);
+      originalStarts = new Map(starts);
+      frozenDX = curDX;
+      frozenDY = curDY;
+      // Restaurer les originaux à leur position initiale (invariant pendant tout le drag)
+      activeGroup.forEach((el) => {
+        const init = trueInitialStarts.get(el);
+        if (init) {
+          el.style.left = init.left + 'px';
+          el.style.top = init.top + 'px';
+        }
+        el.style.transform = '';
+      });
       const copies = new Set();
       // Positions courantes avant duplication
       const curPositions = new Map();
@@ -3441,8 +3883,8 @@ const App = (function () {
         const s = starts.get(el);
         if (!s) return;
         curPositions.set(el, {
-          left: s.left + curDX,
-          top: s.top + curDY,
+          left: s.left + targetDX,
+          top: s.top + targetDY,
         });
       });
       activeGroup.forEach((el) => {
@@ -3463,6 +3905,8 @@ const App = (function () {
         copy._collabPendingCreate = true;
         copies.add(copy);
       });
+      curDX = targetDX;
+      curDY = targetDY;
       // Collab: libérer les locks sur les originaux + vider sélection
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         activeGroup.forEach(function (el) {
@@ -3523,15 +3967,50 @@ const App = (function () {
     const onMove = (ev) => {
       // Alt enfoncé en cours → dupliquer
       if (isAltDown && !duplicated) {
-        // Figer positions courantes comme nouveaux starts pour les copies
-        const frozenDX = curDX,
-          frozenDY = curDY;
         doDuplicateGroup();
         // Réinitialiser le delta pour les copies à partir de leur position actuelle
         curDX = 0;
         curDY = 0;
         targetDX = 0;
         targetDY = 0;
+        startMX = (ev.clientX - canvasRect.left) / zoomLevel;
+        startMY = (ev.clientY - canvasRect.top) / zoomLevel;
+        return;
+      }
+      // Alt relâché → copies supprimées, originaux reprennent drag depuis position du curseur
+      if (!isAltDown && duplicated && originalGroup) {
+        const origArr = [...originalGroup];
+        const copyArr = [...activeGroup]; // copies dans le même ordre
+        origArr.forEach((origEl, i) => {
+          const copy = copyArr[i];
+          const s = starts.get(copy);
+          origEl.style.left = (s ? s.left : 0) + targetDX + 'px';
+          origEl.style.top = (s ? s.top : 0) + targetDY + 'px';
+          origEl.style.transform = '';
+          copy.remove();
+        });
+        activeGroup = originalGroup;
+        duplicated = false;
+        starts = new Map();
+        activeGroup.forEach((el) => {
+          starts.set(el, {
+            left: parseFloat(el.style.left) || 0,
+            top: parseFloat(el.style.top) || 0,
+          });
+        });
+        curDX = 0;
+        curDY = 0;
+        targetDX = 0;
+        targetDY = 0;
+        startMX = (ev.clientX - canvasRect.left) / zoomLevel;
+        startMY = (ev.clientY - canvasRect.top) / zoomLevel;
+        deselectAll();
+        activeGroup.forEach((el) => {
+          el.classList.add('multi-selected');
+          multiSelected.add(el);
+        });
+        excludeSet = new Set(activeGroup);
+        originalGroup = null;
         return;
       }
       moved = true;
@@ -3585,6 +4064,7 @@ const App = (function () {
     const onUp = () => {
       groupDragActive = false;
       document.body.classList.remove('is-dragging-el'); // <-- RETRAIT ICI
+      activeGroup.forEach((el) => el.classList.remove('is-dragging'));
 
       if (groupRafId) {
         cancelAnimationFrame(groupRafId);
@@ -3676,6 +4156,7 @@ const App = (function () {
         }
       );
     }
+    activeGroup.forEach((el) => el.classList.add('is-dragging'));
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     groupRafId = requestAnimationFrame(groupDragRAF);
@@ -3683,7 +4164,7 @@ const App = (function () {
 
   function _getMinSize(el) {
     const t = el && el.dataset ? el.dataset.type : '';
-    if (t === 'link') return { w: 103, h: 73 };
+    if (t === 'link') return { w: 270, h: 73 };
     if (t === 'color') return { w: 80, h: 80 };
     if (t === 'file') return { w: 260, h: 76 };
     return { w: 60, h: 40 };
@@ -3763,6 +4244,14 @@ const App = (function () {
           } else {
             resizeEl.style.width = snappedW + 'px';
           }
+          // Resync scale fichier sur la largeur snappée
+          if (resizeEl.dataset.type === 'file') {
+            var _fw = resizeEl.querySelector('.el-file');
+            if (_fw) {
+              _fw.style.transform = 'scale(' + snappedW / 260 + ')';
+              _fw.style.transformOrigin = 'top left';
+            }
+          }
         }
         if (snapDY && !resizeRatio) {
           resizeEl.style.height = Math.max(40, fh + snapDY) + 'px';
@@ -3787,14 +4276,26 @@ const App = (function () {
     }
     // Mettre à jour les connecteurs en temps réel
     updateConnectionsForEl(resizeEl);
+    updateSingleResizeHandle();
   }
 
   // ── RESTORE ──────────────────────────────────────────────────────────────
+  function _applyStyleToEl(el, style) {
+    if (!el || !style) return;
+    const target = el.tagName === 'TEXTAREA' ? el : el.querySelector('textarea') || el;
+    if (style.fontFamily) target.style.fontFamily = style.fontFamily;
+    if (style.fontWeight) target.style.fontWeight = style.fontWeight;
+    if (style.fontSize) target.style.fontSize = style.fontSize;
+    if (style.textAlign) target.style.textAlign = style.textAlign;
+  }
+
   function restoreElement(s) {
     let el;
     if (s.type === 'image') el = createImageElement(s.data, s.x, s.y, s.w, s.h);
-    else if (s.type === 'note') el = createNoteElement(s.data, s.x, s.y, s.w, s.h);
-    else if (s.type === 'color') el = createColorElement(s.data, s.x, s.y, s.w, s.h);
+    else if (s.type === 'note') {
+      el = createNoteElement(s.data, s.x, s.y, s.w, s.h);
+      if (s.style) _applyStyleToEl(el, s.style);
+    } else if (s.type === 'color') el = createColorElement(s.data, s.x, s.y, s.w, s.h);
     else if (s.type === 'link') {
       const d = tryParse(s.data);
       el = createLinkElement(d.url, d.title, d.img, s.x, s.y);
@@ -3804,7 +4305,13 @@ const App = (function () {
     } else if (s.type === 'file') {
       const d = tryParse(s.data);
       if (d.isVideo) el = createVideoFileElement(d.name, d.size, d.src || '', s.x, s.y, s.w, s.h);
-      else el = createFileElement(d.name, d.size, d.icon, s.x, s.y);
+      else {
+        el = createFileElement(d.name, d.size, d.icon, s.x, s.y);
+        // Restaurer les dimensions du conteneur (createFileElement fixe 260×76 par défaut)
+        if (s.w) el.style.width = s.w + 'px';
+        if (s.h) el.style.height = s.h + 'px';
+        if (d.fileData) el.dataset.savedata = s.data;
+      }
     } else if (s.type === 'connection') {
       // Restaurer après que les éléments soient dans le DOM
       setTimeout(() => createConnection(s.from, s.to), 50);
@@ -3820,6 +4327,7 @@ const App = (function () {
       cap.style.top = s.y + 'px';
       if (s.width) cap.style.width = s.width;
       cap.textContent = s.text || '';
+      if (s.style) _applyStyleToEl(cap, s.style);
 
       // Liaison au panneau de texte
       cap.addEventListener('focus', () => showTextEditPanel(cap));
@@ -3830,13 +4338,12 @@ const App = (function () {
     }
     if (el && s.z) el.style.zIndex = s.z;
     if (el && s.type === 'file') {
-      el.style.overflow = 'hidden';
       var fileWrap = el.querySelector('.el-file');
       if (fileWrap) {
         fileWrap.style.width = '260px';
         fileWrap.style.height = '76px';
         fileWrap.style.overflow = 'hidden';
-        if (s.w && s.w > 260) {
+        if (s.w) {
           fileWrap.style.transform = 'scale(' + s.w / 260 + ')';
           fileWrap.style.transformOrigin = 'top left';
         }
@@ -3877,8 +4384,8 @@ const App = (function () {
       await window._fbAuthReady;
     }
     try {
-      const elemCheck = await window._fbDb.ref('collabSessions/' + boardId + '/elements').get();
-      if (!elemCheck.exists()) {
+      const metaCheck = await window._fbDb.ref('collabSessions/' + boardId + '/meta').get();
+      if (!metaCheck.exists()) {
         errPage("Cette session collaborative n'existe plus ou est terminée.");
         return;
       }
@@ -3948,10 +4455,10 @@ const App = (function () {
       await Collab.startSession(boardId, false);
 
       var collabBtn = document.getElementById('collab-btn');
-      if (collabBtn) {
-        collabBtn.style.display = '';
-        collabBtn.classList.add('collab-active');
-      }
+      if (collabBtn) collabBtn.style.display = 'none';
+      var shareWrap = document.getElementById('share-wrap');
+      if (shareWrap && window._fbDb && !document.body.classList.contains('readonly-mode'))
+        shareWrap.style.display = '';
 
       setupUIEvents();
     } catch (e) {
@@ -3989,8 +4496,8 @@ const App = (function () {
       await window._fbAuthReady;
     }
     try {
-      const elemSnap0 = await window._fbDb.ref('collabSessions/' + boardId + '/elements').get();
-      if (!elemSnap0.exists()) {
+      const metaSnap0 = await window._fbDb.ref('collabSessions/' + boardId + '/meta').get();
+      if (!metaSnap0.exists()) {
         toast("Cette session collaborative n'existe pas");
         return;
       }
@@ -4043,8 +4550,8 @@ const App = (function () {
       await window._fbAuthReady;
     }
     try {
-      const elemCheck = await window._fbDb.ref('collabSessions/' + board.id + '/elements').get();
-      const isActive = elemCheck.exists();
+      const metaCheck = await window._fbDb.ref('collabSessions/' + board.id + '/meta').get();
+      const isActive = metaCheck.exists();
 
       if (isActive) {
         // Session active : charger depuis Firebase et démarrer collab
@@ -4067,10 +4574,14 @@ const App = (function () {
 
         // Charger éléments depuis la session collab
         const elemSnap = await window._fbDb.ref('collabSessions/' + board.id + '/elements').get();
+        const _pendingImageIds = new Set();
         if (elemSnap.exists()) {
           elemSnap.forEach((child) => {
             const d = child.val();
             if (d.deleted) return;
+            if (d.type === 'image' && (!d.data || d.data === 'pending')) {
+              _pendingImageIds.add(child.key);
+            }
             restoreElement({
               id: child.key,
               type: d.type,
@@ -4080,6 +4591,7 @@ const App = (function () {
               h: d.h,
               z: d.z,
               data: d.data || '',
+              style: d.style || null,
             });
             if (d.z && d.z >= nextZ) nextZ = d.z + 1;
           });
@@ -4106,6 +4618,7 @@ const App = (function () {
               width: d.width,
               parentId: d.parentId,
               text: d.text,
+              style: d.style || null,
             });
             if (cap) cap.dataset.capId = child.key;
           });
@@ -4113,16 +4626,51 @@ const App = (function () {
 
         setTimeout(() => fitElementsToScreen(), 150);
         pushHistory();
+        loadLibraryForBoard(board.id);
         renderPanelLib();
 
         await Collab.startSession(board.id, false);
 
-        // Afficher le bouton collab pour que le guest puisse copier l'ID
-        const collabBtn = document.getElementById('collab-btn');
-        if (collabBtn) {
-          collabBtn.style.display = '';
-          collabBtn.classList.add('collab-active');
+        // Récupération : pour les images marquées 'pending' sur Firebase,
+        // ré-injecter la base64 depuis le stockage local si disponible et
+        // ré-uploader vers Firebase pour réparer la session.
+        if (_pendingImageIds.size && board.elements && board.elements.length) {
+          const _localById = {};
+          board.elements.forEach((e) => {
+            if (e && e.id) _localById[e.id] = e;
+          });
+          let _recovered = 0;
+          _pendingImageIds.forEach((id) => {
+            const local = _localById[id];
+            if (
+              local &&
+              local.type === 'image' &&
+              local.data &&
+              local.data !== 'pending' &&
+              /^data:/.test(local.data)
+            ) {
+              _imgStore.set(id, local.data);
+              const elDom = document.querySelector('[data-id="' + id + '"]');
+              if (elDom) {
+                const imgTag = elDom.querySelector('img');
+                if (imgTag) imgTag.src = local.data;
+              }
+              if (typeof Collab !== 'undefined' && Collab.isActive()) {
+                Collab.syncElementData(id, local.data, true);
+              }
+              _recovered++;
+            }
+          });
+          if (_recovered) toast(_recovered + ' image(s) restaurée(s) depuis la sauvegarde locale');
         }
+
+        setTimeout(_updateBrokenBanner, 200);
+
+        const collabBtn = document.getElementById('collab-btn');
+        if (collabBtn) collabBtn.style.display = 'none';
+        const shareWrap = document.getElementById('share-wrap');
+        if (shareWrap && window._fbDb && !document.body.classList.contains('readonly-mode'))
+          shareWrap.style.display = '';
       } else {
         // Pas de session Firebase : créer une nouvelle session depuis les données locales
         currentBoardId = board.id;
@@ -4131,24 +4679,36 @@ const App = (function () {
         document.getElementById('board-title-display').textContent = board.name;
         if (window._reattachPinch) window._reattachPinch();
         document.getElementById('canvas').innerHTML = '';
-        zoomLevel = 1; panX = 0; panY = 0; nextZ = 100;
-        history = []; historyIndex = -1;
-        selectedEl = null; multiSelected.clear();
-        applyTransform(); updateZoomDisplay();
+        zoomLevel = 1;
+        panX = 0;
+        panY = 0;
+        nextZ = 100;
+        history = [];
+        historyIndex = -1;
+        selectedEl = null;
+        multiSelected.clear();
+        applyTransform();
+        updateZoomDisplay();
         if (board.elements && board.elements.length) {
-          board.elements.forEach(function(e) { restoreElement(e); });
-          setTimeout(function() { fitElementsToScreen(); }, 120);
+          board.elements.forEach(function (e) {
+            restoreElement(e);
+          });
+          setTimeout(function () {
+            fitElementsToScreen();
+          }, 120);
         }
         pushHistory();
+        loadLibraryForBoard(board.id);
         renderPanelLib();
         // Démarrer une session collab comme owner avec les éléments locaux
         var localElements = _collabGetBoardElements();
         await Collab.startSession(board.id, true, { elements: localElements });
         var collabBtn2 = document.getElementById('collab-btn');
-        if (collabBtn2) {
-          collabBtn2.style.display = '';
-          collabBtn2.classList.add('collab-active');
-        }
+        if (collabBtn2) collabBtn2.style.display = 'none';
+        var shareWrap2 = document.getElementById('share-wrap');
+        if (shareWrap2 && window._fbDb && !document.body.classList.contains('readonly-mode'))
+          shareWrap2.style.display = '';
+        setTimeout(_updateBrokenBanner, 200);
       }
     } catch (e) {
       console.warn('_openCollabBoard error:', e);
@@ -4183,8 +4743,8 @@ const App = (function () {
     }
     pushHistory();
     renderPanelLib();
-    const shareBtn = document.getElementById('share-btn');
-    if (shareBtn) shareBtn.style.display = 'none';
+    const shareWrap = document.getElementById('share-wrap');
+    if (shareWrap) shareWrap.style.display = 'none';
     const collabBtn = document.getElementById('collab-btn');
     if (collabBtn) collabBtn.style.display = 'none';
   }
@@ -4198,22 +4758,62 @@ const App = (function () {
       errPage('Firebase non disponible.');
       return;
     }
+    // Attendre l'auth anonyme (les règles DB exigent auth != null).
+    // Sans ça, sur iPhone Safari / navigation privée / nouveau profil,
+    // la lecture est tentée avant la fin du signInAnonymously et échoue.
+    if (window._fbAuthReady) {
+      try {
+        await window._fbAuthReady;
+      } catch (_) {}
+    }
     try {
-      const snap = await window._fbDb.ref('boards/' + id).get();
+      let snap = await window._fbDb.ref('boards/' + id).get();
+      let isCollabSession = false;
       if (!snap.exists()) {
-        errPage("Ce moodboard n'existe pas ou a été supprimé.");
-        return;
+        // Fallback : essayer dans les sessions collaboratives
+        var collabSnap = await window._fbDb.ref('collabSessions/' + id + '/elements').get();
+        if (!collabSnap.exists()) {
+          errPage("Ce moodboard n'existe pas ou a été supprimé.");
+          return;
+        }
+        isCollabSession = true;
       }
-      const boardData = snap.val();
       document.body.classList.add('readonly-mode');
       document.getElementById('board-screen').style.display = 'flex';
-      document.getElementById('board-title-display').textContent = boardData.name || 'Moodboard';
       document.getElementById('canvas').innerHTML = '';
       zoomLevel = 1;
       panX = 0;
       panY = 0;
       nextZ = 100;
       applyTransform();
+      if (isCollabSession) {
+        document.getElementById('board-title-display').textContent = 'Moodboard';
+        var elemSnap = await window._fbDb.ref('collabSessions/' + id + '/elements').get();
+        if (elemSnap.exists()) {
+          elemSnap.forEach(function (child) {
+            var d = child.val();
+            if (d && !d.deleted) {
+              restoreElement({
+                id: child.key,
+                type: d.type,
+                x: d.x,
+                y: d.y,
+                w: d.w,
+                h: d.h,
+                z: d.z,
+                data: d.data || '',
+              });
+            }
+          });
+        }
+        setTimeout(function () {
+          fitElementsToScreen();
+        }, 150);
+        pushHistory();
+        return;
+      }
+      const boardData = snap.val();
+      document.getElementById('board-title-display').textContent = boardData.name || 'Moodboard';
       if (boardData.elements && boardData.elements.length) {
         boardData.elements.forEach((e) => {
           if (e.type === 'caption') {
@@ -4232,6 +4832,11 @@ const App = (function () {
 
   // ── IMAGE ─────────────────────────────────────────────────────────────────
   function createImageElement(src, x, y, w, h) {
+    const isBrokenSrc =
+      !src ||
+      src === 'pending' ||
+      typeof src !== 'string' ||
+      (!src.startsWith('data:') && !src.startsWith('http') && !src.startsWith('blob:'));
     const doCreate = (natW, natH) => {
       let fw = w || natW || 220;
       let fh = h || natH || 170;
@@ -4251,24 +4856,140 @@ const App = (function () {
         }
       }
       const el = makeElement('image', x || 100, y || 100, fw, fh);
-      _imgStore.set(el.dataset.id, src); // base64 hors-DOM → inspecteur léger
+      _imgStore.set(el.dataset.id, isBrokenSrc ? '' : src);
       // Stocker le ratio w/h pour le resize proportionnel
       el.dataset.ratio = (fw / fh).toFixed(6);
-      // L'img est posée directement dans le board-element, sans div wrapper
-      const img = document.createElement('img');
-      img.src = src;
-      img.draggable = false;
-      el.insertBefore(img, el.querySelector('.element-toolbar'));
+      if (isBrokenSrc) {
+        el.classList.add('image-broken');
+        const ph = document.createElement('div');
+        ph.className = 'image-broken-content';
+        ph.innerHTML =
+          '<div class="ib-icon">⚠</div><div class="ib-label">Image perdue</div><button class="ib-restore-btn" type="button">Restaurer</button>';
+        ph.querySelector('.ib-restore-btn').addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          _restoreBrokenImage(el);
+        });
+        el.insertBefore(ph, el.querySelector('.element-toolbar'));
+      } else {
+        const img = document.createElement('img');
+        img.src = src;
+        img.draggable = false;
+        el.insertBefore(img, el.querySelector('.element-toolbar'));
+      }
       return el;
     };
     // Si les dimensions sont déjà connues (chargement sauvegarde), créer directement
     if (w && h) return doCreate(w, h);
+    // Image broken sans dimensions : utiliser un placeholder de taille par défaut
+    if (isBrokenSrc) return doCreate(220, 170);
     // Sinon, charger l'image pour obtenir ses dimensions naturelles
     const tmpImg = new Image();
     tmpImg.onload = () => doCreate(tmpImg.naturalWidth, tmpImg.naturalHeight);
     tmpImg.onerror = () => doCreate(220, 170);
     tmpImg.src = src;
     return null; // création asynchrone
+  }
+  function _applyRestoredImageSrc(el, base64) {
+    const id = el.dataset.id;
+    _imgStore.set(id, base64);
+    const placeholder = el.querySelector('.image-broken-content');
+    if (placeholder) placeholder.remove();
+    el.classList.remove('image-broken');
+    const existingImg = el.querySelector('img');
+    if (existingImg) existingImg.remove();
+    const img = document.createElement('img');
+    img.src = base64;
+    img.draggable = false;
+    el.insertBefore(img, el.querySelector('.element-toolbar'));
+    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+      Collab.syncElementData(id, base64, true);
+    }
+    try {
+      saveCurrentBoard();
+    } catch (_) {}
+    pushHistory();
+    _updateBrokenBanner();
+    toast('Image restaurée');
+  }
+  function _restoreBrokenImage(el) {
+    const overlay = document.createElement('div');
+    overlay.className = 'restore-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'restore-modal';
+    const close = () => overlay.remove();
+
+    let libItems = [];
+    if (library && typeof library === 'object') {
+      Object.keys(library).forEach((folder) => {
+        (library[folder] || []).forEach((it) => {
+          if (it && it.src && /^data:|^https?:|^blob:/.test(it.src)) libItems.push(it);
+        });
+      });
+    }
+
+    let html = '<div class="rm-header">Restaurer cette image</div>';
+    if (libItems.length) {
+      html +=
+        '<div class="rm-section-label">Depuis la bibliothèque du board (' +
+        libItems.length +
+        ')</div>';
+      html += '<div class="rm-grid">';
+      libItems.forEach((it, idx) => {
+        html +=
+          '<div class="rm-thumb" data-idx="' +
+          idx +
+          '" title="' +
+          (it.name || '') +
+          '"><img src="' +
+          it.src +
+          '" draggable="false"/></div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="rm-empty">La bibliothèque de ce board est vide.</div>';
+    }
+    html +=
+      '<div class="rm-actions"><button type="button" class="rm-file-btn">Importer depuis le fichier…</button><button type="button" class="rm-cancel-btn">Annuler</button></div>';
+    modal.innerHTML = html;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+    modal.querySelector('.rm-cancel-btn').addEventListener('click', close);
+    modal.querySelectorAll('.rm-thumb').forEach((th) => {
+      th.addEventListener('click', () => {
+        const idx = parseInt(th.dataset.idx, 10);
+        const it = libItems[idx];
+        if (it && it.src) {
+          _applyRestoredImageSrc(el, it.src);
+          close();
+        }
+      });
+    });
+    modal.querySelector('.rm-file-btn').addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+      input.addEventListener('change', () => {
+        const file = input.files && input.files[0];
+        if (!file) {
+          input.remove();
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          _applyRestoredImageSrc(el, ev.target.result);
+          input.remove();
+          close();
+        };
+        reader.readAsDataURL(file);
+      });
+      input.click();
+    });
   }
   function addImageFromPanel(src) {
     const tmpImg = new Image();
@@ -4409,33 +5130,6 @@ const App = (function () {
     if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
     pushHistory();
   }
-  function openColorPicker() {
-    openModal('color-modal');
-  }
-  function closeColorModal() {
-    closeModal('color-modal');
-  }
-  function syncHex(val) {
-    document.getElementById('hex-input').value = val.replace('#', '').toUpperCase();
-    document.getElementById('hex-preview').style.background = val;
-  }
-  function syncColor(val) {
-    if (val.length === 6 && /^[0-9A-Fa-f]{6}$/.test(val)) {
-      document.getElementById('color-picker-input').value = '#' + val;
-      document.getElementById('hex-preview').style.background = '#' + val;
-    }
-  }
-  function addColorElement() {
-    const hex =
-      '#' + document.getElementById('hex-input').value.trim().toUpperCase().replace('#', '');
-    const c = getCenter();
-    const el = createColorElement(hex, c.x - 65, c.y - 70, 130, 140);
-    _collabSyncCreatedEl(el);
-    if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
-    pushHistory();
-
-    closeColorModal();
-  }
   function createColorElement(hex, x, y, w, h) {
     w = w || 130;
     h = h || 140;
@@ -4450,27 +5144,59 @@ const App = (function () {
     const info = document.createElement('div');
     info.className = 'color-info';
 
-    // Input HEX éditable
+    // Input HEX éditable — readonly par défaut, éditable au double-clic
     const hexInput = document.createElement('input');
     hexInput.type = 'text';
     hexInput.className = 'color-hex-input';
     hexInput.value = (hex || '').toUpperCase();
     hexInput.maxLength = 7;
     hexInput.spellcheck = false;
+    hexInput.readOnly = true;
 
     // Empêcher le drag de l'élément quand on clique sur l'input
     hexInput.addEventListener('mousedown', (e) => e.stopPropagation());
     hexInput.addEventListener('pointerdown', (e) => e.stopPropagation());
+    // Double-clic : passer en mode édition
+    hexInput.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      hexInput.readOnly = false;
+      hexInput.focus();
+      hexInput.select();
+    });
+
+    let _colorValueOnFocus = hex || '#000000';
+    hexInput.addEventListener('focus', () => {
+      _colorValueOnFocus = el.dataset.savedata || '#000000';
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        if (Collab.isLockedByOther(el.dataset.id)) {
+          toast("Élément en cours d'édition");
+          hexInput.blur();
+          return;
+        }
+        Collab.acquireLock(el.dataset.id);
+      }
+    });
 
     // Mise à jour de la couleur à la saisie (hex toujours en majuscules)
     function applyHexColor(val) {
-      const v = val.trim().toUpperCase();
+      let v = val.trim().toUpperCase();
+      if (!v.startsWith('#')) v = '#' + v;
       if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) {
         swatch.style.background = v;
         el.dataset.savedata = v;
         hexInput.value = v;
+        if (v !== _colorValueOnFocus) {
+          pushAction({
+            type: 'editColor',
+            elId: el.dataset.id,
+            before: { data: _colorValueOnFocus },
+            after: { data: v },
+          });
+        }
         pushHistory();
-
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.syncElementData(el.dataset.id, v);
+        }
         return true;
       }
       return false;
@@ -4483,15 +5209,18 @@ const App = (function () {
       e.stopPropagation();
     });
     hexInput.addEventListener('blur', () => {
-      // Si la valeur saisie est un hex valide → appliquer
-      // Sinon → toujours restaurer depuis savedata (jamais laisser vide)
       if (!applyHexColor(hexInput.value)) {
         hexInput.value = (el.dataset.savedata || hex || '#000000').toUpperCase();
+      }
+      hexInput.readOnly = true;
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.releaseLock(el.dataset.id);
       }
     });
     hexInput.addEventListener('input', () => {
       hexInput.value = hexInput.value.toUpperCase();
-      const v = hexInput.value.trim();
+      let v = hexInput.value.trim();
+      if (!v.startsWith('#')) v = '#' + v;
       if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) {
         swatch.style.background = v;
       }
@@ -4501,8 +5230,11 @@ const App = (function () {
     const eyeBtn = document.createElement('button');
     eyeBtn.className = 'color-eyedropper';
     eyeBtn.title = 'Pipette — cliquer sur le canvas pour prendre une couleur';
-    eyeBtn.innerHTML =
-      '<img src="PNG/pipette.png" style="width:14px;height:14px;object-fit:contain;display:block;">';
+    eyeBtn.innerHTML = `
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:14px; height:14px; display:block; pointer-events:none;">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M4.098 19.902a3.75 3.75 0 0 0 5.304 0l6.401-6.402M6.75 21A3.75 3.75 0 0 1 3 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 0 0 3.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.44.44 1.152 0 1.59l-2.879 2.88M6.75 17.25h.008v.008H6.75v-.008Z" />
+  </svg>`;
+
     eyeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
     eyeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     eyeBtn.addEventListener('click', (e) => {
@@ -4648,10 +5380,14 @@ const App = (function () {
   }
   function addLinkElement() {
     const url = document.getElementById('link-url-input').value.trim();
-    const title = document.getElementById('link-title-input').value.trim() || url;
+    const title = document.getElementById('link-title-input').value.trim();
     const img = document.getElementById('link-img-input').value.trim();
     if (!url) {
       toast('Entrez une URL');
+      return;
+    }
+    if (!title) {
+      toast('Entrez un titre');
       return;
     }
     let lx, ly;
@@ -4675,26 +5411,29 @@ const App = (function () {
       (id) => (document.getElementById(id).value = '')
     );
   }
+  function _shortUrl(url) {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  }
   function createLinkElement(url, title, imgSrc, x, y) {
-    const el = makeElement('link', x || 100, y || 100, 270, 220);
+    const hasImg = !!imgSrc;
+    const el = makeElement('link', x || 100, y || 100, 270, hasImg ? 220 : 73);
     el.dataset.savedata = JSON.stringify({ url, title, img: imgSrc });
     const wrap = document.createElement('div');
     wrap.className = 'el-link';
-    if (imgSrc) {
+    if (hasImg) {
       const img = document.createElement('img');
       img.className = 'link-image';
       img.src = imgSrc;
       img.alt = title;
       wrap.appendChild(img);
-    } else {
-      const ph = document.createElement('div');
-      ph.className = 'link-image-placeholder';
-      ph.textContent = '🔗';
-      wrap.appendChild(ph);
     }
     const body = document.createElement('div');
     body.className = 'link-body';
-    body.innerHTML = `<div class="link-title">${escHtml(title)}</div><div class="link-url">${escHtml(url)}</div>`;
+    body.innerHTML = `<div class="link-title">${escHtml(title)}</div><div class="link-url"><img class="link-url-icon" src="PNG/lien.png" alt=""><span>${escHtml(_shortUrl(url))}</span></div>`;
     wrap.appendChild(body);
     wrap.addEventListener('dblclick', () => window.open(url, '_blank'));
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
@@ -4702,62 +5441,6 @@ const App = (function () {
   }
 
   // ── VIDÉO ─────────────────────────────────────────────────────────────────
-  function openVideoModal() {
-    openModal('video-modal');
-  }
-  function closeVideoModal() {
-    closeModal('video-modal');
-  }
-  function switchVideoTab(mode) {
-    videoTabMode = mode;
-    document.getElementById('vt-url').classList.toggle('active', mode === 'url');
-    document.getElementById('vt-local').classList.toggle('active', mode === 'local');
-    document.getElementById('video-url-section').classList.toggle('hidden', mode !== 'url');
-    document.getElementById('video-local-section').classList.toggle('hidden', mode !== 'local');
-  }
-  function addVideoURL() {
-    let url = document.getElementById('video-url-input').value.trim();
-    if (!url) {
-      toast('Entrez une URL');
-      return;
-    }
-    let embed = url,
-      isEmbed = false;
-    const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/);
-    const vm = url.match(/vimeo\.com\/(\d+)/);
-    if (yt) {
-      embed = `https://www.youtube.com/embed/${yt[1]}`;
-      isEmbed = true;
-    }
-    if (vm) {
-      embed = `https://player.vimeo.com/video/${vm[1]}`;
-      isEmbed = true;
-    }
-    const c = getCenter();
-    const vEl = createVideoElement(embed, isEmbed, c.x - 180, c.y - 101, 360, 202);
-    _collabSyncCreatedEl(vEl);
-    if (vEl) pushAction({ type: 'create', elId: vEl.dataset.id, after: _captureElState(vEl) });
-    pushHistory();
-
-    closeVideoModal();
-    document.getElementById('video-url-input').value = '';
-  }
-  function handleVideoUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const c = getCenter();
-      const vEl2 = createVideoElement(ev.target.result, false, c.x - 180, c.y - 101, 360, 202);
-      _collabSyncCreatedEl(vEl2);
-      if (vEl2) pushAction({ type: 'create', elId: vEl2.dataset.id, after: _captureElState(vEl2) });
-      pushHistory();
-
-      closeVideoModal();
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  }
   function createVideoElement(src, isEmbed, x, y, w, h) {
     w = w || 360;
     h = h || 202;
@@ -4863,6 +5546,15 @@ const App = (function () {
           newEl.style.zIndex = target.style.zIndex;
           target.replaceWith(newEl);
           selectEl(newEl);
+          if (typeof Collab !== 'undefined' && Collab.isActive()) {
+            Collab.syncElementData(newEl.dataset.id, newEl.dataset.savedata);
+            Collab.syncElementSize(
+              newEl.dataset.id,
+              parseFloat(newEl.style.width) || null,
+              parseFloat(newEl.style.height) || null,
+              true
+            );
+          }
           pushHistory();
         });
       } else {
@@ -4887,6 +5579,9 @@ const App = (function () {
         if (h) newEl.style.height = h + 'px';
         target.replaceWith(newEl);
         selectEl(newEl);
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.syncElementData(newEl.dataset.id, newEl.dataset.savedata);
+        }
         pushHistory();
       }
       e.target.value = '';
@@ -4968,7 +5663,6 @@ const App = (function () {
 
   function createFileElement(name, size, icon, x, y) {
     const el = makeElement('file', x || 100, y || 100, 260, 76);
-    el.style.overflow = 'hidden';
     el.dataset.savedata = JSON.stringify({ name, size, icon });
     const wrap = document.createElement('div');
     wrap.className = 'el-file';
@@ -4995,10 +5689,18 @@ const App = (function () {
         d = JSON.parse(el.dataset.savedata || '{}');
       } catch (_) {}
       if (d.fileData) {
-        var a = document.createElement('a');
-        a.href = d.fileData;
-        a.download = d.name || 'fichier';
-        a.click();
+        if (typeof chrome !== 'undefined' && chrome.downloads) {
+          chrome.downloads.download({
+            url: d.fileData,
+            filename: d.name || 'fichier',
+            saveAs: true,
+          });
+        } else {
+          var a = document.createElement('a');
+          a.href = d.fileData;
+          a.download = d.name || 'fichier';
+          a.click();
+        }
       } else {
         toast('Aucun fichier attaché');
       }
@@ -5391,9 +6093,14 @@ const App = (function () {
       allSelIds.add(el.dataset.id);
     });
     if (selectedEl) allSelIds.add(selectedEl.dataset.id);
+    var multi = allSelIds.size >= 2;
     var toRemove = [];
     document.querySelectorAll('.el-connection').forEach(function (svg) {
-      if (allSelIds.has(svg.dataset.from) || allSelIds.has(svg.dataset.to)) {
+      var fromIn = allSelIds.has(svg.dataset.from);
+      var toIn = allSelIds.has(svg.dataset.to);
+      // ≥ 2 sélectionnés : ne déconnecter que les liens dont LES DEUX bouts sont dans la sélection
+      // 1 seul sélectionné : déconnecter tout ce qui le touche
+      if (multi ? fromIn && toIn : fromIn || toIn) {
         toRemove.push(svg);
       }
     });
@@ -5452,6 +6159,110 @@ const App = (function () {
       const fromEl = canvas.querySelector(`[data-id="${svg.dataset.from}"]`);
       const toEl = canvas.querySelector(`[data-id="${svg.dataset.to}"]`);
       if (fromEl && toEl) updateConnection(svg, fromEl, toEl);
+    });
+  }
+
+  // ── MODE CONNECTEUR (outil "Connecteur") ─────────────────────────────────
+  let connectorMode = false;
+  let connectorDrag = null;
+
+  function setConnectorMode(active) {
+    connectorMode = !!active;
+    const btn = document.getElementById('tool-connector');
+    if (btn) btn.classList.toggle('active', connectorMode);
+    document.body.classList.toggle('connector-mode', connectorMode);
+    if (!connectorMode) cancelConnectorDrag();
+  }
+
+  function toggleConnectorMode() {
+    setConnectorMode(!connectorMode);
+  }
+
+  function cancelConnectorDrag() {
+    if (connectorDrag && connectorDrag.tempSvg) connectorDrag.tempSvg.remove();
+    connectorDrag = null;
+  }
+
+  function setupConnectorTool() {
+    document.addEventListener(
+      'mousedown',
+      (e) => {
+        if (!connectorMode) return;
+        if (e.button !== 0) return;
+        const inWrapper = e.target.closest && e.target.closest('#canvas-wrapper');
+        if (!inWrapper) return;
+        const elTarget = e.target.closest && e.target.closest('#canvas .board-element');
+        // En mode connecteur : bloquer toute interaction native (sélection, drag, panning)
+        // qu'on clique sur un élément ou sur le fond du canvas
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+        if (!elTarget) return;
+        const canvas = document.getElementById('canvas');
+        const fromCenter = getElCenter(elTarget);
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('el-connection-temp');
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', fromCenter.x);
+        line.setAttribute('y1', fromCenter.y);
+        line.setAttribute('x2', fromCenter.x);
+        line.setAttribute('y2', fromCenter.y);
+        svg.appendChild(line);
+        canvas.appendChild(svg);
+        connectorDrag = {
+          fromEl: elTarget,
+          fromId: elTarget.dataset.id,
+          fromX: fromCenter.x,
+          fromY: fromCenter.y,
+          tempSvg: svg,
+          tempLine: line,
+        };
+      },
+      true
+    );
+
+    window.addEventListener('mousemove', (e) => {
+      if (!connectorMode || !connectorDrag) return;
+      const canvas = document.getElementById('canvas');
+      const rect = canvas.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) / zoomLevel;
+      const cy = (e.clientY - rect.top) / zoomLevel;
+      connectorDrag.tempLine.setAttribute('x2', cx);
+      connectorDrag.tempLine.setAttribute('y2', cy);
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (!connectorMode || !connectorDrag) return;
+      const fromId = connectorDrag.fromId;
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      const toEl = target ? target.closest('#canvas .board-element') : null;
+      cancelConnectorDrag();
+      if (!toEl) return;
+      const toId = toEl.dataset.id;
+      if (!toId || toId === fromId) return;
+      const exists = document.querySelector(
+        '.el-connection[data-from="' +
+          fromId +
+          '"][data-to="' +
+          toId +
+          '"], ' +
+          '.el-connection[data-from="' +
+          toId +
+          '"][data-to="' +
+          fromId +
+          '"]'
+      );
+      if (exists) return;
+      createConnection(fromId, toId);
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        const svgConn = document.querySelector(
+          '.el-connection[data-from="' + fromId + '"][data-to="' + toId + '"]'
+        );
+        if (svgConn && svgConn.dataset.connId) {
+          Collab.syncConnection(svgConn.dataset.connId, fromId, toId);
+        }
+      }
+      pushHistory();
     });
   }
 
@@ -5600,6 +6411,7 @@ const App = (function () {
     const activeBtn = document.getElementById(val === 'helvetica-bold' ? 'tp-bold' : 'tp-roman');
     if (activeBtn) activeBtn.classList.add('active');
     _collabSyncStyle();
+    _saveStyleChange();
   }
   function applyTextSizeDelta(delta) {
     if (!textEditTarget) return;
@@ -5611,6 +6423,7 @@ const App = (function () {
     const sizeVal = document.getElementById('text-size-val');
     if (sizeVal) sizeVal.textContent = next;
     _collabSyncStyle();
+    _saveStyleChange();
   }
   function applyTextAlign(align) {
     if (!textEditTarget) return;
@@ -5621,17 +6434,36 @@ const App = (function () {
     const btn = document.getElementById(id);
     if (btn) btn.classList.add('active');
     _collabSyncStyle();
+    _saveStyleChange();
+  }
+
+  let _saveStyleTimer = null;
+  function _saveStyleChange() {
+    // En mode collab, la sync est déjà gérée par _collabSyncStyle()
+    // En mode solo, on sauvegarde localement avec un léger debounce
+    if (typeof Collab !== 'undefined' && Collab.isActive()) return;
+    clearTimeout(_saveStyleTimer);
+    _saveStyleTimer = setTimeout(() => {
+      saveCurrentBoard();
+      pushHistory();
+    }, 300);
   }
 
   function ctxBringFront() {
     if (ctxTargetEl) {
       ctxTargetEl.style.zIndex = ++nextZ;
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementZ(ctxTargetEl.dataset.id, nextZ);
+      }
     }
     hideContextMenu();
   }
   function ctxSendBack() {
     if (ctxTargetEl) {
       ctxTargetEl.style.zIndex = 1;
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementZ(ctxTargetEl.dataset.id, 1);
+      }
     }
     hideContextMenu();
   }
@@ -5686,17 +6518,15 @@ const App = (function () {
     hideContextMenu();
   }
   function ctxDelete() {
+    // S'assurer que l'élément cible fait bien partie de la sélection courante
     if (ctxTargetEl) {
-      const el = ctxTargetEl;
+      if (!multiSelected.has(ctxTargetEl) && selectedEl !== ctxTargetEl) {
+        selectedEl = ctxTargetEl;
+      }
       ctxTargetEl = null;
-      selectedEl = null;
-      removeConnectionsForEl(el);
-      removeCaptionsForEl(el);
-      animateRemove(el, () => {
-        pushHistory();
-      });
     }
     hideContextMenu();
+    deleteSelected();
   }
 
   // ── PANNEAU BIBLIOTHÈQUE ──────────────────────────────────────────────────
@@ -5733,6 +6563,12 @@ const App = (function () {
       btn.textContent = `${label} (${count})`;
 
       btn.addEventListener('click', () => setPanelFolder(f, btn));
+      if (f !== 'all' && f !== 'image') {
+        btn.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          _showLibFolderContextMenu(f, e.clientX, e.clientY);
+        });
+      }
       btn.addEventListener('dragover', (e) => {
         if (isDraggingFromPanel) {
           e.preventDefault();
@@ -5817,9 +6653,6 @@ const App = (function () {
       div.dataset.libId = item.id;
       if (libSelectedIds.has(item.id)) div.classList.add('selected-lib-item');
 
-      const indicator = document.createElement('div');
-      indicator.className = 'lib-select-indicator';
-
       const img = document.createElement('img');
       img.src = item.src;
       img.alt = escHtml(item.name);
@@ -5838,25 +6671,38 @@ const App = (function () {
         deletePanelLibItem(item.id, item.folder);
       });
 
-      // Sélection SHIFT+clic (range comme Windows Explorer)
+      // Sélection : clic simple = cet item seul, Ctrl+clic = toggle individuel,
+      // Shift+clic = sélection de plage entre l'ancre et l'item cliqué.
       div.addEventListener('click', (e) => {
+        // Désélectionner les éléments du board pour éviter qu'un Suppr ultérieur
+        // ne les supprime alors que l'intention est sur la bibliothèque.
+        deselectAll();
         if (e.shiftKey && _libLastClickedId) {
-          // Sélection range : du dernier cliqué jusqu'à celui-ci
-          const allItems = [...grid.querySelectorAll('.lib-panel-item')];
-          const allIds = allItems.map((d) => d.dataset.libId);
-          const idxA = allIds.indexOf(_libLastClickedId);
-          const idxB = allIds.indexOf(item.id);
-          if (idxA !== -1 && idxB !== -1) {
-            const from = Math.min(idxA, idxB);
-            const to = Math.max(idxA, idxB);
+          const all = Array.from(document.querySelectorAll('.lib-panel-item'));
+          const startIdx = all.findIndex((n) => n.dataset.libId === _libLastClickedId);
+          const endIdx = all.findIndex((n) => n.dataset.libId === item.id);
+          if (startIdx !== -1 && endIdx !== -1) {
+            const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
             libSelectedIds.clear();
             document
               .querySelectorAll('.lib-panel-item.selected-lib-item')
               .forEach((d) => d.classList.remove('selected-lib-item'));
             for (let i = from; i <= to; i++) {
-              libSelectedIds.add(allIds[i]);
-              allItems[i].classList.add('selected-lib-item');
+              const id = all[i].dataset.libId;
+              libSelectedIds.add(id);
+              all[i].classList.add('selected-lib-item');
             }
+          }
+          return;
+        }
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl/Cmd+clic : ajouter/retirer cet item sans toucher aux autres
+          if (libSelectedIds.has(item.id)) {
+            libSelectedIds.delete(item.id);
+            div.classList.remove('selected-lib-item');
+          } else {
+            libSelectedIds.add(item.id);
+            div.classList.add('selected-lib-item');
           }
         } else {
           // Clic simple : sélectionner uniquement cet item
@@ -5866,8 +6712,8 @@ const App = (function () {
             .forEach((d) => d.classList.remove('selected-lib-item'));
           libSelectedIds.add(item.id);
           div.classList.add('selected-lib-item');
-          _libLastClickedId = item.id;
         }
+        _libLastClickedId = item.id;
       });
 
       div.addEventListener('dragstart', (e) => {
@@ -5989,7 +6835,6 @@ const App = (function () {
         p.style.display = 'none';
       });
 
-      div.appendChild(indicator);
       div.appendChild(img);
       div.appendChild(name);
       div.appendChild(delBtn);
@@ -6052,6 +6897,32 @@ const App = (function () {
     renderPanelLib();
   }
 
+  function _deleteSelectedLibItems() {
+    if (!libSelectedIds.size) return;
+    const ids = libSelectedIds;
+    const removed = [];
+    Object.keys(library).forEach((folder) => {
+      const arr = library[folder];
+      for (let i = 0; i < arr.length; i++) {
+        if (ids.has(arr[i].id)) removed.push({ folder, index: i, item: arr[i] });
+      }
+      library[folder] = arr.filter((it) => !ids.has(it.id));
+    });
+    libSelectedIds.clear();
+    _libLastClickedId = null;
+    saveLibrary();
+    renderPanelLib();
+    if (removed.length) {
+      pushAction({ type: 'libDelete', before: removed });
+      pushHistory();
+      toast(
+        removed.length > 1
+          ? removed.length + ' images supprimées de la bibliothèque'
+          : 'Image supprimée'
+      );
+    }
+  }
+
   function addNewLibFolder() {
     const name = prompt('Nom de la nouvelle catégorie :');
     if (!name || !name.trim()) return;
@@ -6064,6 +6935,78 @@ const App = (function () {
     panelFolder = trimmed;
     saveLibrary();
     renderPanelLib();
+  }
+
+  function _showLibFolderContextMenu(folderName, x, y) {
+    var old = document.getElementById('lib-folder-context-menu');
+    if (old) old.remove();
+
+    var menu = document.createElement('div');
+    menu.id = 'lib-folder-context-menu';
+    menu.style.cssText =
+      'position:fixed;z-index:9999;background:#fff;border-radius:6px;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,0.18);padding:4px 0;min-width:140px;' +
+      'left:' +
+      x +
+      'px;top:' +
+      y +
+      'px;';
+
+    function makeItem(label, isDanger, onClick) {
+      var item = document.createElement('div');
+      item.textContent = label;
+      item.style.cssText =
+        'padding:8px 16px;cursor:pointer;font-size:13px;color:' +
+        (isDanger ? '#e53e3e' : '#222') +
+        ';';
+      item.addEventListener('mouseenter', () => (item.style.background = '#f5f5f5'));
+      item.addEventListener('mouseleave', () => (item.style.background = ''));
+      item.addEventListener('click', () => {
+        menu.remove();
+        onClick();
+      });
+      return item;
+    }
+
+    menu.appendChild(
+      makeItem('Renommer', false, () => {
+        var newName = prompt('Nouveau nom :', folderName);
+        if (!newName || !newName.trim()) return;
+        var trimmed = newName.trim();
+        if (trimmed === folderName) return;
+        if (Object.keys(library).some((k) => k.toLowerCase() === trimmed.toLowerCase())) {
+          toast('Cette catégorie existe déjà.');
+          return;
+        }
+        var newLib = {};
+        Object.keys(library).forEach((k) => {
+          newLib[k === folderName ? trimmed : k] = library[k];
+        });
+        library = newLib;
+        if (panelFolder === folderName) panelFolder = trimmed;
+        saveLibrary();
+        renderPanelLib();
+      })
+    );
+
+    menu.appendChild(
+      makeItem('Supprimer', true, () => {
+        delete library[folderName];
+        if (panelFolder === folderName) panelFolder = 'all';
+        saveLibrary();
+        renderPanelLib();
+      })
+    );
+
+    document.body.appendChild(menu);
+
+    function dismiss(e) {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('mousedown', dismiss);
+      }
+    }
+    setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
   }
 
   function setupPanelDrop() {
@@ -6123,69 +7066,10 @@ const App = (function () {
   }
 
   // ── EXPORT ────────────────────────────────────────────────────────────────
-  // Calcule le bounding box des éléments + 10% de marge, capture le canvas
-  // ── FONCTIONS D'OPTIMISATION DE TAILLE DE FICHIER ──
-
-  // Redimensionne proprement un canvas
-  function scaleCanvas(originalCanvas, scale) {
-    const scaledCanvas = document.createElement('canvas');
-    scaledCanvas.width = Math.round(originalCanvas.width * scale);
-    scaledCanvas.height = Math.round(originalCanvas.height * scale);
-    const ctx = scaledCanvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(originalCanvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
-    return scaledCanvas;
-  }
-
-  // Boucle pour atteindre le poids en Mo ciblé (minMB / maxMB)
-  async function optimizeFileSize(sourceCanvas, format, minMB, maxMB) {
-    const minBytes = minMB * 1024 * 1024;
-    const maxBytes = maxMB * 1024 * 1024;
-
-    let currentCanvas = sourceCanvas;
-    let quality = format === 'image/jpeg' ? 0.9 : 1.0;
-    let scale = 1.0;
-
-    let dataUrl = currentCanvas.toDataURL(format, quality);
-    let sizeBytes = Math.round((dataUrl.length * 3) / 4);
-
-    let attempts = 0;
-    const maxAttempts = 6; // On limite à 6 essais pour ne pas bloquer l'interface
-
-    while (attempts < maxAttempts) {
-      if (sizeBytes >= minBytes && sizeBytes <= maxBytes) {
-        break; // Le fichier est dans la bonne fourchette
-      }
-
-      if (sizeBytes > maxBytes) {
-        // Trop lourd : on baisse la qualité (JPEG) ou on réduit la résolution
-        if (format === 'image/jpeg' && quality > 0.4) {
-          quality -= 0.15;
-        } else {
-          scale *= 0.75;
-          currentCanvas = scaleCanvas(sourceCanvas, scale);
-        }
-      } else if (sizeBytes < minBytes) {
-        // Trop léger : on augmente la résolution.
-        // SÉCURITÉ : On bloque si la largeur dépasse 8000px pour ne pas faire crasher l'onglet
-        if (currentCanvas.width * 1.3 > 8000) break;
-
-        if (format === 'image/jpeg' && quality < 1.0) {
-          quality += 0.05;
-        } else {
-          scale *= 1.3;
-          currentCanvas = scaleCanvas(sourceCanvas, scale);
-        }
-      }
-
-      dataUrl = currentCanvas.toDataURL(format, quality);
-      sizeBytes = Math.round((dataUrl.length * 3) / 4);
-      attempts++;
-    }
-
-    return dataUrl;
-  }
+  // quality : 1 = Basse, 2 = Moyenne, 3 = Haute
+  // Échelles de capture et qualité JPEG correspondantes
+  const _EXPORT_SCALES = { 1: 1, 2: 2, 3: 3 };
+  const _EXPORT_JPEG_Q = { 1: 0.6, 2: 0.82, 3: 0.95 };
 
   // ── FONCTIONS D'EXPORT MISES À JOUR ──
 
@@ -6215,7 +7099,8 @@ const App = (function () {
 
       const contentW = maxR - minL;
       const contentH = maxB - minT;
-      const margin = Math.round(Math.max(contentW, contentH) * 0.05);
+      // Marge générale (5%) + marge fixe pour les ombres portées (20px)
+      const margin = Math.round(Math.max(contentW, contentH) * 0.05) + 20;
       const cropX = minL - margin;
       const cropY = minT - margin;
       const cropW = contentW + margin * 2;
@@ -6282,23 +7167,22 @@ const App = (function () {
     });
   }
 
-  function exportPNG() {
+  function exportPNG(quality = 2) {
     if (typeof html2canvas === 'undefined') {
       toast('html2canvas non chargé');
       return;
     }
-    toast('Export PNG');
+    const scale = _EXPORT_SCALES[quality] || 2;
+    const labels = { 1: 'Basse', 2: 'Moyenne', 3: 'Haute' };
+    toast('Export PNG — ' + (labels[quality] || 'Moyenne') + ' qualité…');
 
-    // Capture brute en haute définition
-    captureBoard(3)
-      .then(async ({ canvas }) => {
-        // Optimisation: cible de 20 Mo à 40 Mo
-        const optimizedDataUrl = await optimizeFileSize(canvas, 'image/png', 20, 40);
-
+    captureBoard(scale)
+      .then(({ canvas }) => {
+        const dataUrl = canvas.toDataURL('image/png');
         const a = document.createElement('a');
         const b = boards.find((b) => b.id === currentBoardId);
         a.download = (b ? b.name : 'moodboard') + '.png';
-        a.href = optimizedDataUrl;
+        a.href = dataUrl;
         a.click();
         toast('PNG exporté !');
       })
@@ -6310,33 +7194,21 @@ const App = (function () {
       toast('Librairies PDF non chargées');
       return;
     }
+    const scale = _EXPORT_SCALES[quality] || 2;
+    const jpegQ = _EXPORT_JPEG_Q[quality] || 0.82;
+    const labels = { 1: 'Basse', 2: 'Moyenne', 3: 'Haute' };
+    toast('Export PDF — ' + (labels[quality] || 'Moyenne') + ' qualité…');
 
-    const isHR = quality > 1;
-    const label = isHR ? '— Haute résolution' : '— Basse résolution';
-    toast(`Export PDF ${label}`);
-
-    // Pour éviter les artefacts gris en basse résolution, on capture toujours minimum à scale 2
-    const baseScale = isHR ? 3 : 2;
-
-    captureBoard(baseScale)
-      .then(async ({ canvas, w, h }) => {
-        // Cibles en Mégaoctets
-        const minMB = isHR ? 20 : 5;
-        const maxMB = isHR ? 40 : 20;
-
-        // Optimisation
-        const optimizedDataUrl = await optimizeFileSize(canvas, 'image/jpeg', minMB, maxMB);
-
+    captureBoard(scale)
+      .then(({ canvas, w, h }) => {
+        const dataUrl = canvas.toDataURL('image/jpeg', jpegQ);
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF({
           orientation: w > h ? 'landscape' : 'portrait',
           unit: 'px',
           format: [w, h],
         });
-
-        // Les dimensions physiques (w, h) du PDF restent fixes, seule la résolution de l'image change
-        pdf.addImage(optimizedDataUrl, 'JPEG', 0, 0, w, h);
-
+        pdf.addImage(dataUrl, 'JPEG', 0, 0, w, h);
         const board = boards.find((b) => b.id === currentBoardId);
         pdf.save((board ? board.name : 'moodboard') + '.pdf');
         toast('PDF exporté !');
@@ -6353,9 +7225,7 @@ const App = (function () {
   }
   function closeAllModals() {
     [
-      'color-modal',
       'link-modal',
-      'video-modal',
       'rename-modal',
       'export-modal',
       'create-board-modal',
@@ -6371,25 +7241,9 @@ const App = (function () {
 
   // ── CUSTOM CURSOR ─────────────────────────────────────────────────────────
   function _applyCustomCursor() {
-    const size = 20;
-    const c = document.createElement('canvas');
-    c.width = size;
-    c.height = size;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#ff3c00';
-    // Flèche standard : pointe en haut-gauche
-    ctx.beginPath();
-    ctx.moveTo(1, 1);
-    ctx.lineTo(1, 15);
-    ctx.lineTo(5, 11);
-    ctx.lineTo(8, 18);
-    ctx.lineTo(10, 17);
-    ctx.lineTo(7, 10);
-    ctx.lineTo(13, 10);
-    ctx.closePath();
-    ctx.fill();
-    const url = c.toDataURL('image/png');
-    document.body.style.cursor = `url("${url}") 1 1, auto`;
+    const svg =
+      "%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 48 48'%3E%3Cpolygon fill='%23fff' points='9.33 6.2 36.21 29.13 20.7 30.84 9.33 41.53 9.33 6.2'/%3E%3Cpath fill='%23ff3c00' d='M11.83,11.62l18.36,15.66-8.93.99-1.66.18-1.22,1.14-6.56,6.16V11.62M7.59,1.68c-.13,0-.26.03-.35.08-.2.1-.41.36-.41.66v43.1c0,.36.19.62.45.74.09.04.2.07.31.07.17,0,.34-.05.48-.18l13.74-12.9,18.66-2.07c.36-.06.59-.25.68-.55.08-.25-.02-.58-.28-.81L8.07,1.85c-.14-.12-.31-.16-.48-.16h0Z'/%3E%3C/svg%3E";
+    document.body.style.cursor = `url("data:image/svg+xml,${svg}") 3 1, default`;
   }
 
   // ── HOME CONTEXT MENU ────────────────────────────────────────────────────
@@ -6475,6 +7329,12 @@ const App = (function () {
 
     if (_editImg.src) {
       b.thumbnail = _exportEditBoardCrop();
+      if (window._fbDb && _editBoardId) {
+        window._fbDb
+          .ref('boards/' + _editBoardId + '/thumbnail')
+          .set(b.thumbnail)
+          .catch(() => {});
+      }
     }
 
     saveBoards();
@@ -6503,6 +7363,9 @@ const App = (function () {
     const preview = document.getElementById('edit-board-preview');
     const editor = document.getElementById('edit-board-editor');
 
+    // Afficher l'éditeur d'abord pour que offsetWidth soit correct
+    editor.style.display = 'flex';
+
     const tmp = new Image();
     tmp.onload = () => {
       _editImg.src = src;
@@ -6510,7 +7373,7 @@ const App = (function () {
       _editImg.naturalH = tmp.naturalHeight;
 
       // Scale initial : couvrir entièrement le cadre 4:3
-      const pw = preview.offsetWidth;
+      const pw = preview.offsetWidth || 280;
       const ph = pw * 0.75;
       const coverScale = Math.max(pw / tmp.naturalWidth, ph / tmp.naturalHeight);
       _editImg.scale = coverScale;
@@ -6523,7 +7386,6 @@ const App = (function () {
       document.getElementById('edit-board-zoom').value = coverScale;
 
       img.src = src;
-      editor.style.display = 'flex';
       _applyEditBoardTransform();
     };
     tmp.src = src;
@@ -6610,6 +7472,11 @@ const App = (function () {
   let toastTimer;
   function toast(msg) {
     const t = document.getElementById('toast');
+    // Effacer le zoom-toast s'il est visible
+    const zt = document.getElementById('zoom-toast');
+    if (zt) {
+      zt.classList.remove('show');
+    }
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(toastTimer);
@@ -6677,6 +7544,17 @@ const App = (function () {
     } else {
       elData = el.dataset.savedata || '';
     }
+    var elStyle = null;
+    if (elType === 'note') {
+      var ta = el.querySelector('textarea');
+      if (ta)
+        elStyle = {
+          fontFamily: ta.style.fontFamily || '',
+          fontWeight: ta.style.fontWeight || '',
+          fontSize: ta.style.fontSize || '',
+          textAlign: ta.style.textAlign || '',
+        };
+    }
     Collab.syncElementCreate(
       elId,
       elType,
@@ -6685,7 +7563,8 @@ const App = (function () {
       parseFloat(el.style.width) || null,
       parseFloat(el.style.height) || null,
       elData,
-      parseInt(el.style.zIndex) || 100
+      parseInt(el.style.zIndex) || 100,
+      elStyle
     );
   }
 
@@ -6726,6 +7605,7 @@ const App = (function () {
       saveBoards();
       if (window._fbDb) {
         const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
+        if (board.thumbnail) payload.thumbnail = board.thumbnail;
         const payloadSize = new Blob([JSON.stringify(payload)]).size;
         if (payloadSize > 8 * 1024 * 1024) {
           toast('Erreur : Le board est trop lourd. Réduisez la taille des images.');
@@ -6741,6 +7621,17 @@ const App = (function () {
   function _collabGetBoardElements() {
     const elements = [];
     document.querySelectorAll('#canvas .board-element').forEach((el) => {
+      const _elStyle = (() => {
+        if (el.dataset.type !== 'note') return null;
+        const ta = el.querySelector('textarea');
+        if (!ta) return null;
+        return {
+          fontFamily: ta.style.fontFamily || '',
+          fontWeight: ta.style.fontWeight || '',
+          fontSize: ta.style.fontSize || '',
+          textAlign: ta.style.textAlign || '',
+        };
+      })();
       elements.push({
         id: el.dataset.id,
         type: el.dataset.type,
@@ -6753,6 +7644,7 @@ const App = (function () {
           el.dataset.type === 'image'
             ? _imgStore.get(el.dataset.id) || el.dataset.savedata || ''
             : el.dataset.savedata || '',
+        style: _elStyle,
       });
     });
     document.querySelectorAll('#canvas .el-connection').forEach((svg) => {
@@ -6771,9 +7663,34 @@ const App = (function () {
         width: cap.style.width,
         parentId: cap.dataset.parentId || '',
         text: cap.textContent || '',
+        style: {
+          fontFamily: cap.style.fontFamily || '',
+          fontWeight: cap.style.fontWeight || '',
+          fontSize: cap.style.fontSize || '',
+          textAlign: cap.style.textAlign || '',
+        },
       });
     });
     return elements;
+  }
+
+  function updateBoardThumbnail(boardId, thumb) {
+    if (!thumb || !boardId) return;
+    const board = boards.find((b) => b.id === boardId);
+    if (!board || board.thumbnail === thumb) return;
+    board.thumbnail = thumb;
+    saveBoards();
+    const card = document.querySelector('.board-card[data-id="' + boardId + '"]');
+    if (card) {
+      let img = card.querySelector('.board-thumb');
+      if (!img) {
+        img = document.createElement('img');
+        img.className = 'board-thumb';
+        img.alt = '';
+        card.insertBefore(img, card.firstChild);
+      }
+      img.src = thumb;
+    }
   }
 
   // ── API PUBLIQUE ──────────────────────────────────────────────────────────
@@ -6793,19 +7710,9 @@ const App = (function () {
     addNote,
     addFile,
     addColorDirect,
-    openColorPicker,
-    closeColorModal,
-    syncHex,
-    syncColor,
-    addColorElement,
     openLinkModal,
     closeLinkModal,
     addLinkElement,
-    openVideoModal,
-    closeVideoModal,
-    switchVideoTab,
-    addVideoURL,
-    handleVideoUpload,
     toggleLibPanel,
     renderPanelLib,
     setPanelFolder,
@@ -6859,6 +7766,7 @@ const App = (function () {
     _collabCreateConnection,
     _collabDeleteImgStore,
     _collabMergeElements,
+    updateBoardThumbnail,
     _collabGetBoardElements,
   };
 })();

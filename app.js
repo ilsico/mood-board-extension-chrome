@@ -3489,8 +3489,10 @@ const App = (function () {
       }
 
       selectEl(el);
-      const _srhInit = document.getElementById('single-resize-handle');
-      if (_srhInit) _srhInit.style.display = 'none';
+      ['nw', 'ne', 'sw', 'se'].forEach((c) => {
+        const h = document.getElementById('resize-corner-' + c);
+        if (h) h.style.display = 'none';
+      });
       const canvasRect = document.getElementById('canvas').getBoundingClientRect();
       const startMX = (e.clientX - canvasRect.left) / zoomLevel;
       const startMY = (e.clientY - canvasRect.top) / zoomLevel;
@@ -3532,8 +3534,10 @@ const App = (function () {
         // Marquer la copie comme "en cours de création" pour bloquer les .update() de position
         copy._collabPendingCreate = true;
         dragEl = copy;
-        const _srh = document.getElementById('single-resize-handle');
-        if (_srh) _srh.style.display = 'none';
+        ['nw', 'ne', 'sw', 'se'].forEach((c) => {
+          const h = document.getElementById('resize-corner-' + c);
+          if (h) h.style.display = 'none';
+        });
         selectEl(dragEl);
         excludeSet.add(dragEl);
         startLeft = targetX;
@@ -3597,8 +3601,10 @@ const App = (function () {
           }
 
           dragEl.style.transform = `translate3d(${vx}px,${vy}px,0)`;
-          const _srh2 = document.getElementById('single-resize-handle');
-          if (_srh2 && _srh2.style.display !== 'none') _srh2.style.display = 'none';
+          ['nw', 'ne', 'sw', 'se'].forEach((c) => {
+            const h = document.getElementById('resize-corner-' + c);
+            if (h && h.style.display !== 'none') h.style.display = 'none';
+          });
 
           // Throttle: update connections every other frame
           if (++_frameCount % 2 === 0) {
@@ -3664,8 +3670,10 @@ const App = (function () {
           duplicated = false;
           dragEl = el;
           selectEl(el);
-          const _srh3 = document.getElementById('single-resize-handle');
-          if (_srh3) _srh3.style.display = 'none';
+          ['nw', 'ne', 'sw', 'se'].forEach((c) => {
+            const h = document.getElementById('resize-corner-' + c);
+            if (h) h.style.display = 'none';
+          });
           el.style.left = copyX + 'px';
           el.style.top = copyY + 'px';
           el.style.transform = '';
@@ -3808,8 +3816,10 @@ const App = (function () {
 
       document.body.classList.add('is-dragging-el'); // <-- AJOUT ICI
       dragEl.classList.add('is-dragging');
-      const _srh = document.getElementById('single-resize-handle');
-      if (_srh) _srh.style.display = 'none';
+      ['nw', 'ne', 'sw', 'se'].forEach((c) => {
+        const h = document.getElementById('resize-corner-' + c);
+        if (h) h.style.display = 'none';
+      });
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
       // Démarrer la boucle RAF

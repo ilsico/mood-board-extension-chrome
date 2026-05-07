@@ -1901,11 +1901,32 @@ const App = (function () {
         }, 0);
       }
       if (isResizing) {
-        // Collab: sync taille finale + libérer le lock
+        // Cancel any pending RAF and apply final values immediately
+        if (_resizeRafId) {
+          cancelAnimationFrame(_resizeRafId);
+          _resizeRafId = null;
+        }
+        if (resizeEl) {
+          resizeEl.style.width  = _resizeTargetW    + 'px';
+          resizeEl.style.height = _resizeTargetH    + 'px';
+          resizeEl.style.left   = _resizeTargetLeft + 'px';
+          resizeEl.style.top    = _resizeTargetTop  + 'px';
+          if (resizeEl.dataset.type === 'file') {
+            const fw = resizeEl.querySelector('.el-file');
+            if (fw) {
+              fw.style.transform = 'scale(' + _resizeTargetW / 260 + ')';
+              fw.style.transformOrigin = 'top left';
+            }
+          }
+        }
+        // Collab: sync taille + position finale + libérer le lock
         if (typeof Collab !== 'undefined' && Collab.isActive() && resizeEl) {
           const fw = parseFloat(resizeEl.style.width) || null;
           const fh = parseFloat(resizeEl.style.height) || null;
+          const fx = parseFloat(resizeEl.style.left)  || 0;
+          const fy = parseFloat(resizeEl.style.top)   || 0;
           Collab.syncElementSize(resizeEl.dataset.id, fw, fh, true);
+          Collab.syncElementPosition(resizeEl.dataset.id, fx, fy, true);
           Collab.releaseLock(resizeEl.dataset.id);
           // Collab: sync la nouvelle position des captions attachées
           const _rElId = resizeEl.dataset.id;
@@ -1926,14 +1947,16 @@ const App = (function () {
         }
         // Action-based undo for resize
         if (resizeEl) {
-          const afterW = parseFloat(resizeEl.style.width) || null;
+          const afterW = parseFloat(resizeEl.style.width)  || null;
           const afterH = parseFloat(resizeEl.style.height) || null;
+          const afterX = parseFloat(resizeEl.style.left)   || 0;
+          const afterY = parseFloat(resizeEl.style.top)    || 0;
           if (afterW !== resizeStartW || afterH !== resizeStartH) {
             pushAction({
               type: 'resize',
               elId: resizeEl.dataset.id,
-              before: { w: resizeStartW, h: resizeStartH },
-              after: { w: afterW, h: afterH },
+              before: { w: resizeStartW, h: resizeStartH, x: resizeStartLeft, y: resizeStartTop },
+              after:  { w: afterW,       h: afterH,       x: afterX,          y: afterY },
             });
           }
         }

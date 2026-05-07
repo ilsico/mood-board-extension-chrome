@@ -85,7 +85,10 @@
         position: absolute;
         inset: 0;
         overflow: hidden;
-        cursor: default;
+        cursor:
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 48 48'%3E%3Cpolygon fill='%23fff' points='9.33 6.2 36.21 29.13 20.7 30.84 9.33 41.53 9.33 6.2'/%3E%3Cpath fill='%23ff3c00' d='M11.83,11.62l18.36,15.66-8.93.99-1.66.18-1.22,1.14-6.56,6.16V11.62M7.59,1.68c-.13,0-.26.03-.35.08-.2.1-.41.36-.41.66v43.1c0,.36.19.62.45.74.09.04.2.07.31.07.17,0,.34-.05.48-.18l13.74-12.9,18.66-2.07c.36-.06.59-.25.68-.55.08-.25-.02-.58-.28-.81L8.07,1.85c-.14-.12-.31-.16-.48-.16h0Z'/%3E%3C/svg%3E")
+            3 1,
+          default;
       }
       .boards-canvas {
         position: absolute;
@@ -476,6 +479,43 @@
       .share-btn:hover {
         background: #ff3c00;
       }
+      .share-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        background: #fff;
+        border: 1px solid #e0e0e8;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+        border-radius: 6px;
+        padding: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        z-index: 1000;
+        white-space: nowrap;
+      }
+      .share-menu.hidden {
+        display: none;
+      }
+      .share-menu-item {
+        background: none;
+        border: none;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 500;
+        color: #1a1a2e;
+        cursor: pointer;
+        text-align: left;
+        border-radius: 4px;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+      .share-menu-item:hover {
+        background: rgba(255, 60, 0, 0.08);
+        color: #ff3c00;
+      }
       #board-header .board-title-display {
         font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         font-size: 15px;
@@ -497,10 +537,16 @@
         display: flex;
         gap: 4px;
         z-index: 300;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        padding: 14px;
+        margin: -14px;
+      }
+      .fit-btn-group.fit-visible {
+        opacity: 1;
       }
       .fit-screen-btn,
-      .preview-btn,
-      .refresh-save-btn {
+      .preview-btn {
         width: 36px;
         height: 36px;
         background: #ff3c00;
@@ -513,12 +559,37 @@
         justify-content: center;
         font-size: 15px;
         transition: background 0.15s;
-        box-shadow: 0 2px 10px rgba(255, 60, 0, 0.25);
       }
       .fit-screen-btn:hover,
-      .preview-btn:hover,
-      .refresh-save-btn:hover {
+      .preview-btn:hover {
         background: #ff3c00;
+      }
+      .exit-preview-btn {
+        position: fixed;
+        bottom: max(16px, env(safe-area-inset-bottom, 16px));
+        left: max(16px, env(safe-area-inset-left, 16px));
+        width: 36px;
+        height: 36px;
+        background: #ff3c00;
+        color: #fff;
+        border: none;
+        border-radius: 0;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        line-height: 1;
+        z-index: 10000;
+        transition: background 0.15s;
+      }
+      .exit-preview-btn:hover {
+        background: #ff3c00;
+      }
+      @media (max-width: 768px), (pointer: coarse) {
+        body.preview-mode .exit-preview-btn {
+          display: flex;
+        }
       }
       #autosave-menu {
         position: fixed;
@@ -539,8 +610,8 @@
       body.preview-mode #zoom-toast,
       body.preview-mode #context-menu,
       body.preview-mode .modal-overlay,
+      body.preview-mode #single-resize-handle,
       body.preview-mode #multi-resize-handle,
-      body.preview-mode .element-toolbar,
       body.preview-mode .resize-handle,
       body.preview-mode .color-eyedropper {
         display: none !important;
@@ -612,6 +683,41 @@
         display: block;
         transition: filter 0.15s;
       }
+      .tool-btn svg {
+        width: 28px;
+        height: 28px;
+        display: block;
+        transition: color 0.15s;
+      }
+      .tool-btn:hover svg {
+        color: #ff3c00 !important;
+      }
+      #tool-connector.active svg {
+        color: #ff3c00 !important;
+      }
+      body.connector-mode,
+      body.connector-mode .canvas-wrapper,
+      body.connector-mode #canvas,
+      body.connector-mode .board-element,
+      body.connector-mode .board-element * {
+        cursor: crosshair !important;
+      }
+      .el-connection-temp {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 8000px;
+        height: 8000px;
+        pointer-events: none;
+        z-index: 9999;
+        overflow: visible;
+      }
+      .el-connection-temp line {
+        stroke: #ff3c00;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-dasharray: 5 4;
+      }
       .tool-btn .tool-label {
         font-size: 10px;
         color: #777;
@@ -639,8 +745,8 @@
         background: #f8f8fb;
         touch-action: none !important;
         cursor:
-          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='22' viewBox='0 0 18 22'%3E%3Cpath d='M2 2 L2 17 L6 13 L9 20 L11 19 L8 12 L14 12 Z' fill='%23ff3c00'/%3E%3C/svg%3E")
-            2 2,
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 48 48'%3E%3Cpolygon fill='%23fff' points='9.33 6.2 36.21 29.13 20.7 30.84 9.33 41.53 9.33 6.2'/%3E%3Cpath fill='%23ff3c00' d='M11.83,11.62l18.36,15.66-8.93.99-1.66.18-1.22,1.14-6.56,6.16V11.62M7.59,1.68c-.13,0-.26.03-.35.08-.2.1-.41.36-.41.66v43.1c0,.36.19.62.45.74.09.04.2.07.31.07.17,0,.34-.05.48-.18l13.74-12.9,18.66-2.07c.36-.06.59-.25.68-.55.08-.25-.02-.58-.28-.81L8.07,1.85c-.14-.12-.31-.16-.48-.16h0Z'/%3E%3C/svg%3E")
+            3 1,
           default;
       }
       #canvas,
@@ -659,8 +765,8 @@
 
       #zoom-toast,
       #preview-toast {
-        position: absolute;
-        bottom: 28px;
+        position: fixed;
+        bottom: 34px;
         left: 50%;
         transform: translateX(-50%);
         background: #ff3c00;
@@ -782,7 +888,9 @@
         display: flex;
         flex-direction: column;
         z-index: 100;
-        transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+        transition:
+          width 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+          min-width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
         overflow: visible;
       }
       #lib-panel.open {
@@ -995,22 +1103,8 @@
       .lib-panel-item:hover .lib-item-name {
         opacity: 1;
       }
-      .lib-select-indicator {
-        position: absolute;
-        top: 4px;
-        left: 4px;
-        width: 14px;
-        height: 14px;
-        border: 3px solid #fff;
-        background: transparent;
-        display: none;
-        pointer-events: none;
-        z-index: 2;
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
-      }
-      .lib-panel-item.selected-lib-item .lib-select-indicator {
-        display: block;
-        background: #ff3c00;
+      .lib-panel-item.selected-lib-item {
+        border: 1px solid #ff3c00;
       }
       .lib-panel-item.selected-lib-item {
         border: 1px solid #ff3c00;
@@ -1066,67 +1160,29 @@
 
       .board-element {
         position: absolute;
-        will-change: transform;
-        backface-visibility: hidden;
-        transform: translateZ(0);
         cursor:
-          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='22' viewBox='0 0 18 22'%3E%3Cpath d='M2 2 L2 17 L6 13 L9 20 L11 19 L8 12 L14 12 Z' fill='%23ff3c00'/%3E%3C/svg%3E")
-            2 2,
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 48 48'%3E%3Cpolygon fill='%23fff' points='9.33 6.2 36.21 29.13 20.7 30.84 9.33 41.53 9.33 6.2'/%3E%3Cpath fill='%23ff3c00' d='M11.83,11.62l18.36,15.66-8.93.99-1.66.18-1.22,1.14-6.56,6.16V11.62M7.59,1.68c-.13,0-.26.03-.35.08-.2.1-.41.36-.41.66v43.1c0,.36.19.62.45.74.09.04.2.07.31.07.17,0,.34-.05.48-.18l13.74-12.9,18.66-2.07c.36-.06.59-.25.68-.55.08-.25-.02-.58-.28-.81L8.07,1.85c-.14-.12-.31-.16-.48-.16h0Z'/%3E%3C/svg%3E")
+            3 1,
           default;
       }
+      .board-element.is-dragging {
+        will-change: transform;
+        backface-visibility: hidden;
+      }
       .board-element.selected {
-        outline: 2px solid black;
+        outline: 1px solid #000000;
         outline-offset: 3px;
-        z-index: 1000 !important;
       }
+      .board-element.selected.is-dragging { outline: none; }
       .board-element.multi-selected {
-        outline: 1px solid black;
+        outline: 1px solid #000000;
         outline-offset: 0px;
-      }
-
-      .element-toolbar {
-        position: absolute;
-        top: -40px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #fff;
-        padding: 4px 6px;
-        display: none;
-        gap: 2px;
-        white-space: nowrap;
-        z-index: 20;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
-      }
-      .board-element.selected .element-toolbar {
-        display: flex;
-      }
-      .el-tool-btn {
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 4px 6px;
-        transition: background 0.1s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .el-tool-btn img {
-        width: 16px;
-        height: 16px;
-        object-fit: contain;
-        display: block;
-      }
-      .el-tool-btn:hover {
-        background: rgba(0, 0, 0, 0.06);
-      }
-      .el-tool-btn.danger:hover {
-        background: #fee2e2;
       }
 
       .resize-handle {
         position: absolute;
-        bottom: -7px;
-        right: -7px;
+        bottom: -11px;
+        right: -11px;
         width: 14px;
         height: 14px;
         background: #ff3c00;
@@ -1134,7 +1190,6 @@
         cursor: se-resize;
         display: none;
         z-index: 20;
-        border: 2px solid #fff;
         transform-origin: center center;
       }
       .resize-handle::before {
@@ -1146,22 +1201,42 @@
         width: 48px;
         height: 48px;
       }
+      /* Le handle in-canvas est remplacé par #single-resize-handle en screen-space */
       .board-element.selected .resize-handle {
-        display: block;
+        display: none;
+      }
+      #single-resize-handle {
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        background: #ff3c00;
+        border-radius: 0;
+        cursor: se-resize;
+        display: none;
+        z-index: 9000;
+        transform: translate(-50%, -50%);
+      }
+      #single-resize-handle::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 48px;
+        height: 48px;
       }
       #group-bounding-box {
         position: absolute;
-        border: 1px solid black;
+        border: 1px solid #ff3c00;
         pointer-events: none;
         display: none;
         z-index: 9000;
       }
       #multi-resize-handle {
         position: absolute;
-        width: 12px;
-        height: 12px;
+        width: 6px;
+        height: 6px;
         background: #ff3c00;
-        border: 2px solid #fff;
         cursor: se-resize;
         z-index: 9100;
         display: none;
@@ -1196,9 +1271,10 @@
       .el-note {
         background: #fff;
         border-radius: 0;
-        box-shadow: 0 3px 16px rgba(0, 0, 0, 0.1);
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.08),
+          0 2px 8px rgba(0, 0, 0, 0.06);
         padding: 14px;
-        border: 1px solid #eaeaf0;
         display: flex;
         flex-direction: column;
         width: 100%;
@@ -1225,7 +1301,9 @@
       }
       .el-color {
         border-radius: 0;
-        box-shadow: 0 3px 16px rgba(0, 0, 0, 0.1);
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.08),
+          0 2px 8px rgba(0, 0, 0, 0.06);
         overflow: hidden;
         display: flex;
         flex-direction: column;
@@ -1239,7 +1317,6 @@
       .el-color .color-info {
         background: #fff;
         padding: 6px 10px;
-        border-top: 1px solid rgba(0, 0, 0, 0.06);
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -1274,8 +1351,6 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        opacity: 0.45;
-        transition: opacity 0.15s;
       }
       .el-color .color-eyedropper:hover {
         opacity: 1;
@@ -1286,12 +1361,15 @@
         margin-top: 2px;
       }
 
+      .board-element[data-type='link'] {
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.08),
+          0 2px 8px rgba(0, 0, 0, 0.06);
+      }
       .el-link {
         background: #fff;
         border-radius: 0;
         overflow: hidden;
-        box-shadow: 0 3px 16px rgba(0, 0, 0, 0.1);
-        border: 1px solid #eaeaf0;
         width: 100%;
         height: 100%;
         min-width: 103px;
@@ -1307,40 +1385,45 @@
         display: block;
         min-height: 60px;
       }
-      .el-link .link-image-placeholder {
-        width: 100%;
-        flex: 1;
-        min-height: 60px;
-        background: linear-gradient(135deg, #ffe8e0, #ffd0c0);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 32px;
-      }
       .el-link .link-body {
         padding: 10px 14px;
         flex-shrink: 0;
       }
       .el-link .link-title {
-        font-size: 13px;
+        font-size: 17px;
         font-weight: 600;
         color: #2d2d2d;
         margin-bottom: 5px;
         line-height: 1.4;
       }
       .el-link .link-url {
-        font-size: 11px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 14px;
         color: #ff3c00;
+        overflow: hidden;
+      }
+      .el-link .link-url-icon {
+        width: 1em;
+        height: 1em;
+        flex-shrink: 0;
+        object-fit: contain;
+      }
+      .el-link .link-url span {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        min-width: 0;
       }
 
       .el-video {
         background: #000;
         border-radius: 0;
         overflow: hidden;
-        box-shadow: 0 3px 16px rgba(0, 0, 0, 0.18);
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.08),
+          0 2px 8px rgba(0, 0, 0, 0.06);
         width: 100%;
         height: 100%;
       }
@@ -1356,12 +1439,15 @@
         display: block;
       }
 
+      .board-element[data-type='file'] {
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.08),
+          0 2px 8px rgba(0, 0, 0, 0.06);
+      }
       .el-file {
         background: #fff;
         border-radius: 0;
         padding: 16px 20px;
-        box-shadow: 0 3px 16px rgba(0, 0, 0, 0.1);
-        border: 1px solid #eaeaf0;
         display: flex;
         align-items: center;
         gap: 14px;
@@ -1400,7 +1486,6 @@
       .el-file-video {
         background: #000;
         border-radius: 0;
-        box-shadow: 0 3px 16px rgba(0, 0, 0, 0.18);
         border: 1px solid #111;
         width: 100%;
         height: 100%;
@@ -1555,71 +1640,6 @@
         color: #2d2d2d;
       }
 
-      .color-picker-wrap {
-        padding: 22px 26px;
-      }
-      .color-picker-wrap input[type='color'] {
-        width: 100%;
-        height: 130px;
-        border: none;
-        border-radius: 0;
-        cursor: pointer;
-        padding: 0;
-        display: block;
-      }
-      .hex-input-wrap {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-top: 16px;
-      }
-      .hex-input-wrap label {
-        font-size: 13px;
-        font-weight: 700;
-        color: #666;
-      }
-      .hex-input {
-        flex: 1;
-        padding: 9px 14px;
-        border: 1px solid #eaeaf0;
-        font-size: 15px;
-        font-weight: 700;
-        font-family: 'Courier New', monospace;
-        letter-spacing: 2px;
-        outline: none;
-        text-transform: uppercase;
-        color: #2d2d2d;
-      }
-      .hex-input:focus {
-        border-color: #ff3c00;
-      }
-      #hex-preview {
-        width: 36px;
-        height: 36px;
-        border-radius: 0;
-        flex-shrink: 0;
-        border: 1px solid #eaeaf0;
-      }
-      .add-color-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        width: 100%;
-        padding: 13px;
-        margin-top: 18px;
-        background: #ff3c00;
-        color: #fff;
-        border: none;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 700;
-        transition: background 0.15s;
-      }
-      .add-color-btn:hover {
-        background: #ff3c00;
-      }
-
       .form-wrap {
         padding: 22px 26px;
         display: flex;
@@ -1661,28 +1681,6 @@
       }
       .form-submit:hover {
         background: #e03500;
-      }
-
-      .video-type-tabs {
-        display: flex;
-        gap: 8px;
-      }
-      .video-tab {
-        flex: 1;
-        padding: 10px;
-        border: 1px solid #eaeaf0;
-        background: none;
-        cursor: pointer;
-        font-size: 13px;
-        color: #666;
-        font-weight: 500;
-        transition: all 0.15s;
-        font-family: inherit;
-      }
-      .video-tab.active {
-        background: rgba(255, 60, 0, 0.08);
-        border-color: #ff3c00;
-        color: #ff3c00;
       }
 
       #context-menu {
@@ -1928,6 +1926,224 @@
         cursor: grabbing !important;
       }
 
+      .board-element.image-broken {
+        background: #fafafa;
+        border: 2px dashed #d0d0d8;
+      }
+      .image-broken-content {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        pointer-events: none;
+      }
+      .image-broken-content > * {
+        pointer-events: auto;
+      }
+      .image-broken-content .ib-icon {
+        font-size: 28px;
+        color: #ff8c00;
+        line-height: 1;
+      }
+      .image-broken-content .ib-label {
+        font-size: 11px;
+        color: #888;
+        font-weight: 500;
+        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      }
+      .image-broken-content .ib-restore-btn {
+        background: #ff3c00;
+        color: #fff;
+        border: none;
+        padding: 5px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        transition: background 0.15s;
+      }
+      .image-broken-content .ib-restore-btn:hover {
+        background: #e03500;
+      }
+
+      #broken-images-banner {
+        position: absolute;
+        top: 70px;
+        right: 16px;
+        background: #fff7ed;
+        border: 1px solid #ffb98a;
+        color: #9a4500;
+        padding: 8px 10px 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 600;
+        z-index: 350;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+      #broken-images-banner.hidden {
+        display: none;
+      }
+      #broken-images-banner .bib-icon {
+        color: #ff8c00;
+        font-size: 14px;
+      }
+      #broken-images-banner #broken-delete-all {
+        background: #ff3c00;
+        color: #fff;
+        border: none;
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.15s;
+      }
+      #broken-images-banner #broken-delete-all:hover {
+        background: #e03500;
+      }
+      #broken-images-banner #broken-banner-close {
+        background: transparent;
+        border: none;
+        color: #9a4500;
+        font-size: 18px;
+        cursor: pointer;
+        padding: 0 2px;
+        line-height: 1;
+        font-family: inherit;
+      }
+
+      .restore-modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(20, 20, 30, 0.55);
+        z-index: 10001;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: rmFade 0.15s ease-out;
+      }
+      @keyframes rmFade {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .restore-modal {
+        background: #fff;
+        width: min(640px, 92vw);
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 18px 20px;
+        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+        overflow: hidden;
+      }
+      .restore-modal .rm-header {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1a1a2e;
+      }
+      .restore-modal .rm-section-label {
+        font-size: 11px;
+        color: #888;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .restore-modal .rm-empty {
+        font-size: 13px;
+        color: #888;
+        padding: 16px;
+        background: #f8f8fb;
+        text-align: center;
+      }
+      .restore-modal .rm-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 8px;
+        overflow-y: auto;
+        max-height: 50vh;
+        padding: 2px;
+      }
+      .restore-modal .rm-thumb {
+        aspect-ratio: 1;
+        background: #f4f4f6;
+        border: 2px solid transparent;
+        cursor: pointer;
+        overflow: hidden;
+        transition:
+          border-color 0.12s,
+          transform 0.12s;
+      }
+      .restore-modal .rm-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .restore-modal .rm-thumb:hover {
+        border-color: #ff3c00;
+        transform: scale(1.03);
+      }
+      .restore-modal .rm-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        padding-top: 6px;
+        border-top: 1px solid #eef0f3;
+      }
+      .restore-modal .rm-file-btn {
+        background: #ff3c00;
+        color: #fff;
+        border: none;
+        padding: 8px 16px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .restore-modal .rm-file-btn:hover {
+        background: #e03500;
+      }
+      .restore-modal .rm-cancel-btn {
+        background: #f4f4f6;
+        color: #1a1a2e;
+        border: none;
+        padding: 8px 16px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .restore-modal .rm-cancel-btn:hover {
+        background: #e8e8ec;
+      }
+
+      body.is-panning,
+      body.is-panning * {
+        cursor: grabbing !important;
+      }
+      body.is-pan-mode,
+      body.is-pan-mode * {
+        cursor: grab !important;
+      }
+
+      body.is-dragging-el .color-hex-input,
+      body.is-dragging-el .color-eyedropper {
+        pointer-events: none;
+        user-select: none;
+      }
+
       #group-toolbar {
         display: none;
         position: absolute;
@@ -1951,8 +2167,10 @@
       body.readonly-mode #lib-panel,
       body.readonly-mode #back-btn,
       body.readonly-mode #share-btn,
-      body.readonly-mode .element-toolbar,
+      body.readonly-mode #share-wrap,
+      body.readonly-mode #collab-btn,
       body.readonly-mode .resize-handle,
+      body.readonly-mode #single-resize-handle,
       body.readonly-mode #multi-resize-handle,
       body.readonly-mode #home-screen {
         display: none !important;
@@ -2022,6 +2240,10 @@
         transition: opacity 0.3s;
         will-change: transform;
       }
+      .collab-cursor svg {
+        display: block;
+        margin: -1px 0 0 -3px;
+      }
       .collab-sel-rect {
         position: absolute;
         border: 1.5px dashed;
@@ -2038,8 +2260,7 @@
         outline: 2px dashed var(--lock-color, #888);
         outline-offset: 2px;
       }
-      .board-element.collab-locked .resize-handle,
-      .board-element.collab-locked .element-toolbar {
+      .board-element.collab-locked .resize-handle {
         display: none !important;
       }
 
@@ -2074,11 +2295,23 @@
       </div>
       <button id="new-board-btn" title="Nouveau Moodboard">+</button>
       <button id="join-board-btn" title="Rejoindre un board collaboratif">
-        <img
-          src="PNG/collaborer.png"
-          alt=""
-          style="width: 20px; height: 20px; pointer-events: none"
-        />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          style="pointer-events: none; color: #fff"
+        >
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <path d="M16 3.128a4 4 0 0 1 0 7.744" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <circle cx="9" cy="7" r="4" />
+        </svg>
       </button>
     </div>
 
@@ -2089,29 +2322,66 @@
         </button>
         <div class="board-title-display" id="board-title-display">Moodboard</div>
         <div style="display: flex; align-items: center; gap: 6px">
-          <button id="share-btn" class="share-btn" title="Partager ce board" style="display: none">
-            <img src="PNG/partager.png" alt="" style="width: 14px; height: 14px; flex-shrink: 0" />
-            Partager
-          </button>
+          <div id="share-wrap" style="position: relative; display: none">
+            <button id="share-btn" class="share-btn" title="Partager ce board">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="flex-shrink: 0; color: #fff"
+              >
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" x2="15.42" y1="13.51" y2="17.49" />
+                <line x1="15.41" x2="8.59" y1="6.51" y2="10.49" />
+              </svg>
+              Partager
+            </button>
+            <div id="share-menu" class="share-menu hidden">
+              <button class="share-menu-item" id="share-copy-id">Copier l'ID du board</button>
+              <button class="share-menu-item" id="share-copy-url">
+                Copier le lien de lecture seule
+              </button>
+            </div>
+          </div>
           <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
-            <img
-              src="PNG/collaborer.png"
-              alt=""
-              style="width: 18px; height: 18px; flex-shrink: 0"
-            />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="flex-shrink: 0; color: #fff"
+            >
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <path d="M16 3.128a4 4 0 0 1 0 7.744" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <circle cx="9" cy="7" r="4" />
+            </svg>
             Collaborer
           </button>
         </div>
       </header>
 
+      <div id="broken-images-banner" class="hidden">
+        <span class="bib-icon">⚠</span>
+        <span><span id="broken-count">0</span> image(s) perdue(s)</span>
+        <button id="broken-delete-all" type="button">Tout supprimer</button>
+        <button id="broken-banner-close" type="button" title="Fermer">×</button>
+      </div>
+
       <div class="fit-btn-group">
-        <button id="refresh-save-btn" class="refresh-save-btn" title="Synchroniser (Ctrl+S)">
-          <img
-            src="PNG/sauvegarder.png"
-            alt="Sync"
-            style="width: 20px; height: 20px; object-fit: contain"
-          />
-        </button>
         <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">⊡</button>
         <button
           id="preview-btn"
@@ -2130,7 +2400,23 @@
             draggable="true"
             title="Note — glisser pour poser"
           >
-            <img src="PNG/note.png" alt="Note" draggable="false" style="pointer-events: none" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="pointer-events: none; color: #000"
+            >
+              <path
+                d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"
+              />
+              <path d="M15 3v5a1 1 0 0 0 1 1h5" />
+            </svg>
             <span class="tool-label">Note</span>
           </button>
           <button
@@ -2139,12 +2425,26 @@
             draggable="true"
             title="Couleur — glisser pour poser"
           >
-            <img
-              src="PNG/couleur.png"
-              alt="Couleur"
-              draggable="false"
-              style="pointer-events: none"
-            />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="pointer-events: none; color: #000"
+            >
+              <path
+                d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"
+              />
+              <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+              <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+              <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+              <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+            </svg>
             <span class="tool-label">Couleur</span>
           </button>
           <button
@@ -2153,7 +2453,22 @@
             draggable="true"
             title="Lien — glisser pour poser"
           >
-            <img src="PNG/lien.png" alt="Lien" draggable="false" style="pointer-events: none" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="pointer-events: none; color: #000"
+            >
+              <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+              <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+              <line x1="8" x2="16" y1="12" y2="12" />
+            </svg>
             <span class="tool-label">Lien</span>
           </button>
           <button
@@ -2162,22 +2477,64 @@
             draggable="true"
             title="Fichier — glisser pour poser"
           >
-            <img
-              src="PNG/fichier.png"
-              alt="Fichier"
-              draggable="false"
-              style="pointer-events: none"
-            />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="pointer-events: none; color: #000"
+            >
+              <path
+                d="M11.35 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v5.35"
+              />
+              <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+              <path d="M14 19h6" />
+              <path d="M17 16v6" />
+            </svg>
             <span class="tool-label">Fichier</span>
+          </button>
+          <button id="tool-connector" class="tool-btn" title="Connecteur — relier deux éléments">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="pointer-events: none; color: #1a1a2e"
+            >
+              <path d="M 3 12 L 15 12" />
+              <circle cx="18" cy="12" r="3" />
+            </svg>
+            <span class="tool-label">Connecteur</span>
           </button>
           <div class="toolbar-divider"></div>
           <button id="tool-export" class="tool-btn" title="Exporter">
-            <img
-              src="PNG/exportation.png"
-              alt="Exporter"
-              draggable="false"
-              style="pointer-events: none"
-            />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="pointer-events: none; color: #ff3c00"
+            >
+              <path
+                d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+              />
+              <path d="M12 10v6" />
+              <path d="m9 13 3-3 3 3" />
+            </svg>
             <span class="tool-label">Exporter</span>
           </button>
         </div>
@@ -2205,6 +2562,7 @@
           <div id="collab-cursors"></div>
           <div id="collab-sel-rects"></div>
           <div id="selection-rect"></div>
+          <div id="single-resize-handle"></div>
           <div id="multi-resize-handle"></div>
           <div id="group-bounding-box"></div>
           <div id="zoom-toast"></div>
@@ -2266,34 +2624,30 @@
       <button id="delete-button">Supprimer</button>
     </div>
 
+    <button id="exit-preview-btn" class="exit-preview-btn" title="Quitter l'aperçu">
+      &#x2715;
+    </button>
+
     <input type="file" id="file-input-images" multiple accept="image/*" style="display: none" />
     <input type="file" id="file-input-file" multiple style="display: none" />
-    <input type="file" id="file-input-video" accept="video/*" style="display: none" />
     <input type="file" id="file-input-replace" accept="image/*" style="display: none" />
-
-    <div class="modal-overlay hidden" id="color-modal">
-      <div class="modal" style="width: 370px">
-        <div class="modal-header">
-          <h2>🎨 Ajouter une couleur</h2>
-          <button id="close-color-modal" class="modal-close">&#x2715;</button>
-        </div>
-        <div class="color-picker-wrap">
-          <label for="color-picker-input" style="display: none">Sélecteur couleur</label>
-          <input type="color" id="color-picker-input" value="#ff3c00" />
-          <div class="hex-input-wrap">
-            <label for="hex-input">#</label>
-            <input class="hex-input" type="text" id="hex-input" value="6C63FF" maxlength="6" />
-            <div id="hex-preview" style="background: #ff3c00"></div>
-          </div>
-          <button id="add-color-btn" class="add-color-btn">＋ Ajouter au board</button>
-        </div>
-      </div>
-    </div>
 
     <div class="modal-overlay hidden" id="link-modal">
       <div class="modal" style="width: 460px">
         <div class="modal-header">
-          <h2>🔗 Ajouter un lien</h2>
+          <h2>
+            <img
+              src="PNG/lien.png"
+              alt=""
+              style="
+                width: 1.2em;
+                height: 1.2em;
+                vertical-align: middle;
+                object-fit: contain;
+                margin-right: 6px;
+              "
+            />Ajouter un lien
+          </h2>
           <button id="close-link-modal" class="modal-close">&#x2715;</button>
         </div>
         <div class="form-wrap">
@@ -2307,7 +2661,7 @@
             />
           </div>
           <div class="form-group">
-            <label for="link-title-input">Titre (optionnel)</label>
+            <label for="link-title-input">Titre *</label>
             <input
               class="form-input"
               type="text"
@@ -2325,36 +2679,6 @@
             />
           </div>
           <button id="submit-link" class="form-submit">Ajouter le lien</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-overlay hidden" id="video-modal">
-      <div class="modal" style="width: 480px">
-        <div class="modal-header">
-          <h2>▶️ Ajouter une vidéo</h2>
-          <button id="close-video-modal" class="modal-close">&#x2715;</button>
-        </div>
-        <div class="form-wrap">
-          <div class="video-type-tabs">
-            <button class="video-tab active" id="vt-url">🌐 URL</button>
-            <button class="video-tab" id="vt-local">📁 Fichier local</button>
-          </div>
-          <div id="video-url-section">
-            <div class="form-group">
-              <label for="video-url-input">URL de la vidéo</label>
-              <input
-                class="form-input"
-                type="url"
-                id="video-url-input"
-                placeholder="https://youtube.com/watch?v=..."
-              />
-            </div>
-            <button id="submit-video-url" class="form-submit">Ajouter</button>
-          </div>
-          <div id="video-local-section" class="hidden">
-            <button id="submit-video-local" class="form-submit">📁 Choisir un fichier vidéo</button>
-          </div>
         </div>
       </div>
     </div>
@@ -2404,53 +2728,134 @@
     </div>
 
     <div class="modal-overlay hidden" id="export-modal">
-      <div class="modal" style="width: 320px">
+      <div class="modal" style="width: 340px">
         <div class="modal-header">
           <h2>Exporter</h2>
           <button id="close-export-modal" class="modal-close">&#x2715;</button>
         </div>
-        <div style="padding: 24px 26px; display: flex; flex-direction: column; gap: 10px">
-          <button id="export-png-btn" class="form-submit">PNG — Haute résolution</button>
-          <div style="border-top: 1px solid #eaeaf0; margin: 2px 0"></div>
-          <button id="export-pdf-hr-btn" class="form-submit" style="background: #1a1a2e">
-            PDF — Haute résolution
-          </button>
-          <button id="export-pdf-lr-btn" class="form-submit" style="background: #3a3a5e">
-            PDF — Basse résolution
-          </button>
+        <div style="padding: 24px 26px; display: flex; flex-direction: column; gap: 20px">
+          <!-- Qualité -->
+          <div>
+            <div
+              style="
+                font-size: 12px;
+                font-weight: 700;
+                color: #888;
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                margin-bottom: 12px;
+              "
+            >
+              Qualité
+            </div>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                font-size: 12px;
+                color: #aaa;
+                margin-bottom: 6px;
+              "
+            >
+              <span>Basse</span><span>Moyenne</span><span>Haute</span>
+            </div>
+            <input
+              type="range"
+              id="export-quality-slider"
+              min="1"
+              max="3"
+              step="1"
+              value="2"
+              style="width: 100%; accent-color: #ff3c00; cursor: pointer"
+            />
+          </div>
+
+          <!-- Format -->
+          <div>
+            <div
+              style="
+                font-size: 12px;
+                font-weight: 700;
+                color: #888;
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                margin-bottom: 12px;
+              "
+            >
+              Format
+            </div>
+            <div style="display: flex; gap: 10px">
+              <label
+                style="
+                  flex: 1;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  gap: 8px;
+                  padding: 10px;
+                  border: 2px solid #ff3c00;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-weight: 700;
+                  font-size: 14px;
+                  background: #fff;
+                  color: #ff3c00;
+                "
+              >
+                <input
+                  type="radio"
+                  name="export-format"
+                  value="png"
+                  checked
+                  style="accent-color: #ff3c00"
+                />
+                PNG
+              </label>
+              <label
+                style="
+                  flex: 1;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  gap: 8px;
+                  padding: 10px;
+                  border: 2px solid #eaeaf0;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-weight: 700;
+                  font-size: 14px;
+                  background: #fff;
+                  color: #888;
+                "
+              >
+                <input
+                  type="radio"
+                  name="export-format"
+                  value="pdf"
+                  style="accent-color: #ff3c00"
+                />
+                PDF
+              </label>
+            </div>
+          </div>
+
+          <button id="export-do-btn" class="form-submit" style="margin-top: 4px">Exporter</button>
         </div>
       </div>
     </div>
 
     <div id="context-menu">
-      <div class="ctx-item" id="ctx-bring-front">⬆️ Premier plan</div>
-      <div class="ctx-item" id="ctx-send-back">⬇️ Arrière-plan</div>
-      <div class="ctx-divider"></div>
-      <div class="ctx-item" id="ctx-duplicate">
-        <img
-          src="PNG/dupliquer.png"
-          alt=""
-          style="width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; margin-right: 6px"
-        />
-        Dupliquer
-      </div>
+      <div class="ctx-item" id="ctx-duplicate">Dupliquer</div>
       <div class="ctx-divider" id="ctx-img-divider" style="display: none"></div>
-      <div class="ctx-item" id="ctx-img-download" style="display: none">⬇️ Télécharger</div>
-      <div class="ctx-item" id="ctx-img-replace" style="display: none">🔄 Remplacer</div>
-      <div class="ctx-item" id="ctx-img-caption" style="display: none">💬 Commentaire</div>
+      <div class="ctx-item" id="ctx-img-download" style="display: none">Télécharger</div>
+      <div class="ctx-item" id="ctx-img-replace" style="display: none">Remplacer</div>
+      <div class="ctx-item" id="ctx-img-caption" style="display: none">Commentaire</div>
       <div class="ctx-divider" id="ctx-connect-divider" style="display: none"></div>
-      <div class="ctx-item" id="ctx-connect" style="display: none">— Connecter</div>
+      <div class="ctx-item" id="ctx-connect" style="display: none">Connecter</div>
       <div id="ctx-disconnect-divider" class="ctx-divider" style="display: none"></div>
       <div id="ctx-disconnect" class="ctx-item" style="display: none">Déconnecter</div>
       <div class="ctx-divider"></div>
-      <div class="ctx-item danger" id="ctx-delete">
-        <img
-          src="PNG/supprimer.png"
-          alt=""
-          style="width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; margin-right: 6px"
-        />
-        Supprimer
-      </div>
+      <div class="ctx-item danger" id="ctx-delete">Supprimer</div>
     </div>
     <div id="autosave-menu">
       <div class="ctx-item" data-interval="120000">2 minutes</div>

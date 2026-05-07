@@ -610,9 +610,11 @@
       body.preview-mode #zoom-toast,
       body.preview-mode #context-menu,
       body.preview-mode .modal-overlay,
-      body.preview-mode #single-resize-handle,
       body.preview-mode #multi-resize-handle,
-      body.preview-mode .resize-handle,
+      body.preview-mode #resize-corner-nw,
+      body.preview-mode #resize-corner-ne,
+      body.preview-mode #resize-corner-sw,
+      body.preview-mode #resize-corner-se,
       body.preview-mode .color-eyedropper {
         display: none !important;
       }
@@ -1179,52 +1181,6 @@
         outline-offset: 0px;
       }
 
-      .resize-handle {
-        position: absolute;
-        bottom: -11px;
-        right: -11px;
-        width: 14px;
-        height: 14px;
-        background: #ff3c00;
-        border-radius: 0;
-        cursor: se-resize;
-        display: none;
-        z-index: 20;
-        transform-origin: center center;
-      }
-      .resize-handle::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 48px;
-        height: 48px;
-      }
-      /* Le handle in-canvas est remplacé par #single-resize-handle en screen-space */
-      .board-element.selected .resize-handle {
-        display: none;
-      }
-      #single-resize-handle {
-        position: absolute;
-        width: 6px;
-        height: 6px;
-        background: #ff3c00;
-        border-radius: 0;
-        cursor: se-resize;
-        display: none;
-        z-index: 9000;
-        transform: translate(-50%, -50%);
-      }
-      #single-resize-handle::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 48px;
-        height: 48px;
-      }
       #group-bounding-box {
         position: absolute;
         border: 1px solid #ff3c00;
@@ -2169,9 +2125,11 @@
       body.readonly-mode #share-btn,
       body.readonly-mode #share-wrap,
       body.readonly-mode #collab-btn,
-      body.readonly-mode .resize-handle,
-      body.readonly-mode #single-resize-handle,
       body.readonly-mode #multi-resize-handle,
+      body.readonly-mode #resize-corner-nw,
+      body.readonly-mode #resize-corner-ne,
+      body.readonly-mode #resize-corner-sw,
+      body.readonly-mode #resize-corner-se,
       body.readonly-mode #home-screen {
         display: none !important;
       }
@@ -2259,9 +2217,6 @@
       .board-element.collab-locked {
         outline: 2px dashed var(--lock-color, #888);
         outline-offset: 2px;
-      }
-      .board-element.collab-locked .resize-handle {
-        display: none !important;
       }
 
       #collab-status-bar {

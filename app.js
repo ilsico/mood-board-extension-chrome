@@ -1293,21 +1293,33 @@ const App = (function () {
       `translate(${panX}px,${panY}px) scale(${zoomLevel})`;
 
     updateMultiResizeHandle();
-    updateSingleResizeHandle();
+    updateCornerHandles();
   }
 
-  function updateSingleResizeHandle() {
-    const handle = document.getElementById('single-resize-handle');
-    if (!handle) return;
+  function updateCornerHandles() {
+    const corners = ['nw', 'ne', 'sw', 'se'];
     if (!selectedEl || multiSelected.size > 0) {
-      handle.style.display = 'none';
+      corners.forEach((c) => {
+        const h = document.getElementById('resize-corner-' + c);
+        if (h) h.style.display = 'none';
+      });
       return;
     }
     const r = selectedEl.getBoundingClientRect();
     const wRect = document.getElementById('canvas-wrapper').getBoundingClientRect();
-    handle.style.display = 'block';
-    handle.style.left = r.right - wRect.left + 'px';
-    handle.style.top = r.bottom - wRect.top + 'px';
+    const pos = {
+      nw: { left: r.left - wRect.left, top: r.top - wRect.top },
+      ne: { left: r.right - wRect.left, top: r.top - wRect.top },
+      sw: { left: r.left - wRect.left, top: r.bottom - wRect.top },
+      se: { left: r.right - wRect.left, top: r.bottom - wRect.top },
+    };
+    corners.forEach((c) => {
+      const h = document.getElementById('resize-corner-' + c);
+      if (!h) return;
+      h.style.display = 'block';
+      h.style.left = pos[c].left + 'px';
+      h.style.top = pos[c].top + 'px';
+    });
   }
 
   function setupSingleResizeHandle() {
@@ -2631,7 +2643,7 @@ const App = (function () {
         }
         _applyReverse(action);
         _actionIndex--;
-        updateSingleResizeHandle();
+        updateCornerHandles();
         toast('Annulé');
         return;
       }
@@ -2667,7 +2679,7 @@ const App = (function () {
       _actionIndex++;
       const action = _actionHistory[_actionIndex];
       _applyForward(action);
-      updateSingleResizeHandle();
+      updateCornerHandles();
       toast('Rétabli');
       return;
     }
@@ -2971,7 +2983,7 @@ const App = (function () {
     selectedEl = null;
     multiSelected.clear();
     updateMultiResizeHandle();
-    updateSingleResizeHandle();
+    updateCornerHandles();
     updateAllConnections();
     _collabSyncSelection();
   }
@@ -3014,7 +3026,7 @@ const App = (function () {
       }
     }
     updateMultiResizeHandle();
-    updateSingleResizeHandle();
+    updateCornerHandles();
     _collabSyncSelection();
   }
 
@@ -3707,7 +3719,7 @@ const App = (function () {
         dragEl.style.transform = '';
         if (ctrlSnap) applySnap(dragEl, excludeSet);
         updateConnectionsForEl(dragEl); // position finale après snap éventuel
-        updateSingleResizeHandle();
+        updateCornerHandles();
         clearSnapGuides();
         // Repositionner les captions attachées sur la position finale
         const _elId2 = dragEl.dataset.id;
@@ -4282,7 +4294,7 @@ const App = (function () {
     }
     // Mettre à jour les connecteurs en temps réel
     updateConnectionsForEl(resizeEl);
-    updateSingleResizeHandle();
+    updateCornerHandles();
   }
 
   // ── RESTORE ──────────────────────────────────────────────────────────────

@@ -5211,6 +5211,7 @@ const App = (function () {
         Collab.releaseLock(el.dataset.id);
       }
       if (!ta.value.trim()) {
+        if (hoveredEl === el) { hoveredEl = null; updateCornerHandles(); }
         el.remove();
         // Collab: sync suppression
         if (typeof Collab !== 'undefined' && Collab.isActive()) {

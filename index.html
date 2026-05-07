@@ -1188,6 +1188,21 @@
         display: none;
         z-index: 9000;
       }
+      #resize-corner-nw,
+      #resize-corner-ne,
+      #resize-corner-sw,
+      #resize-corner-se {
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        z-index: 9000;
+        display: none;
+        transform: translate(-50%, -50%);
+      }
+      #resize-corner-nw { cursor: nw-resize; }
+      #resize-corner-ne { cursor: ne-resize; }
+      #resize-corner-sw { cursor: sw-resize; }
+      #resize-corner-se { cursor: se-resize; }
       #multi-resize-handle {
         position: absolute;
         width: 6px;
@@ -2517,7 +2532,10 @@
           <div id="collab-cursors"></div>
           <div id="collab-sel-rects"></div>
           <div id="selection-rect"></div>
-          <div id="single-resize-handle"></div>
+          <div id="resize-corner-nw"></div>
+          <div id="resize-corner-ne"></div>
+          <div id="resize-corner-sw"></div>
+          <div id="resize-corner-se"></div>
           <div id="multi-resize-handle"></div>
           <div id="group-bounding-box"></div>
           <div id="zoom-toast"></div>

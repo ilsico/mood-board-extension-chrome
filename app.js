@@ -4247,7 +4247,7 @@ const App = (function () {
       ? resizeStartH + dy : resizeStartH - dy;
 
     let fw, fh;
-    if (resizeRatio) {
+    if (resizeRatio && resizeStartW > 0 && resizeStartH > 0) {
       const scale = Math.max(
         rawW / resizeStartW,
         rawH / resizeStartH,

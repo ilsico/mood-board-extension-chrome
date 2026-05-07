@@ -2502,6 +2502,7 @@ const App = (function () {
           removeCaptionsForEl(el);
           if (selectedEl === el) selectedEl = null;
           multiSelected.delete(el);
+          if (hoveredEl === el) hoveredEl = null;
           el.remove();
         }
         if (isCollab) Collab.syncElementDelete(action.elId);
@@ -2536,6 +2537,7 @@ const App = (function () {
           if (el) {
             removeConnectionsForEl(el);
             removeCaptionsForEl(el);
+            if (hoveredEl === el) hoveredEl = null;
             el.remove();
           }
           if (isCollab) Collab.syncElementDelete(id);
@@ -2617,6 +2619,7 @@ const App = (function () {
         if (el) {
           removeConnectionsForEl(el);
           removeCaptionsForEl(el);
+          if (hoveredEl === el) hoveredEl = null;
           el.remove();
         }
         if (isCollab) Collab.syncElementDelete(action.elId);
@@ -2836,6 +2839,7 @@ const App = (function () {
             data: _noteValueOnFocus,
           },
         });
+        if (hoveredEl === el) { hoveredEl = null; updateCornerHandles(); }
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
@@ -3172,6 +3176,8 @@ const App = (function () {
       toDelete.forEach((el) => Collab.syncElementDelete(el.dataset.id));
     }
     toast(toDelete.length > 1 ? toDelete.length + ' éléments supprimés' : 'Supprimé');
+    toDelete.forEach((el) => { if (hoveredEl === el) hoveredEl = null; });
+    updateCornerHandles();
     let done = 0;
     toDelete.forEach((el) =>
       animateRemove(el, () => {

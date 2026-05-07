@@ -3537,6 +3537,7 @@ const App = (function () {
         return;
       }
 
+      const _wasSelectedBefore = (selectedEl === el);
       selectEl(el);
       ['nw', 'ne', 'sw', 'se'].forEach((c) => {
         const h = document.getElementById('resize-corner-' + c);
@@ -3785,6 +3786,7 @@ const App = (function () {
         dragEl.style.transform = '';
         if (ctrlSnap) applySnap(dragEl, excludeSet);
         updateConnectionsForEl(dragEl); // position finale après snap éventuel
+        if (moved && !_wasSelectedBefore && !duplicated) deselectAll();
         updateCornerHandles();
         clearSnapGuides();
         // Repositionner les captions attachées sur la position finale

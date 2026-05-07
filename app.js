@@ -35,6 +35,7 @@ const App = (function () {
   let _resizeTargetW = 0, _resizeTargetH = 0;
   let _resizeTargetLeft = 0, _resizeTargetTop = 0;
   let hoveredEl = null;
+  let _cornerHandlesTarget = null;
   let snapThreshold = 8; // pixels canvas pour déclencher le snap
   let isAltDown = false; // état de la touche Alt
   let ctrlSnap = false; // Ctrl enfoncé → snap actif
@@ -1301,12 +1302,14 @@ const App = (function () {
     const corners = ['nw', 'ne', 'sw', 'se'];
     const target = multiSelected.size > 0 ? null : (hoveredEl || selectedEl);
     if (!target) {
+      _cornerHandlesTarget = null;
       corners.forEach((c) => {
         const h = document.getElementById('resize-corner-' + c);
         if (h) h.style.display = 'none';
       });
       return;
     }
+    _cornerHandlesTarget = target;
     const r = target.getBoundingClientRect();
     const wRect = document.getElementById('canvas-wrapper').getBoundingClientRect();
     const pos = {
@@ -1332,7 +1335,7 @@ const App = (function () {
         if (e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
-        const _target = hoveredEl || selectedEl;
+        const _target = _cornerHandlesTarget;
         if (!_target) return;
         if (document.body.classList.contains('readonly-mode')) return;
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
@@ -3504,6 +3507,7 @@ const App = (function () {
   function attachElementEvents(el) {
     el.addEventListener('mousedown', (e) => {
       if (document.body.classList.contains('readonly-mode')) return;
+      if (isResizing) return;
       if (e.target.classList.contains('resize-handle')) return;
       if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'IFRAME'].includes(e.target.tagName)) return;
       if (e.target.isContentEditable) return;

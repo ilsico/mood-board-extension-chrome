@@ -36,6 +36,7 @@ const App = (function () {
   let _resizeTargetLeft = 0, _resizeTargetTop = 0;
   let hoveredEl = null;
   let _cornerHandlesTarget = null;
+  let _hoverLeaveTimer = null;
   let snapThreshold = 8; // pixels canvas pour déclencher le snap
   let isAltDown = false; // état de la touche Alt
   let ctrlSnap = false; // Ctrl enfoncé → snap actif
@@ -1330,6 +1331,15 @@ const App = (function () {
     ['nw', 'ne', 'sw', 'se'].forEach((corner) => {
       const handle = document.getElementById('resize-corner-' + corner);
       if (!handle) return;
+      handle.addEventListener('mouseenter', () => {
+        clearTimeout(_hoverLeaveTimer);
+      });
+      handle.addEventListener('mouseleave', () => {
+        _hoverLeaveTimer = setTimeout(() => {
+          hoveredEl = null;
+          updateCornerHandles();
+        }, 200);
+      });
       handle.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
         e.stopPropagation();
@@ -3912,13 +3922,16 @@ const App = (function () {
     });
 
     el.addEventListener('mouseenter', () => {
+      clearTimeout(_hoverLeaveTimer);
       hoveredEl = el;
       updateCornerHandles();
     });
     el.addEventListener('mouseleave', () => {
       if (hoveredEl === el) {
-        hoveredEl = null;
-        updateCornerHandles();
+        _hoverLeaveTimer = setTimeout(() => {
+          hoveredEl = null;
+          updateCornerHandles();
+        }, 200);
       }
     });
   }

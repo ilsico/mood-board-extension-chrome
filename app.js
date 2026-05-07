@@ -28,6 +28,12 @@ const App = (function () {
     resizeStartX = 0,
     resizeStartY = 0;
   let resizeRatio = null; // ratio w/h pour les images (resize proportionnel)
+  let resizeCorner = null; // 'nw' | 'ne' | 'sw' | 'se'
+  let resizeStartLeft = 0;
+  let resizeStartTop = 0;
+  let _resizeRafId = null;
+  let _resizeTargetW = 0, _resizeTargetH = 0;
+  let _resizeTargetLeft = 0, _resizeTargetTop = 0;
   let snapThreshold = 8; // pixels canvas pour déclencher le snap
   let isAltDown = false; // état de la touche Alt
   let ctrlSnap = false; // Ctrl enfoncé → snap actif

@@ -19,6 +19,8 @@ const App = (function () {
   let historyIndex = -1;
   let selectedEl = null; // élément unique sélectionné
   let multiSelected = new Set(); // sélection multiple
+  let _keyObjectMode = false;
+  let _keyObject = null;
   let libSelectedIds = new Set();
   let _libLastClickedId = null; // dernier item cliqué (pour Shift range)
   let isResizing = false;
@@ -320,6 +322,7 @@ const App = (function () {
     setupKeyboard();
     setupMultiResizeHandle();
     setupCornerHandles();
+    setupEdgeHandles();
     setupConnectorTool();
     document.querySelectorAll('.modal-overlay').forEach((ov) => {
       ov.addEventListener('mousedown', (e) => {
@@ -611,9 +614,29 @@ const App = (function () {
     addEvt('ta-center', 'click', () => applyTextAlign('center'));
     addEvt('ta-right', 'click', () => applyTextAlign('right'));
 
+    // Panneau alignement multi-sélection
+    addEvt('align-left',     'click', () => alignElements('left'));
+    addEvt('align-center-h', 'click', () => alignElements('center-h'));
+    addEvt('align-right',    'click', () => alignElements('right'));
+    addEvt('align-top',      'click', () => alignElements('top'));
+    addEvt('align-center-v', 'click', () => alignElements('center-v'));
+    addEvt('align-bottom',   'click', () => alignElements('bottom'));
+    addEvt('distrib-h',      'click', () => distributeElements('h'));
+    addEvt('distrib-v',      'click', () => distributeElements('v'));
+    addEvt('key-object-toggle', 'click', () => {
+      _keyObjectMode = !_keyObjectMode;
+      const toggle = document.getElementById('key-object-toggle');
+      if (toggle) toggle.classList.toggle('active', _keyObjectMode);
+      if (!_keyObjectMode && _keyObject) {
+        _keyObject.classList.remove('key-object');
+        _keyObject = null;
+      }
+    });
+
     // Panneau bibliothèque
     addEvt('lib-toggle-btn', 'click', () => toggleLibPanel());
     addEvt('lib-add-btn', 'click', () => uploadImages());
+    document.getElementById('lib-panel-empty')?.addEventListener('dblclick', () => uploadImages());
 
     // Les chips de dossier sont créées dynamiquement dans renderFolderChips()
 
@@ -1100,9 +1123,13 @@ const App = (function () {
         if (board.elements && board.elements.length) {
           board.elements.forEach((e) => restoreElement(e));
           // Attendre le rendu (les images sont asynchrones), puis centrer
-          setTimeout(() => fitElementsToScreen(true), 120);
+          setTimeout(() => {
+            fitElementsToScreen(true);
+            pushHistory();
+          }, 120);
+        } else {
+          pushHistory();
         }
-        pushHistory();
         renderPanelLib();
         setTimeout(_updateBrokenBanner, 200);
         setTimeout(() => loaderOverlay.classList.add('hidden'), 2000);
@@ -1112,6 +1139,7 @@ const App = (function () {
 
   function goHome() {
     const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+    setConnectorMode(false);
 
     // Sauvegarder l'état courant pour les boards collaboratifs
     if (isCollab) {
@@ -1301,11 +1329,16 @@ const App = (function () {
 
   function updateCornerHandles() {
     const corners = ['nw', 'ne', 'sw', 'se'];
-    const target = multiSelected.size > 0 ? null : (hoveredEl || selectedEl);
+    const edges   = ['n', 'e', 's', 'w'];
+    const target  = multiSelected.size > 0 ? null : (hoveredEl || selectedEl);
     if (!target) {
       _cornerHandlesTarget = null;
       corners.forEach((c) => {
         const h = document.getElementById('resize-corner-' + c);
+        if (h) h.style.display = 'none';
+      });
+      edges.forEach((edge) => {
+        const h = document.getElementById('resize-edge-' + edge);
         if (h) h.style.display = 'none';
       });
       return;
@@ -1323,7 +1356,23 @@ const App = (function () {
       if (!h) return;
       h.style.display = 'block';
       h.style.left = pos[c].left + 'px';
-      h.style.top = pos[c].top + 'px';
+      h.style.top  = pos[c].top  + 'px';
+    });
+    const t         = target.dataset.type;
+    const showEdges = t === 'note' || t === 'color';
+    const edgePos   = {
+      n: { left: (r.left + r.right) / 2, top: r.top               },
+      e: { left: r.right,                top: (r.top + r.bottom) / 2 },
+      s: { left: (r.left + r.right) / 2, top: r.bottom             },
+      w: { left: r.left,                 top: (r.top + r.bottom) / 2 },
+    };
+    edges.forEach((edge) => {
+      const h = document.getElementById('resize-edge-' + edge);
+      if (!h) return;
+      if (!showEdges) { h.style.display = 'none'; return; }
+      h.style.display = 'block';
+      h.style.left    = edgePos[edge].left + 'px';
+      h.style.top     = edgePos[edge].top  + 'px';
     });
   }
 
@@ -1375,6 +1424,51 @@ const App = (function () {
         } else {
           resizeRatio = resizeStartH > 0 ? resizeStartW / resizeStartH : null;
         }
+      });
+    });
+  }
+
+  function setupEdgeHandles() {
+    ['n', 'e', 's', 'w'].forEach((edge) => {
+      const handle = document.getElementById('resize-edge-' + edge);
+      if (!handle) return;
+      handle.addEventListener('mouseenter', () => {
+        clearTimeout(_hoverLeaveTimer);
+      });
+      handle.addEventListener('mouseleave', () => {
+        _hoverLeaveTimer = setTimeout(() => {
+          hoveredEl = null;
+          updateCornerHandles();
+        }, 200);
+      });
+      handle.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        e.preventDefault();
+        const _target = _cornerHandlesTarget;
+        if (!_target) return;
+        if (document.body.classList.contains('readonly-mode')) return;
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          if (Collab.isLockedByOther(_target.dataset.id)) {
+            toast('Élément verrouillé');
+            return;
+          }
+          Collab.acquireLock(_target.dataset.id);
+        }
+        isResizing        = true;
+        resizeEl          = _target;
+        resizeStartW      = parseFloat(_target.style.width)  || _target.offsetWidth;
+        resizeStartH      = parseFloat(_target.style.height) || _target.offsetHeight;
+        resizeStartLeft   = parseFloat(_target.style.left)   || 0;
+        resizeStartTop    = parseFloat(_target.style.top)    || 0;
+        _resizeTargetW    = resizeStartW;
+        _resizeTargetH    = resizeStartH;
+        _resizeTargetLeft = resizeStartLeft;
+        _resizeTargetTop  = resizeStartTop;
+        resizeStartX      = e.clientX;
+        resizeStartY      = e.clientY;
+        resizeCorner      = edge;
+        resizeRatio       = null;
       });
     });
   }
@@ -2503,6 +2597,7 @@ const App = (function () {
           if (swatch) swatch.style.backgroundColor = action.before.data;
           const hexInput = el.querySelector('.color-hex-input');
           if (hexInput) hexInput.value = action.before.data;
+          _syncColorInfo(el, action.before.data);
         }
         if (isCollab) Collab.syncElementData(action.elId, action.before.data);
         break;
@@ -2617,6 +2712,7 @@ const App = (function () {
           if (swatch) swatch.style.backgroundColor = action.after.data;
           const hexInput = el.querySelector('.color-hex-input');
           if (hexInput) hexInput.value = action.after.data;
+          _syncColorInfo(el, action.after.data);
         }
         if (isCollab) Collab.syncElementData(action.elId, action.after.data);
         break;
@@ -2826,6 +2922,7 @@ const App = (function () {
       if (goingToPanel || window._textPanelKeepOpen) return;
       ta.style.pointerEvents = 'none';
       ta.style.cursor = 'move';
+      ta.scrollTop = 0;
       delete el.dataset.editing;
       hideTextEditPanel();
       // Collab: force une synchro immédiate du texte avant de libérer le lock
@@ -2937,6 +3034,7 @@ const App = (function () {
     if (el.dataset.savedata) {
       hexInput.value = el.dataset.savedata.toUpperCase();
       swatch.style.background = el.dataset.savedata;
+      _syncColorInfo(el, el.dataset.savedata);
     }
     let _colorValueOnFocus = el.dataset.savedata || '#000000';
     // Readonly par défaut, éditable au double-clic
@@ -2982,7 +3080,7 @@ const App = (function () {
           });
         }
         pushHistory();
-
+        _syncColorInfo(el, v);
         return true;
       }
       return false;
@@ -3340,6 +3438,7 @@ const App = (function () {
     if (group.length < 2) {
       handle.style.display = 'none';
       if (bbox) bbox.style.display = 'none';
+      updateAlignPanel();
       return;
     }
 
@@ -3392,6 +3491,7 @@ const App = (function () {
       bbox.style.width = maxR - minL + 12 + 'px';
       bbox.style.height = maxB - minT + 12 + 'px';
     }
+    updateAlignPanel();
   }
 
   function setupMultiResizeHandle() {
@@ -3546,6 +3646,7 @@ const App = (function () {
       }
 
       if (multiSelected.has(el) && multiSelected.size > 1) {
+        if (_keyObjectMode) _setKeyObject(el);
         startGroupDrag(e, multiSelected);
         return;
       }
@@ -3554,6 +3655,10 @@ const App = (function () {
       selectEl(el);
       ['nw', 'ne', 'sw', 'se'].forEach((c) => {
         const h = document.getElementById('resize-corner-' + c);
+        if (h) h.style.display = 'none';
+      });
+      ['n', 'e', 's', 'w'].forEach((edge) => {
+        const h = document.getElementById('resize-edge-' + edge);
         if (h) h.style.display = 'none';
       });
       const canvasRect = document.getElementById('canvas').getBoundingClientRect();
@@ -3599,6 +3704,10 @@ const App = (function () {
         dragEl = copy;
         ['nw', 'ne', 'sw', 'se'].forEach((c) => {
           const h = document.getElementById('resize-corner-' + c);
+          if (h) h.style.display = 'none';
+        });
+        ['n', 'e', 's', 'w'].forEach((edge) => {
+          const h = document.getElementById('resize-edge-' + edge);
           if (h) h.style.display = 'none';
         });
         selectEl(dragEl);
@@ -3666,6 +3775,10 @@ const App = (function () {
           dragEl.style.transform = `translate3d(${vx}px,${vy}px,0)`;
           ['nw', 'ne', 'sw', 'se'].forEach((c) => {
             const h = document.getElementById('resize-corner-' + c);
+            if (h && h.style.display !== 'none') h.style.display = 'none';
+          });
+          ['n', 'e', 's', 'w'].forEach((edge) => {
+            const h = document.getElementById('resize-edge-' + edge);
             if (h && h.style.display !== 'none') h.style.display = 'none';
           });
 
@@ -3737,6 +3850,10 @@ const App = (function () {
             const h = document.getElementById('resize-corner-' + c);
             if (h) h.style.display = 'none';
           });
+          ['n', 'e', 's', 'w'].forEach((edge) => {
+            const h = document.getElementById('resize-edge-' + edge);
+            if (h) h.style.display = 'none';
+          });
           el.style.left = copyX + 'px';
           el.style.top = copyY + 'px';
           el.style.transform = '';
@@ -3792,6 +3909,7 @@ const App = (function () {
         dragActive = false;
         document.body.classList.remove('is-dragging-el'); // <-- RETRAIT ICI
         dragEl.classList.remove('is-dragging');
+        dragEl.classList.remove('is-solo-dragging');
         cancelAnimationFrame(rafId);
         // Appliquer la position finale exacte et enlever le tilt
         dragEl.style.left = targetX + 'px';
@@ -3880,8 +3998,13 @@ const App = (function () {
 
       document.body.classList.add('is-dragging-el'); // <-- AJOUT ICI
       dragEl.classList.add('is-dragging');
+      dragEl.classList.add('is-solo-dragging');
       ['nw', 'ne', 'sw', 'se'].forEach((c) => {
         const h = document.getElementById('resize-corner-' + c);
+        if (h) h.style.display = 'none';
+      });
+      ['n', 'e', 's', 'w'].forEach((edge) => {
+        const h = document.getElementById('resize-edge-' + edge);
         if (h) h.style.display = 'none';
       });
       window.addEventListener('mousemove', onMove);
@@ -4280,8 +4403,9 @@ const App = (function () {
   function _getMinSize(el) {
     const t = el && el.dataset ? el.dataset.type : '';
     if (t === 'link') return { w: 270, h: 73 };
-    if (t === 'color') return { w: 80, h: 80 };
+    if (t === 'color') return { w: 153, h: 127 };
     if (t === 'file') return { w: 260, h: 76 };
+    if (t === 'note') return { w: 160, h: 54 };
     return { w: 60, h: 40 };
   }
 
@@ -4319,10 +4443,16 @@ const App = (function () {
     const dy = (e.clientY - resizeStartY) / zoomLevel;
     const mins = _getMinSize(resizeEl);
 
-    const rawW = (resizeCorner === 'se' || resizeCorner === 'ne')
-      ? resizeStartW + dx : resizeStartW - dx;
-    const rawH = (resizeCorner === 'se' || resizeCorner === 'sw')
-      ? resizeStartH + dy : resizeStartH - dy;
+    const rawW = (resizeCorner === 'se' || resizeCorner === 'ne' || resizeCorner === 'e')
+      ? resizeStartW + dx
+      : (resizeCorner === 'sw' || resizeCorner === 'nw' || resizeCorner === 'w')
+      ? resizeStartW - dx
+      : resizeStartW;
+    const rawH = (resizeCorner === 'se' || resizeCorner === 'sw' || resizeCorner === 's')
+      ? resizeStartH + dy
+      : (resizeCorner === 'ne' || resizeCorner === 'nw' || resizeCorner === 'n')
+      ? resizeStartH - dy
+      : resizeStartH;
 
     let fw, fh;
     if (resizeRatio && resizeStartW > 0 && resizeStartH > 0) {
@@ -4339,9 +4469,9 @@ const App = (function () {
     }
 
     const newLeft = resizeStartLeft +
-      (resizeCorner === 'sw' || resizeCorner === 'nw' ? resizeStartW - fw : 0);
+      (resizeCorner === 'sw' || resizeCorner === 'nw' || resizeCorner === 'w' ? resizeStartW - fw : 0);
     const newTop  = resizeStartTop  +
-      (resizeCorner === 'ne' || resizeCorner === 'nw' ? resizeStartH - fh : 0);
+      (resizeCorner === 'ne' || resizeCorner === 'nw' || resizeCorner === 'n' ? resizeStartH - fh : 0);
 
     // Snap: only SE corner, unchanged behaviour
     if (ctrlSnap && resizeCorner === 'se') {
@@ -4820,9 +4950,11 @@ const App = (function () {
           });
           setTimeout(function () {
             fitElementsToScreen();
+            pushHistory();
           }, 120);
+        } else {
+          pushHistory();
         }
-        pushHistory();
         loadLibraryForBoard(board.id);
         renderPanelLib();
         // Démarrer une session collab comme owner avec les éléments locaux
@@ -4864,9 +4996,13 @@ const App = (function () {
     updateZoomDisplay();
     if (board.elements && board.elements.length) {
       board.elements.forEach((e) => restoreElement(e));
-      setTimeout(() => fitElementsToScreen(), 120);
+      setTimeout(() => {
+        fitElementsToScreen();
+        pushHistory();
+      }, 120);
+    } else {
+      pushHistory();
     }
-    pushHistory();
     renderPanelLib();
     const shareWrap = document.getElementById('share-wrap');
     if (shareWrap) shareWrap.style.display = 'none';
@@ -5218,6 +5354,7 @@ const App = (function () {
       if (goingToPanel || window._textPanelKeepOpen) return;
       ta.style.pointerEvents = 'none';
       ta.style.cursor = 'move';
+      ta.scrollTop = 0;
       delete el.dataset.editing;
       hideTextEditPanel();
       // Collab: force une synchro immédiate du texte avant de libérer le lock
@@ -5323,6 +5460,7 @@ const App = (function () {
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
           Collab.syncElementData(el.dataset.id, v);
         }
+        _syncColorInfo(el, v);
         return true;
       }
       return false;
@@ -5375,6 +5513,7 @@ const App = (function () {
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
     // Marquer comme déjà attaché (propriété JS, pas dataset, pour ne pas être dans innerHTML)
     el._colorEventsAttached = true;
+    _syncColorInfo(el, hex);
     return el;
   }
 
@@ -5392,6 +5531,7 @@ const App = (function () {
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
+          _syncColorInfo(colorEl, hex);
           if (hex !== prevColor) {
             pushAction({
               type: 'editColor',
@@ -5457,6 +5597,7 @@ const App = (function () {
           swatch.style.background = hex;
           hexInput.value = hex;
           colorEl.dataset.savedata = hex;
+          _syncColorInfo(colorEl, hex);
           if (hex !== prevCol) {
             pushAction({
               type: 'editColor',
@@ -6437,10 +6578,149 @@ const App = (function () {
   }
 
   // ── PANNEAU ÉDITION TEXTE ─────────────────────────────────────────────────
+  function _setKeyObject(el) {
+    if (_keyObject) _keyObject.classList.remove('key-object');
+    _keyObject = el;
+    _keyObject.classList.add('key-object');
+  }
+
+  function updateAlignPanel() {
+    const panel = document.getElementById('align-panel');
+    if (!panel) return;
+    const toolbar = document.getElementById('toolbar');
+    const textPanel = document.getElementById('text-edit-panel');
+    if (multiSelected.size >= 2) {
+      if (toolbar) toolbar.style.display = 'none';
+      panel.classList.add('active');
+      if (_keyObject && !multiSelected.has(_keyObject)) {
+        _keyObject.classList.remove('key-object');
+        _keyObject = null;
+      }
+    } else {
+      panel.classList.remove('active');
+      if (toolbar && textPanel && !textPanel.classList.contains('active')) {
+        toolbar.style.display = '';
+      }
+      _keyObjectMode = false;
+      if (_keyObject) {
+        _keyObject.classList.remove('key-object');
+        _keyObject = null;
+      }
+      const toggle = document.getElementById('key-object-toggle');
+      if (toggle) toggle.classList.remove('active');
+    }
+  }
+
+  function alignElements(type) {
+    const group = [...multiSelected];
+    if (group.length < 2) return;
+    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+    const ids = [], beforeArr = [], afterArr = [];
+    group.forEach((el) => {
+      ids.push(el.dataset.id);
+      beforeArr.push({ x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0 });
+    });
+    let refLeft, refRight, refTop, refBottom, refCX, refCY;
+    const keyEl = _keyObject && multiSelected.has(_keyObject) ? _keyObject : null;
+    if (keyEl) {
+      refLeft = parseFloat(keyEl.style.left) || 0;
+      refTop = parseFloat(keyEl.style.top) || 0;
+      refRight = refLeft + keyEl.offsetWidth;
+      refBottom = refTop + keyEl.offsetHeight;
+      refCX = refLeft + keyEl.offsetWidth / 2;
+      refCY = refTop + keyEl.offsetHeight / 2;
+    } else {
+      let minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+      group.forEach((el) => {
+        const l = parseFloat(el.style.left) || 0;
+        const t = parseFloat(el.style.top) || 0;
+        const r = l + el.offsetWidth;
+        const b = t + el.offsetHeight;
+        if (l < minL) minL = l;
+        if (t < minT) minT = t;
+        if (r > maxR) maxR = r;
+        if (b > maxB) maxB = b;
+      });
+      refLeft = minL; refTop = minT; refRight = maxR; refBottom = maxB;
+      refCX = (minL + maxR) / 2;
+      refCY = (minT + maxB) / 2;
+    }
+    group.forEach((el, i) => {
+      if (keyEl && el === keyEl) { afterArr.push({ x: beforeArr[i].x, y: beforeArr[i].y }); return; }
+      let newX = beforeArr[i].x, newY = beforeArr[i].y;
+      if (type === 'left')     newX = refLeft;
+      else if (type === 'center-h') newX = refCX - el.offsetWidth / 2;
+      else if (type === 'right')    newX = refRight - el.offsetWidth;
+      else if (type === 'top')      newY = refTop;
+      else if (type === 'center-v') newY = refCY - el.offsetHeight / 2;
+      else if (type === 'bottom')   newY = refBottom - el.offsetHeight;
+      el.style.left = newX + 'px';
+      el.style.top  = newY + 'px';
+      updateConnectionsForEl(el);
+      if (isCollab) Collab.syncElementPosition(el.dataset.id, newX, newY, true);
+      afterArr.push({ x: newX, y: newY });
+    });
+    pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr });
+    pushHistory();
+    updateMultiResizeHandle();
+  }
+
+  function distributeElements(axis) {
+    const group = [...multiSelected];
+    if (group.length < 3) return;
+    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+    const getLeft = (el) => parseFloat(el.style.left) || 0;
+    const getTop  = (el) => parseFloat(el.style.top)  || 0;
+    const getSize = (el) => axis === 'h' ? el.offsetWidth : el.offsetHeight;
+    const getPos  = (el) => axis === 'h' ? getLeft(el) : getTop(el);
+    const sorted = [...group].sort((a, b) => getPos(a) - getPos(b));
+    let anchorA = sorted[0], anchorB = sorted[sorted.length - 1];
+    const keyEl = _keyObject && multiSelected.has(_keyObject) ? _keyObject : null;
+    if (keyEl) {
+      let maxDist = -1;
+      sorted.forEach((el) => {
+        if (el === keyEl) return;
+        const d = Math.abs(getPos(el) - getPos(keyEl));
+        if (d > maxDist) { maxDist = d; anchorB = el; }
+      });
+      anchorA = keyEl;
+      if (getPos(anchorA) > getPos(anchorB)) { const tmp = anchorA; anchorA = anchorB; anchorB = tmp; }
+    }
+    const startEdge = getPos(anchorA) + getSize(anchorA);
+    const endEdge   = getPos(anchorB);
+    const inner = sorted.filter((el) => el !== anchorA && el !== anchorB && getPos(el) >= getPos(anchorA) && getPos(el) <= getPos(anchorB));
+    if (inner.length === 0) return;
+    const innerTotalSize = inner.reduce((sum, el) => sum + getSize(el), 0);
+    const gap = (endEdge - startEdge - innerTotalSize) / (inner.length + 1);
+    const newPosMap = new Map();
+    let cursor = startEdge + gap;
+    inner.forEach((el) => { newPosMap.set(el, cursor); cursor += getSize(el) + gap; });
+    const ids = [], beforeArr = [], afterArr = [];
+    group.forEach((el) => {
+      const origX = getLeft(el), origY = getTop(el);
+      ids.push(el.dataset.id);
+      beforeArr.push({ x: origX, y: origY });
+      if (!newPosMap.has(el)) { afterArr.push({ x: origX, y: origY }); return; }
+      const newPos = newPosMap.get(el);
+      const newX = axis === 'h' ? newPos : origX;
+      const newY = axis === 'h' ? origY  : newPos;
+      el.style.left = newX + 'px';
+      el.style.top  = newY + 'px';
+      updateConnectionsForEl(el);
+      if (isCollab) Collab.syncElementPosition(el.dataset.id, newX, newY, true);
+      afterArr.push({ x: newX, y: newY });
+    });
+    pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr });
+    pushHistory();
+    updateMultiResizeHandle();
+  }
+
   let textEditTarget = null;
   function showTextEditPanel(el) {
     textEditTarget = el;
     document.getElementById('toolbar').style.display = 'none';
+    const alignPanel = document.getElementById('align-panel');
+    if (alignPanel) alignPanel.classList.remove('active');
     const panel = document.getElementById('text-edit-panel');
     panel.classList.add('active');
 
@@ -6471,8 +6751,8 @@ const App = (function () {
   }
   function hideTextEditPanel() {
     document.getElementById('text-edit-panel').classList.remove('active');
-    document.getElementById('toolbar').style.display = '';
     textEditTarget = null;
+    updateAlignPanel();
   }
 
   function handleCaptionBlur(e, cap) {
@@ -7194,6 +7474,23 @@ const App = (function () {
   // ── EXPORT ────────────────────────────────────────────────────────────────
   // quality : 1 = Basse, 2 = Moyenne, 3 = Haute
   // Échelles de capture et qualité JPEG correspondantes
+  // ── COULEUR CONTRASTE ──────────────────────────────────────────────────────
+  function _contrastColor(hex) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.length === 3 ? h[0] + h[0] : h.slice(0, 2), 16);
+    const g = parseInt(h.length === 3 ? h[1] + h[1] : h.slice(2, 4), 16);
+    const b = parseInt(h.length === 3 ? h[2] + h[2] : h.slice(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 128 ? '#000000' : '#ffffff';
+  }
+  function _syncColorInfo(el, hex) {
+    if (!hex || !/^#[0-9A-Fa-f]{3,6}$/.test(hex)) return;
+    const elColor = el.querySelector('.el-color');
+    if (elColor) elColor.style.backgroundColor = hex;
+    const info = el.querySelector('.color-info');
+    if (info) info.style.backgroundColor = hex;
+    el.style.setProperty('--color-card-contrast', _contrastColor(hex));
+  }
+
   const _EXPORT_SCALES = { 1: 1, 2: 2, 3: 3 };
   const _EXPORT_JPEG_Q = { 1: 0.6, 2: 0.82, 3: 0.95 };
 
@@ -7262,6 +7559,103 @@ const App = (function () {
 
       ghostCanvas.querySelectorAll('video').forEach((vid) => {
         vid.style.backgroundColor = '#111';
+      });
+
+      // Bug 1 : connecteurs SVG → remplacés par un <canvas> dessiné via l'API 2D.
+      // html2canvas lit les <canvas> par getImageData (zéro sérialisation SVG) → fiable
+      // à toutes les échelles. L'approche SVG+viewBox échouait silencieusement car
+      // html2canvas génère un <img> depuis XMLSerializer et peut rater le rendu du SVG
+      // hors-document.
+      ghostCanvas.querySelectorAll('.el-connection').forEach((svgEl) => {
+        const line = svgEl.querySelector('line');
+        if (!line) return;
+        const x1 = parseFloat(line.getAttribute('x1')) || 0;
+        const y1 = parseFloat(line.getAttribute('y1')) || 0;
+        const x2 = parseFloat(line.getAttribute('x2')) || 0;
+        const y2 = parseFloat(line.getAttribute('y2')) || 0;
+        const pad = 4;
+        const minX = Math.floor(Math.min(x1, x2)) - pad;
+        const minY = Math.floor(Math.min(y1, y2)) - pad;
+        const w = Math.ceil(Math.abs(x2 - x1)) + pad * 2;
+        const h = Math.ceil(Math.abs(y2 - y1)) + pad * 2;
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, w);
+        c.height = Math.max(1, h);
+        c.style.position = 'absolute';
+        c.style.left = minX + 'px';
+        c.style.top = minY + 'px';
+        c.style.width = w + 'px';
+        c.style.height = h + 'px';
+        c.style.pointerEvents = 'none';
+        c.style.zIndex = svgEl.style.zIndex || '1';
+        const ctx = c.getContext('2d');
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x1 - minX, y1 - minY);
+        ctx.lineTo(x2 - minX, y2 - minY);
+        ctx.stroke();
+        svgEl.parentNode.replaceChild(c, svgEl);
+      });
+
+      // Bug 2 : notes grises à faible qualité.
+      // Double protection : backgroundColor (longhand) sur le board-element parent
+      // + sur el-note. Si el-note (flex container) est mal rendu à scale=1, le
+      // board-element blanc transparaît de toute façon. Shorthand `background` évité
+      // car parsé de façon inconsistante par certaines versions de html2canvas.
+      ghostCanvas.querySelectorAll('.board-element[data-type="note"]').forEach((bel) => {
+        bel.style.backgroundColor = '#ffffff';
+      });
+      ghostCanvas.querySelectorAll('.el-note').forEach((noteWrap) => {
+        noteWrap.style.backgroundColor = '#ffffff';
+        noteWrap.style.boxShadow = 'none';
+        const ta = noteWrap.querySelector('textarea');
+        if (!ta) return;
+        const div = document.createElement('div');
+        div.style.width = '100%';
+        div.style.flex = '1';
+        div.style.fontFamily = ta.style.fontFamily || '';
+        div.style.fontSize = ta.style.fontSize || '';
+        div.style.fontWeight = ta.style.fontWeight || '';
+        div.style.textAlign = ta.style.textAlign || '';
+        div.style.color = '#2d2d2d';
+        div.style.backgroundColor = 'transparent';
+        div.style.lineHeight = '1.6';
+        div.style.overflow = 'hidden';
+        div.style.wordBreak = 'break-word';
+        div.style.whiteSpace = 'pre-wrap';
+        div.textContent = ta.value || ta.getAttribute('data-snap-value') || '';
+        noteWrap.replaceChild(div, ta);
+      });
+
+      // Bug 3 : cartes fichier — dimensions réelles + contenu scalé proportionnellement.
+      // Sur le board, transform:scale(bw/260) scale TOUT (padding, icône, texte).
+      // Sans scale dans l'export, il faut reproduire cet effet manuellement.
+      ghostCanvas.querySelectorAll('.board-element[data-type="file"]').forEach((bel) => {
+        const fw = bel.querySelector('.el-file');
+        if (!fw) return;
+        const bw = parseFloat(bel.style.width) || 260;
+        const bh = parseFloat(bel.style.height) || 76;
+        const sc = bw / 260;
+        fw.style.transform = 'none';
+        fw.style.width = bw + 'px';
+        fw.style.height = bh + 'px';
+        fw.style.padding = `${Math.round(16 * sc)}px ${Math.round(20 * sc)}px`;
+        fw.style.gap = Math.round(14 * sc) + 'px';
+        const iconDiv = fw.querySelector('.file-icon');
+        if (iconDiv) {
+          const sz = Math.round(36 * sc);
+          const iconImg = iconDiv.querySelector('img');
+          if (iconImg) {
+            iconImg.style.width = sz + 'px';
+            iconImg.style.height = sz + 'px';
+          }
+        }
+        const fileName = fw.querySelector('.file-name');
+        if (fileName) fileName.style.fontSize = Math.round(13 * sc) + 'px';
+        const fileSize = fw.querySelector('.file-size');
+        if (fileSize) fileSize.style.fontSize = Math.round(11 * sc) + 'px';
       });
 
       container.appendChild(ghostCanvas);

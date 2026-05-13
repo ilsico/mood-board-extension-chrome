@@ -605,6 +605,7 @@
 
       body.preview-mode #header,
       body.preview-mode #toolbar,
+      body.preview-mode #align-panel,
       body.preview-mode #lib-panel,
       body.preview-mode .fit-btn-group,
       body.preview-mode #zoom-toast,
@@ -615,6 +616,10 @@
       body.preview-mode #resize-corner-ne,
       body.preview-mode #resize-corner-sw,
       body.preview-mode #resize-corner-se,
+      body.preview-mode #resize-edge-n,
+      body.preview-mode #resize-edge-e,
+      body.preview-mode #resize-edge-s,
+      body.preview-mode #resize-edge-w,
       body.preview-mode .color-eyedropper {
         display: none !important;
       }
@@ -809,6 +814,81 @@
       }
       #text-edit-panel.active {
         display: flex;
+      }
+      #align-panel {
+        width: 80px;
+        min-width: 80px;
+        background: #fff;
+        border-right: 1px solid #eaeaf0;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        z-index: 101;
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
+        padding: 12px 0;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      #align-panel.active {
+        display: flex;
+      }
+      .align-btns-row {
+        display: flex;
+        gap: 3px;
+        justify-content: center;
+      }
+      .align-btn {
+        width: 20px;
+        height: 20px;
+        border: 1px solid #eaeaf0;
+        background: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border-radius: 2px;
+        color: #333;
+        transition: background 0.12s, border-color 0.12s;
+      }
+      .align-btn:hover {
+        background: #f5f5fb;
+      }
+      .align-btn:active {
+        background: rgba(255, 60, 0, 0.08);
+        border-color: #ff3c00;
+      }
+      .align-divider {
+        width: 56px;
+        height: 1px;
+        background: #eaeaf0;
+        margin: 2px 0;
+      }
+      #key-object-toggle {
+        width: 68px;
+        padding: 5px 4px;
+        font-size: 10px;
+        text-align: center;
+        border: 1px solid #eaeaf0;
+        background: none;
+        cursor: pointer;
+        font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        border-radius: 2px;
+        color: #333;
+        line-height: 1.3;
+        transition: background 0.12s, border-color 0.12s, color 0.12s;
+      }
+      #key-object-toggle:hover {
+        background: #f5f5fb;
+      }
+      #key-object-toggle.active {
+        background: rgba(255, 60, 0, 0.08);
+        border-color: #ff3c00;
+        color: #ff3c00;
+      }
+      .board-element.key-object {
+        outline: 2.5px solid #ff3c00 !important;
+        outline-offset: 3px;
       }
       .text-font-btn,
       .text-size-btn,
@@ -1017,7 +1097,7 @@
         outline: none;
         background: #fafafa;
         transition: border-color 0.15s;
-        background-image: url('PNG/loupe.png');
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21 21-4.34-4.34'/%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3C/svg%3E");
         background-size: 16px;
         background-repeat: no-repeat;
         background-position: 10px center;
@@ -1025,7 +1105,7 @@
       }
       .lib-search-input:focus {
         border-color: #ff3c00;
-        background: #fff;
+        background-color: #fff;
       }
       .lib-panel-grid {
         flex: 1;
@@ -1171,11 +1251,18 @@
         will-change: transform;
         backface-visibility: hidden;
       }
+      .board-element.is-solo-dragging {
+        box-shadow:
+          0 16px 32px rgba(0, 0, 0, 0.18),
+          0 4px 12px rgba(0, 0, 0, 0.10) !important;
+      }
       .board-element.selected {
         outline: 1px solid #000000;
         outline-offset: 3px;
       }
-      .board-element.selected.is-dragging { outline: none; }
+      .board-element.selected.is-dragging {
+        outline: none;
+      }
       .board-element.multi-selected {
         outline: 1px solid #000000;
         outline-offset: 0px;
@@ -1200,10 +1287,40 @@
         transform: translate(-50%, -50%);
         pointer-events: auto;
       }
-      #resize-corner-nw { cursor: nw-resize; }
-      #resize-corner-ne { cursor: ne-resize; }
-      #resize-corner-sw { cursor: sw-resize; }
-      #resize-corner-se { cursor: se-resize; }
+      #resize-corner-nw {
+        cursor: nw-resize;
+      }
+      #resize-corner-ne {
+        cursor: ne-resize;
+      }
+      #resize-corner-sw {
+        cursor: sw-resize;
+      }
+      #resize-corner-se {
+        cursor: se-resize;
+      }
+      #resize-edge-n,
+      #resize-edge-e,
+      #resize-edge-s,
+      #resize-edge-w {
+        position: fixed;
+        z-index: 2147483647;
+        display: none;
+        transform: translate(-50%, -50%);
+        pointer-events: auto;
+      }
+      #resize-edge-n, #resize-edge-s {
+        width: 44px;
+        height: 24px;
+        cursor: n-resize;
+      }
+      #resize-edge-s { cursor: s-resize; }
+      #resize-edge-e, #resize-edge-w {
+        width: 24px;
+        height: 44px;
+        cursor: e-resize;
+      }
+      #resize-edge-w { cursor: w-resize; }
       #multi-resize-handle {
         position: absolute;
         width: 6px;
@@ -1287,7 +1404,6 @@
         min-height: 40px;
       }
       .el-color .color-info {
-        background: #fff;
         padding: 6px 10px;
         flex-shrink: 0;
         display: flex;
@@ -1297,7 +1413,7 @@
       .el-color .color-hex-input {
         font-size: 13px;
         font-weight: 700;
-        color: #2d2d2d;
+        color: var(--color-card-contrast, #2d2d2d);
         font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         letter-spacing: 0.5px;
         border: none;
@@ -1323,6 +1439,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        color: var(--color-card-contrast, #2d2d2d);
       }
       .el-color .color-eyedropper:hover {
         opacity: 1;
@@ -1352,7 +1469,8 @@
       }
       .el-link .link-image {
         width: 100%;
-        flex: 1;
+        height: auto;
+        flex-shrink: 0;
         object-fit: cover;
         display: block;
         min-height: 60px;
@@ -2136,6 +2254,7 @@
 
       /* ===== MODE LECTURE SEULE ===== */
       body.readonly-mode #toolbar,
+      body.readonly-mode #align-panel,
       body.readonly-mode #lib-panel,
       body.readonly-mode #back-btn,
       body.readonly-mode #share-btn,
@@ -2146,6 +2265,10 @@
       body.readonly-mode #resize-corner-ne,
       body.readonly-mode #resize-corner-sw,
       body.readonly-mode #resize-corner-se,
+      body.readonly-mode #resize-edge-n,
+      body.readonly-mode #resize-edge-e,
+      body.readonly-mode #resize-edge-s,
+      body.readonly-mode #resize-edge-w,
       body.readonly-mode #home-screen {
         display: none !important;
       }
@@ -2528,6 +2651,77 @@
           </div>
         </div>
 
+        <div id="align-panel">
+          <span class="text-panel-label">ALIGNER</span>
+          <div class="align-btns-row">
+            <button class="align-btn" id="align-left" title="Aligner les bords gauches">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="2.75" y1="1" x2="2.75" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="4" y="3" width="7" height="3.5" rx="0.5" fill="currentColor"/>
+                <rect x="4" y="9.5" width="10" height="3.5" rx="0.5" fill="currentColor"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="align-center-h" title="Centrer horizontalement">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="8" y1="1" x2="8" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="4.5" y="3" width="7" height="3.5" rx="0.5" fill="currentColor"/>
+                <rect x="2" y="9.5" width="12" height="3.5" rx="0.5" fill="currentColor"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="align-right" title="Aligner les bords droits">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="13.25" y1="1" x2="13.25" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="5" y="3" width="7" height="3.5" rx="0.5" fill="currentColor"/>
+                <rect x="2" y="9.5" width="10" height="3.5" rx="0.5" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <div class="align-btns-row">
+            <button class="align-btn" id="align-top" title="Aligner les bords supérieurs">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="1" y1="2.75" x2="15" y2="2.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="3" y="4" width="3.5" height="7" rx="0.5" fill="currentColor"/>
+                <rect x="9.5" y="4" width="3.5" height="10" rx="0.5" fill="currentColor"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="align-center-v" title="Centrer verticalement">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="3" y="4.5" width="3.5" height="7" rx="0.5" fill="currentColor"/>
+                <rect x="9.5" y="2" width="3.5" height="12" rx="0.5" fill="currentColor"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="align-bottom" title="Aligner les bords inférieurs">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="1" y1="13.25" x2="15" y2="13.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="3" y="5" width="3.5" height="7" rx="0.5" fill="currentColor"/>
+                <rect x="9.5" y="2" width="3.5" height="10" rx="0.5" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <span class="text-panel-label">RÉPARTIR</span>
+          <div class="align-btns-row">
+            <button class="align-btn" id="distrib-h" title="Répartir l'espacement horizontal">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="1.75" y1="2" x2="1.75" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="14.25" y1="2" x2="14.25" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="4.5" y="5" width="2.5" height="6" rx="0.5" fill="currentColor"/>
+                <rect x="9" y="5" width="2.5" height="6" rx="0.5" fill="currentColor"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="distrib-v" title="Répartir l'espacement vertical">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="2" y1="1.75" x2="14" y2="1.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="2" y1="14.25" x2="14" y2="14.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="5" y="4.5" width="6" height="2.5" rx="0.5" fill="currentColor"/>
+                <rect x="5" y="9" width="6" height="2.5" rx="0.5" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <div class="align-divider"></div>
+          <button id="key-object-toggle" title="Aligner sur objet clé">Objet clé</button>
+        </div>
+
         <div class="canvas-wrapper" id="canvas-wrapper">
           <div id="canvas"></div>
           <div id="collab-cursors"></div>
@@ -2574,7 +2768,27 @@
               <div id="lib-panel-grid" class="lib-panel-grid"></div>
 
               <div id="lib-panel-empty" class="lib-panel-empty hidden">
-                <div class="empty-icon">📁</div>
+                <div class="empty-icon">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="48"
+                    height="48"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    style="pointer-events: none; color: #000"
+                  >
+                    <path
+                      d="M11.35 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v5.35"
+                    ></path>
+                    <path d="M14 2v5a1 1 0 0 0 1 1h5"></path>
+                    <path d="M14 19h6"></path>
+                    <path d="M17 16v6"></path>
+                  </svg>
+                </div>
                 <p>Aucune image ici</p>
                 <small>Importez des images ou glissez-les dans ce panneau</small>
               </div>
@@ -2995,9 +3209,13 @@
       <span id="collab-user-count">0 utilisateurs</span>
       <span id="collab-connection-status"></span>
     </div>
-  <div id="resize-corner-nw"></div>
-  <div id="resize-corner-ne"></div>
-  <div id="resize-corner-sw"></div>
-  <div id="resize-corner-se"></div>
+    <div id="resize-corner-nw"></div>
+    <div id="resize-corner-ne"></div>
+    <div id="resize-corner-sw"></div>
+    <div id="resize-corner-se"></div>
+    <div id="resize-edge-n"></div>
+    <div id="resize-edge-e"></div>
+    <div id="resize-edge-s"></div>
+    <div id="resize-edge-w"></div>
   </body>
 </html>

@@ -2,30 +2,75 @@ Contexte Extension Moodboard
 Quoi : Extension Chrome (Manifest V3) de moodboarding — canvas infini type Figma/Milanote pour organiser images, notes, couleurs, liens, vidéos et fichiers.
 
 Fichiers clés
-app.js (~5700 lignes) — logique principale dans une IIFE const App = (function() { ... })() exposant 60+ méthodes publiques
+app.js (~6500 lignes) — logique principale dans une IIFE const App = (function() { ... })() exposant 60+ méthodes publiques
 index.html — UI unique (tous les écrans + CSS inline) : écran d'accueil (board cards), écran board (canvas + toolbar + panneau bibliothèque)
 collab.js (~1130 lignes) — module window.Collab pour la collaboration temps réel via Firebase (curseurs, locks, sync éléments, présence)
 background.js (~176 lignes) — service worker pour le menu contextuel "Ajouter au Moodboard" (clic droit sur image web)
+firebase-init.js — initialisation Firebase (projet moodboard-app-b21b9), expose window._fbDb
+firebase-app-compat.js / firebase-database-compat.js — SDK Firebase bundlé en local (pas de CDN)
 manifest.json — permissions : contextMenus, storage, unlimitedStorage, activeTab, tabs, <all_urls>
+
 Stockage
 IndexedDB (primaire) : DB MoodboardDB, store boards_store, clé mb_boards → Array<Board>
 _imgStore (Map session) : id → base64src — garde les grosses data URLs hors DOM
+Firebase Realtime DB : boards/{boardId} (sync partage), collabSessions/{boardId}/ (collab temps réel)
 Board : { id, name, savedAt, thumbnail, elements: [{id, type, x, y, w, h, z, data}], library: {image:[], couleur:[], ...} }
+
 Architecture app.js (sections principales)
-State (lignes 1-48) : boards, zoom, pan, selection, multiSelected
-IndexedDB (~50-226) : getDB, saveBoards, loadBoardsFromStorage
-Init (~228-336) : init(), détecte mode share/collab
-UI Events (~339-534) : setupUIEvents(), boutons, modales
-Boards CRUD (~536-1038) : renderHome(), openBoard(), createBoard()
-Canvas Transform (~1040-1215) : zoom/pan, fitElementsToScreen, clampPan (Milanote-like avec 5% marge)
-Canvas Events (~1217-1620) : wheel, touch, drag-drop, selection-rect
-Keyboard (~1658-1781) : Ctrl+Z/Y, Delete, Escape, Space (pan)
-History (~1782-2068) : dual — innerHTML snapshots (solo) + actions structurées (collab)
-Drag RAFs (~2700-3387) : dragRAF (lerp single), groupDragRAF (lerp multi), snap guides
-Éléments (~3576-5200) : createImageElement, createNoteElement, createColorElement, createLinkElement, createVideoElement, createFileElement
-Bibliothèque (~4931-5262) : panneau latéral avec dossiers, recherche, Shift+clic range, drag multi
-Export (~5265-5485) : PNG/PDF via html2canvas + jsPDF avec optimisation taille fichier
-Collab Bridge (~5550-5708) : helpers _collab* pour collab.js
+State (lignes 1-48) : boards, zoom, pan, selection, multiSelected, SHARE_BASE_URL
+compressImage (~100-133) : utilitaire Canvas API, downscale maxWidth 1600px, JPEG quality 0.8, fond blanc pour PNG→JPEG, skip si <500KB et ≤1600px
+IndexedDB (~135-260) : getDB, saveBoards, loadBoardsFromStorage
+saveCurrentBoard (~137-197) : sérialise éléments + _imgStore, sauvegarde IndexedDB + sync Firebase avec guard taille 8MB
+Init (~262-370) : init(), détecte mode share/collab via URL params (?board= ou ?collab=)
+UI Events (~373-570) : setupUIEvents(), boutons share/collab (action directe, pas de modale)
+Boards CRUD (~572-1075) : renderHome(), openBoard() [async, vérifie Firebase], createBoard(), goHome()
+Canvas Transform (~1077-1250) : zoom/pan, fitElementsToScreen, clampPan (Milanote-like avec 5% marge)
+Canvas Events (~1252-1660) : wheel, touch, drag-drop (compressImage au drop), selection-rect
+Keyboard (~1695-1820) : Ctrl+Z/Y, Delete, Escape, Space (pan)
+History (~1820-2105) : dual — innerHTML snapshots (solo) + actions structurées (collab)
+Drag RAFs (~2740-3425) : dragRAF (lerp single), groupDragRAF (lerp multi), snap guides
+Éléments (~3615-5250) : createImageElement, createNoteElement, createColorElement, createLinkElement, createVideoElement, createFileElement
+Context Menu (~4915-4960) : ctxReplaceImage avec compressImage + _imgStore sync
+Bibliothèque (~4970-5310) : panneau latéral avec dossiers, recherche, Shift+clic range, drag multi, compressImage à l'import
+Export (~5315-5535) : PNG/PDF via html2canvas + jsPDF avec optimisation taille fichier
+Collab Bridge (~5600-5760) : helpers _collab* pour collab.js, _collabMergeElements avec guard taille 8MB
+
+Éléments (board-element)
+Pas de element-toolbar dans le DOM — supprimée (mai 2026). Duplication et suppression via clic droit et raccourcis clavier uniquement.
+makeElement() crée : div.board-element + div.resize-handle uniquement.
+Les appels restants el.insertBefore(wrap, el.querySelector('.element-toolbar')) fonctionnent car querySelector retourne null → insertBefore(x, null) = appendChild(x).
+
+Partage & Collaboration
+#share-btn : action directe, copie URL Firebase Hosting (https://moodboard-app-b21b9.web.app/?board={id}) → toast
+#collab-btn : si session active → copie board ID brut → toast. Sinon → démarre session, marque isCollaborative, .collab-active CSS.
+Sessions persistantes (Google Docs-style) : la session reste en Firebase après que le propriétaire quitte. Vérification : présence du nœud collabSessions/{id}/elements (pas meta/active).
+openBoard() async : vérifie Firebase si board non marqué isCollaborative avant ouverture locale — reconnecte automatiquement.
+endSession() ne met pas meta/active = false. _onMetaActiveChanged() corps vide.
+goHome() : sauvegarde locale + Collab.endSession(). Pas de reset UI collab-btn.
+
+Bibliothèque — dossiers
+lib-folder-chip clic droit (sauf 'all' et 'image') → menu contextuel #lib-folder-context-menu créé dynamiquement.
+Renommer : prompt() → reconstruit l'objet library avec la nouvelle clé (ordre préservé) → saveLibrary() + renderPanelLib().
+Supprimer : confirm() → delete library[key] → bascule panelFolder = 'all' si nécessaire → saveLibrary() + renderPanelLib().
+Fonction : _showLibFolderContextMenu(folderName, x, y) — se ferme au premier mousedown extérieur.
+
+Compression d'images
+compressImage(src, maxWidth, quality) → Promise<dataURL>
+Intégré à 5 points d'entrée : drop canvas, paste Ctrl+V, replace image, import bibliothèque, drop panneau bibliothèque
+Skip intelligent : si src < 500KB ET largeur ≤ maxWidth → retourne src inchangé
+Sortie JPEG (fond blanc pour transparence), quality 0.8, max 1600px largeur
+Guard Firebase 8MB : saveCurrentBoard() et _collabMergeElements() vérifient Blob size avant .set(), toast d'erreur si dépassement
+
+Firebase init (firebase-init.js)
+Guard firebase.auth : si SDK Auth non chargé (ex. navigation privée/mobile), _fbAuthReady = Promise.resolve() et _fbUid = null — pas de crash.
+forceWebSockets() uniquement dans l'extension Chrome MV3 (pas sur le web).
+Ordre scripts dans index.html : firebase-app-compat.js → firebase-auth-compat.js → firebase-database-compat.js → firebase-init.js.
+
+Partage web (_loadSharedBoard)
+Charge depuis boards/{id}. Si non trouvé, fallback sur collabSessions/{id}/elements (boards collaboratifs persistants).
+Éléments collab restaurés avec restoreElement() en ignorant les deleted.
+Déployé sur Firebase Hosting : https://moodboard-app-b21b9.web.app
+
 Patterns importants
 RAF loops avec lerp + auto-stop quand convergence < 0.1px
 Event cleanup : mousemove/mouseup ajoutés au mousedown, retirés dans onUp + cancelAnimationFrame
@@ -33,14 +78,18 @@ Guard listeners : if (el._noteEventsAttached) return pour éviter les doublons
 _imgStore remap : dans restoreElement, remap _imgStore[tempId] → _imgStore[s.id] avant d'écraser dataset.id
 Coordonnées : canvasX = (clientX - rect.left - panX) / zoomLevel
 Taille min resize par type : link 103×73, color 80×80, file 120×50, default 60×40
+
 Collaboration (Firebase Realtime DB)
 Structure : collabSessions/{boardId}/ → meta, presence, locks, elements, connections, captions
-Curseurs distants : lerp RAF, palette 8 couleurs (première = #ff3c00 orange projet)
+Curseurs distants : lerp RAF, couleur #0b36ed (bleu), facteur lerp 0.35, refresh 33ms (~30Hz)
 Locks : transaction Firebase avant édition, auto-release onDisconnect
-Sync : position throttle 66ms, texte debounce 300ms, version increment par edit
+Sync : position throttle 33ms, texte debounce 300ms, .update() (pas .transaction()) pour isFinal
+Images collab : data = 'pending' (pas de Base64 dans collabSessions), stocké uniquement dans boards/{id}
+
 Conventions
 Pas de console.log dans app.js
 Pas de boucle while non bornée
 Orange projet : #ff3c00
 Curseur custom SVG orange sur canvas-wrapper et board-element
 CSS tout inline dans index.html, fonts HelveticaRoman/HelveticaBold via @font-face
+Tous les scripts locaux (pas de CDN externe) — conformité CSP Manifest V3

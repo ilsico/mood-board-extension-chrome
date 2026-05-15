@@ -23,7 +23,14 @@
       "Bash(grep -E '\\\\.\\(js|css|html|json\\)$')",
       "Bash(grep -E '\\\\.\\(js|html|json\\)$')",
       "Bash(node -c app.js)",
-      "Bash(node -c collab.js)"
+      "Bash(node -c collab.js)",
+      "Bash(firebase deploy:*)",
+      "Bash(git add *)",
+      "Read(//mnt/c/Users/flore/Desktop/MOODBOARD/**)",
+      "Bash(grep -rn \"element-toolbar\" . --include=\"*.js\" --include=\"*.html\")",
+      "Bash(git push *)",
+      "Bash(Get-Content \"C:\\\\Users\\\\flore\\\\Desktop\\\\MOODBOARD\\\\Extension Moodboard\\\\background.js\")",
+      "Bash(Measure-Object -Line)"
     ]
   }
 }

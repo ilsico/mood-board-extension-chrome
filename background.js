@@ -71,9 +71,30 @@ async function rebuildMenus(boards) {
 // ── DÉCLENCHEURS ─────────────────────────────────────────────────────────────
 
 // Reconstruire les menus quand l'app nous informe d'une modification
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === 'MB_BOARDS_MODIFIED') {
     getBoardsFromDB().then(rebuildMenus);
+  } else if (msg.type === 'MB_CAPTURE_START') {
+    const { boardId, tabId } = msg;
+    (async () => {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['content-capture.js'] });
+      chrome.tabs.sendMessage(tabId, { type: 'MB_CAPTURE_ENABLE', boardId }).catch(() => {});
+    })();
+  } else if (msg.type === 'MB_CAPTURE_STOP') {
+    chrome.tabs.sendMessage(msg.tabId, { type: 'MB_CAPTURE_DISABLE' }).catch(() => {});
+  } else if (msg.type === 'MB_CAPTURE_IMAGE') {
+    addImageToBoardLibrary(msg.boardId, msg.imageUrl);
+  } else if (msg.type === 'MB_CAPTURE_UPDATE_BOARD') {
+    chrome.tabs.sendMessage(msg.tabId, { type: 'MB_CAPTURE_UPDATE_BOARD', boardId: msg.boardId }).catch(() => {});
+  } else if (msg.type === 'MB_CAPTURE_STOP_FROM_PAGE') {
+    const tabId = sender.tab?.id;
+    (async () => {
+      const stored = await chrome.storage.local.get('mb_capture_active_tabs');
+      const tabs = stored.mb_capture_active_tabs || {};
+      delete tabs[tabId];
+      await chrome.storage.local.set({ mb_capture_active_tabs: tabs });
+      chrome.runtime.sendMessage({ type: 'MB_CAPTURE_STOPPED', tabId }).catch(() => {});
+    })();
   }
 });
 
@@ -85,26 +106,8 @@ chrome.runtime.onStartup.addListener(async () => {
   rebuildMenus(await getBoardsFromDB());
 });
 
-// ── CLIC SUR L'ICÔNE → OUVRIR / FOCUSER LE MOODBOARD ────────────────────────
-chrome.action.onClicked.addListener(async () => {
-  const url = chrome.runtime.getURL('index.html');
-  const tabs = await chrome.tabs.query({ url });
-  if (tabs.length > 0) {
-    chrome.tabs.update(tabs[0].id, { active: true });
-  } else {
-    chrome.tabs.create({ url });
-  }
-});
-
-// ── CLIC SUR UN ITEM DU MENU CONTEXTUEL ──────────────────────────────────────
-chrome.contextMenus.onClicked.addListener(async (info) => {
-  const menuId = String(info.menuItemId);
-  if (!menuId.startsWith('mb-board-')) return;
-
-  const boardId = menuId.replace('mb-board-', '');
-  const imageUrl = info.srcUrl;
-  if (!imageUrl) return;
-
+// ── AJOUT IMAGE DANS LA BIBLIOTHÈQUE D'UN BOARD ──────────────────────────────
+async function addImageToBoardLibrary(boardId, imageUrl) {
   if (
     imageUrl.startsWith('chrome://') ||
     imageUrl.startsWith('file://') ||
@@ -154,10 +157,8 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
       : imageUrl.split('/').pop().split('?')[0] || 'image.jpg'
   );
 
-  // Écriture directe dans IndexedDB
   const boards = await getBoardsFromDB();
   const board = boards.find((b) => b.id === boardId);
-
   if (!board) return;
 
   if (!board.library) board.library = {};
@@ -170,7 +171,26 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
   });
 
   await saveBoardsToDB(boards);
-
-  // Avertir app.js que la bibliothèque a changé
   chrome.runtime.sendMessage({ type: 'MB_IMAGE_INJECTED' }).catch(() => {});
+}
+
+// ── CLIC SUR UN ITEM DU MENU CONTEXTUEL ──────────────────────────────────────
+chrome.contextMenus.onClicked.addListener(async (info) => {
+  const menuId = String(info.menuItemId);
+  if (!menuId.startsWith('mb-board-')) return;
+
+  const boardId = menuId.replace('mb-board-', '');
+  if (!info.srcUrl) return;
+
+  await addImageToBoardLibrary(boardId, info.srcUrl);
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  if (changeInfo.status !== 'loading') return;
+  const stored = await chrome.storage.local.get('mb_capture_active_tabs');
+  const tabs = stored.mb_capture_active_tabs || {};
+  if (!tabs[tabId]) return;
+  delete tabs[tabId];
+  await chrome.storage.local.set({ mb_capture_active_tabs: tabs });
+  chrome.runtime.sendMessage({ type: 'MB_CAPTURE_STOPPED', tabId }).catch(() => {});
 });

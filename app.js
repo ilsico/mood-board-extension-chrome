@@ -102,7 +102,7 @@ const App = (function () {
     const b = boards.find((x) => x.id === boardId);
     const raw = b && b.library ? b.library : {};
     library = raw;
-    ['typographie', 'couleur', 'logo', 'image'].forEach((f) => {
+    ['typographie', 'couleur', 'logo', 'image', '__trash__'].forEach((f) => {
       if (!library[f]) library[f] = [];
     });
   }
@@ -2238,6 +2238,23 @@ const App = (function () {
 
         return;
       }
+      // Drop d'une URL externe (depuis une autre fenêtre ou onglet Chrome)
+      const _uriList = e.dataTransfer.getData('text/uri-list') || '';
+      const _droppedUrl = _uriList.split('\n').map((s) => s.trim()).find((s) => s.startsWith('http')) ||
+        (src && (src.startsWith('http://') || src.startsWith('https://')) ? src : '');
+      if (_droppedUrl) {
+        const rect = wrapper.getBoundingClientRect();
+        const _lx = (e.clientX - rect.left - panX) / zoomLevel - 135;
+        const _ly = (e.clientY - rect.top - panY) / zoomLevel - 110;
+        _fetchLinkMeta(_droppedUrl).then(({ title, img }) => {
+          const linkEl = createLinkElement(_droppedUrl, title || _droppedUrl, img, _lx, _ly);
+          _collabSyncCreatedEl(linkEl);
+          if (linkEl) pushAction({ type: 'create', elId: linkEl.dataset.id, after: _captureElState(linkEl) });
+          pushHistory();
+        });
+        return;
+      }
+
       // Fichiers images droppés directement
       if (e.dataTransfer.files.length) {
         const rect = wrapper.getBoundingClientRect();
@@ -2807,27 +2824,22 @@ const App = (function () {
         _applyReverse(action);
         _actionIndex--;
         updateCornerHandles();
-        toast('Annulé');
         return;
       }
       if (skipped > 0) {
         toast("Impossible d'annuler : éléments modifiés par d'autres");
-      } else {
-        toast('Rien à annuler');
       }
       return;
     }
 
     // Mode solo: undo innerHTML classique
     if (historyIndex <= 0) {
-      toast('Rien à annuler');
       return;
     }
     historyIndex--;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
     deselectAll();
-    toast('Annulé');
   }
 
   function redo() {
@@ -2836,27 +2848,23 @@ const App = (function () {
     // Mode collab: redo par action
     if (isCollab && _actionHistory.length > 0) {
       if (_actionIndex >= _actionHistory.length - 1) {
-        toast('Rien à rétablir');
         return;
       }
       _actionIndex++;
       const action = _actionHistory[_actionIndex];
       _applyForward(action);
       updateCornerHandles();
-      toast('Rétabli');
       return;
     }
 
     // Mode solo: redo innerHTML classique
     if (historyIndex >= history.length - 1) {
-      toast('Rien à rétablir');
       return;
     }
     historyIndex++;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
     deselectAll();
-    toast('Rétabli');
   }
   function reattachAllEvents() {
     document.querySelectorAll('#canvas .board-element').forEach((el) => {
@@ -4402,7 +4410,10 @@ const App = (function () {
 
   function _getMinSize(el) {
     const t = el && el.dataset ? el.dataset.type : '';
-    if (t === 'link') return { w: 270, h: 73 };
+    if (t === 'link') {
+      const hasLinkImg = el && el.querySelector('.link-image');
+      return { w: 270, h: hasLinkImg ? 200 : 73 };
+    }
     if (t === 'color') return { w: 153, h: 127 };
     if (t === 'file') return { w: 260, h: 76 };
     if (t === 'note') return { w: 160, h: 54 };
@@ -5645,6 +5656,28 @@ const App = (function () {
   function closeLinkModal() {
     closeModal('link-modal');
   }
+  async function _fetchLinkMeta(url) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const title =
+        doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+        doc.querySelector('title')?.textContent ||
+        new URL(url).hostname;
+      const img =
+        doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
+        doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
+        '';
+      return { title: title.trim().slice(0, 120), img };
+    } catch {
+      try { return { title: new URL(url).hostname, img: '' }; } catch { return { title: url, img: '' }; }
+    }
+  }
+
   function addLinkElement() {
     const url = document.getElementById('link-url-input').value.trim();
     const title = document.getElementById('link-title-input').value.trim();
@@ -5687,7 +5720,7 @@ const App = (function () {
   }
   function createLinkElement(url, title, imgSrc, x, y) {
     const hasImg = !!imgSrc;
-    const el = makeElement('link', x || 100, y || 100, 270, hasImg ? 220 : 73);
+    const el = makeElement('link', x || 100, y || 100, 270, hasImg ? 260 : 73);
     el.dataset.savedata = JSON.stringify({ url, title, img: imgSrc });
     const wrap = document.createElement('div');
     wrap.className = 'el-link';
@@ -5696,6 +5729,17 @@ const App = (function () {
       img.className = 'link-image';
       img.src = imgSrc;
       img.alt = title;
+      img.onload = () => {
+        if (!img.naturalWidth) return;
+        const cardW = parseFloat(el.style.width) || 270;
+        const imgH = Math.round((img.naturalHeight / img.naturalWidth) * cardW);
+        const bodyH = 76;
+        const totalH = imgH + bodyH;
+        el.style.height = totalH + 'px';
+        el.dataset.ratio = String(cardW / totalH);
+        updateConnectionsForEl(el);
+        updateCornerHandles();
+      };
       wrap.appendChild(img);
     }
     const body = document.createElement('div');
@@ -6955,7 +6999,7 @@ const App = (function () {
       logo: 'Logo',
       image: 'Image',
     };
-    const allFolders = ['all', ...Object.keys(library)];
+    const allFolders = ['all', ...Object.keys(library).filter((k) => k !== '__trash__')];
 
     allFolders.forEach((f) => {
       const btn = document.createElement('button');
@@ -6964,12 +7008,12 @@ const App = (function () {
       const label = folderLabels[f] || f;
       const count =
         f === 'all'
-          ? Object.values(library).reduce((a, b) => a + b.length, 0)
+          ? Object.entries(library).filter(([k]) => k !== '__trash__').reduce((a, [, b]) => a + b.length, 0)
           : (library[f] || []).length;
       btn.textContent = `${label} (${count})`;
 
       btn.addEventListener('click', () => setPanelFolder(f, btn));
-      if (f !== 'all' && f !== 'image') {
+      if (f !== 'all' && f !== 'image' && f !== '__trash__') {
         btn.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           _showLibFolderContextMenu(f, e.clientX, e.clientY);
@@ -7017,6 +7061,14 @@ const App = (function () {
       foldersDiv.appendChild(btn);
     });
 
+    const trashCount = (library['__trash__'] || []).length;
+    const trashBtn = document.createElement('button');
+    trashBtn.className = 'lib-folder-chip' + (panelFolder === '__trash__' ? ' active' : '');
+    trashBtn.dataset.folder = '__trash__';
+    trashBtn.textContent = `Corbeille (${trashCount})`;
+    trashBtn.addEventListener('click', () => setPanelFolder('__trash__', trashBtn));
+    foldersDiv.appendChild(trashBtn);
+
     // Bouton "+" pour créer une nouvelle catégorie
     const addBtn = document.createElement('button');
     addBtn.className = 'lib-folder-chip';
@@ -7033,11 +7085,26 @@ const App = (function () {
     const grid = document.getElementById('lib-panel-grid');
     const empty = document.getElementById('lib-panel-empty');
     grid.innerHTML = '';
+    const existingEmptyBtn = document.getElementById('lib-trash-empty-btn');
+    if (existingEmptyBtn) existingEmptyBtn.remove();
+    if (panelFolder === '__trash__') {
+      const emptyBtn = document.createElement('button');
+      emptyBtn.id = 'lib-trash-empty-btn';
+      emptyBtn.textContent = 'Vider la corbeille';
+      emptyBtn.style.cssText = 'display:block;width:calc(100% - 28px);margin:0 14px 10px;padding:7px 0;background:#ff3c00;color:#fff;border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;';
+      emptyBtn.addEventListener('click', () => {
+        library['__trash__'] = [];
+        saveLibrary();
+        renderPanelLib();
+      });
+      grid.parentNode.insertBefore(emptyBtn, grid);
+    }
     let items = [];
     if (panelFolder === 'all') {
-      Object.keys(library).forEach(
-        (f) => (items = items.concat(library[f].map((i) => ({ ...i, folder: f }))))
-      );
+      Object.keys(library).forEach((f) => {
+        if (f === '__trash__') return;
+        items = items.concat(library[f].map((i) => ({ ...i, folder: f })));
+      });
     } else {
       items = (library[panelFolder] || []).map((i) => ({ ...i, folder: panelFolder }));
     }
@@ -7046,7 +7113,11 @@ const App = (function () {
 
     if (!items.length) {
       grid.style.display = 'none';
-      empty.classList.remove('hidden');
+      if (panelFolder !== '__trash__') {
+        empty.classList.remove('hidden');
+      } else {
+        empty.classList.add('hidden');
+      }
       return;
     }
     grid.style.display = 'grid';
@@ -7288,7 +7359,6 @@ const App = (function () {
         done++;
         saveLibrary();
         renderPanelLib();
-        if (done === total) toast(total + ' image(s) importée(s) dans "' + targetFolder + '"');
       };
       reader.readAsDataURL(file);
     });
@@ -7297,7 +7367,13 @@ const App = (function () {
 
   function deletePanelLibItem(id, folder) {
     if (!library[folder]) return;
+    const item = library[folder].find((i) => i.id === id);
+    if (!item) return;
     library[folder] = library[folder].filter((i) => i.id !== id);
+    if (folder !== '__trash__') {
+      if (!library['__trash__']) library['__trash__'] = [];
+      library['__trash__'].push(item);
+    }
     libSelectedIds.delete(id);
     saveLibrary();
     renderPanelLib();
@@ -7307,10 +7383,14 @@ const App = (function () {
     if (!libSelectedIds.size) return;
     const ids = libSelectedIds;
     const removed = [];
+    if (!library['__trash__']) library['__trash__'] = [];
     Object.keys(library).forEach((folder) => {
       const arr = library[folder];
       for (let i = 0; i < arr.length; i++) {
         if (ids.has(arr[i].id)) removed.push({ folder, index: i, item: arr[i] });
+      }
+      if (folder !== '__trash__') {
+        arr.filter((it) => ids.has(it.id)).forEach((it) => library['__trash__'].push(it));
       }
       library[folder] = arr.filter((it) => !ids.has(it.id));
     });
@@ -7321,11 +7401,6 @@ const App = (function () {
     if (removed.length) {
       pushAction({ type: 'libDelete', before: removed });
       pushHistory();
-      toast(
-        removed.length > 1
-          ? removed.length + ' images supprimées de la bibliothèque'
-          : 'Image supprimée'
-      );
     }
   }
 
@@ -7463,7 +7538,6 @@ const App = (function () {
           if (++done === files.length) {
             saveLibrary();
             renderPanelLib();
-            toast(done + ' image(s) ajoutée(s)');
           }
         };
         reader.readAsDataURL(file);

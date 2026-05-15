@@ -11,17 +11,22 @@ try {
 
   // Auth anonyme — chaque navigateur reçoit un UID Firebase unique
   // pour que les règles de sécurité (auth != null) autorisent l'accès
-  window._fbAuthReady = firebase
-    .auth()
-    .signInAnonymously()
-    .then(function (cred) {
-      console.log('Firebase auth OK — uid:', cred.user.uid);
-      window._fbUid = cred.user.uid;
-    })
-    .catch(function (err) {
-      console.warn('Firebase anonymous auth failed:', err);
-      window._fbUid = null;
-    });
+  if (firebase.auth) {
+    window._fbAuthReady = firebase
+      .auth()
+      .signInAnonymously()
+      .then(function (cred) {
+        console.log('Firebase auth OK — uid:', cred.user.uid);
+        window._fbUid = cred.user.uid;
+      })
+      .catch(function (err) {
+        console.warn('Firebase anonymous auth failed:', err);
+        window._fbUid = null;
+      });
+  } else {
+    console.warn('Firebase Auth SDK not loaded');
+    window._fbAuthReady = Promise.resolve();
+  }
 
   // Créer l'instance de base de données AVANT de forcer les WebSockets
   window._fbDb = firebase.database();

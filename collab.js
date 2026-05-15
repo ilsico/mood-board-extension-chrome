@@ -31,8 +31,8 @@ window.Collab = (function () {
   
   const COLORS = ['#0b36ed'];
 
-  const CURSOR_SEND_INTERVAL = 33; // ~30 Hz
-  const DRAG_SYNC_INTERVAL = 33; // ~30 Hz
+  const CURSOR_SEND_INTERVAL = 16; // ~60 Hz
+  const DRAG_SYNC_INTERVAL = 16; // ~60 Hz
   const TEXT_SYNC_DEBOUNCE = 300; // ms
 
   // ── UTILITAIRES ─────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ window.Collab = (function () {
   function _makeThrottle(fn, ms) {
     let timer = null;
     let lastArgs = null;
-    return function () {
+    const throttled = function () {
       lastArgs = arguments;
       if (timer) return;
       timer = setTimeout(() => {
@@ -71,6 +71,12 @@ window.Collab = (function () {
         fn.apply(null, lastArgs);
       }, ms);
     };
+    throttled.cancel = function () {
+      clearTimeout(timer);
+      timer = null;
+      lastArgs = null;
+    };
+    return throttled;
   }
 
   /** Crée un debounce simple */
@@ -152,6 +158,7 @@ window.Collab = (function () {
         });
         if (opts && opts.elements) {
           const updates = {};
+          const pendingImages = [];
           opts.elements.forEach((el) => {
             if (el.type === 'connection') {
               updates['connections/' + el.connId] = { from: el.from, to: el.to };
@@ -165,6 +172,10 @@ window.Collab = (function () {
                 text: el.text || '',
               };
             } else {
+              // Pour les images, on écrit 'pending' dans le batch et on uploadera
+              // la base64 individuellement après — un .update() unique avec plusieurs
+              // images lourdes peut dépasser la limite de payload Firebase RTDB.
+              const isImg = el.type === 'image';
               updates['elements/' + el.id] = {
                 x: el.x,
                 y: el.y,
@@ -172,16 +183,32 @@ window.Collab = (function () {
                 h: el.h || null,
                 z: el.z || 100,
                 type: el.type,
-                data: el.type === 'image' ? 'pending' : el.data || '',
+                data: isImg ? 'pending' : el.data || '',
+                style: el.style || null,
                 version: 0,
                 lastEditBy: _userId,
                 lastEditAt: firebase.database.ServerValue.TIMESTAMP,
                 deleted: false,
               };
+              if (isImg && el.data && el.data !== 'pending') {
+                pendingImages.push({ id: el.id, data: el.data });
+              }
             }
           });
           if (Object.keys(updates).length) {
             await _sessionRef.update(updates);
+          }
+          // Upload des images individuellement (séquentiel pour éviter de saturer la connexion)
+          for (var i = 0; i < pendingImages.length; i++) {
+            try {
+              await _sessionRef.child('elements/' + pendingImages[i].id).update({
+                data: pendingImages[i].data,
+                lastEditBy: _userId,
+                lastEditAt: firebase.database.ServerValue.TIMESTAMP,
+              });
+            } catch (_) {
+              // Tolérer une erreur isolée et continuer avec les images suivantes
+            }
           }
         }
       }
@@ -399,13 +426,17 @@ window.Collab = (function () {
   function syncElementPosition(elId, x, y, isFinal) {
     if (!_active || !_sessionRef) return;
     if (isFinal) {
+      // Annuler tout timer throttle en attente avant d'envoyer la position finale
+      if (_throttledPositionSync[elId]) {
+        _throttledPositionSync[elId].cancel();
+        delete _throttledPositionSync[elId];
+      }
       _sessionRef.child('elements/' + elId).update({
         x: x,
         y: y,
         lastEditBy: _userId,
         lastEditAt: firebase.database.ServerValue.TIMESTAMP,
       });
-      delete _throttledPositionSync[elId];
     } else {
       // Sync throttlée pendant le drag (sans version++)
       if (!_throttledPositionSync[elId]) {
@@ -463,10 +494,14 @@ window.Collab = (function () {
 
   function syncElementStyle(elId, styleObj) {
     if (!_active || !_sessionRef) return;
-    _sessionRef.child('elements/' + elId + '/style').set(styleObj);
+    _sessionRef.child('elements/' + elId).update({
+      style: styleObj,
+      lastEditBy: _userId,
+      lastEditAt: firebase.database.ServerValue.TIMESTAMP,
+    });
   }
 
-  function syncElementCreate(elId, type, x, y, w, h, data, z) {
+  function syncElementCreate(elId, type, x, y, w, h, data, z, style) {
     if (!_active || !_sessionRef) return;
     _sessionRef.child('elements/' + elId).set({
       x: x,
@@ -476,6 +511,7 @@ window.Collab = (function () {
       z: z || 100,
       type: type,
       data: data || '',
+      style: style || null,
       version: 0,
       lastEditBy: _userId,
       lastEditAt: firebase.database.ServerValue.TIMESTAMP,
@@ -570,6 +606,17 @@ window.Collab = (function () {
 
     // Méta (session active)
     _listen(_sessionRef.child('meta/active'), 'value', _onMetaActiveChanged);
+
+    // Thumbnail sync
+    if (window._fbDb && _boardId) {
+      const thumbRef = window._fbDb.ref('boards/' + _boardId + '/thumbnail');
+      _listen(thumbRef, 'value', (snap) => {
+        const thumb = snap.val();
+        if (thumb && typeof App !== 'undefined' && App.updateBoardThumbnail) {
+          App.updateBoardThumbnail(_boardId, thumb);
+        }
+      });
+    }
   }
 
   // ── PRÉSENCE HANDLERS ──────────────────────────────────────────────────
@@ -681,6 +728,7 @@ window.Collab = (function () {
         h: data.h,
         z: data.z,
         data: data.data || '',
+        style: data.style || null,
       });
     }
   }
@@ -717,6 +765,7 @@ window.Collab = (function () {
           h: data.h,
           z: data.z,
           data: data.data || '',
+          style: data.style || null,
         });
       }
       return;
@@ -739,6 +788,14 @@ window.Collab = (function () {
     }
     if (data.h !== undefined && data.h !== null) {
       el.style.height = data.h + 'px';
+    }
+    // File card : scaler le contenu interne proportionnellement (miroir de handleResizeMouse)
+    if (el.dataset.type === 'file' && data.w !== undefined && data.w !== null) {
+      var fileWrap = el.querySelector('.el-file');
+      if (fileWrap) {
+        fileWrap.style.transform = 'scale(' + data.w / 260 + ')';
+        fileWrap.style.transformOrigin = 'top left';
+      }
     }
 
     // Z-index
@@ -824,14 +881,62 @@ window.Collab = (function () {
       if (swatch) swatch.style.backgroundColor = data;
       const hexInput = el.querySelector('.color-hex-input');
       if (hexInput && document.activeElement !== hexInput) {
-        hexInput.value = data.replace('#', '');
+        hexInput.value = data;
       }
     } else if (type === 'image') {
       if (data && data !== 'pending') {
-        var img = el.querySelector('img');
-        if (img) {
-          img.src = data;
+        // Si l'élément était en état "image perdue", retirer le placeholder
+        // et créer un <img> avant d'assigner la nouvelle source.
+        if (el.classList.contains('image-broken')) {
+          var ph = el.querySelector('.image-broken-content');
+          if (ph) ph.remove();
+          el.classList.remove('image-broken');
         }
+        var img = el.querySelector('img');
+        if (!img) {
+          img = document.createElement('img');
+          img.draggable = false;
+          el.insertBefore(img, el.querySelector('.element-toolbar'));
+        }
+        img.src = data;
+      }
+    } else if (type === 'file') {
+      el.dataset.savedata = data;
+      var fd = {};
+      try { fd = JSON.parse(data || '{}'); } catch (_) {}
+      var isVideoCard = !!el.querySelector('.el-file-video');
+      if (fd.isVideo && !isVideoCard) {
+        // Changement de type fichier→vidéo : recréer via App
+        if (typeof App !== 'undefined' && typeof App._collabRestoreElement === 'function') {
+          var elId = el.dataset.id;
+          var elZ = el.style.zIndex;
+          var elX = parseFloat(el.style.left) || 0;
+          var elY = parseFloat(el.style.top) || 0;
+          var elW = parseFloat(el.style.width) || null;
+          var elH = parseFloat(el.style.height) || null;
+          el.remove();
+          var newEl = App._collabRestoreElement({ id: elId, type: 'file', x: elX, y: elY, w: elW, h: elH, data: data });
+          if (newEl) newEl.style.zIndex = elZ;
+        }
+      } else if (!fd.isVideo && isVideoCard) {
+        // Changement de type vidéo→fichier : recréer
+        if (typeof App !== 'undefined' && typeof App._collabRestoreElement === 'function') {
+          var elId = el.dataset.id;
+          var elZ = el.style.zIndex;
+          var elX = parseFloat(el.style.left) || 0;
+          var elY = parseFloat(el.style.top) || 0;
+          var elW = parseFloat(el.style.width) || null;
+          var elH = parseFloat(el.style.height) || null;
+          el.remove();
+          var newEl = App._collabRestoreElement({ id: elId, type: 'file', x: elX, y: elY, w: elW, h: elH, data: data });
+          if (newEl) newEl.style.zIndex = elZ;
+        }
+      } else if (!fd.isVideo) {
+        // Même type fichier : mettre à jour le visuel en place
+        var nameDiv = el.querySelector('.file-name');
+        var sizeDiv = el.querySelector('.file-size');
+        if (nameDiv && fd.name) nameDiv.textContent = fd.name;
+        if (sizeDiv && fd.size) sizeDiv.textContent = fd.size;
       }
     } else {
       el.dataset.savedata = data;
@@ -874,6 +979,7 @@ window.Collab = (function () {
         width: data.width,
         parentId: data.parentId,
         text: data.text,
+        style: data.style || null,
       });
       if (capEl) capEl.dataset.capId = capId;
     }
@@ -920,10 +1026,9 @@ window.Collab = (function () {
     div.className = 'collab-cursor';
     div.dataset.userId = uid;
     div.innerHTML =
-      '<svg width="16" height="16" viewBox="0 0 16 16" fill="none">' +
-      '<path d="M0,0 L0,14 L4,10 L8,16 L10,14 L6,8 L12,8 Z" fill="' +
-      color +
-      '" stroke="#fff" stroke-width="0.5"/>' +
+      '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 48 48">' +
+      '<polygon fill="#fff" points="9.33 6.2 36.21 29.13 20.7 30.84 9.33 41.53 9.33 6.2"/>' +
+      '<path fill="' + color + '" d="M11.83,11.62l18.36,15.66-8.93.99-1.66.18-1.22,1.14-6.56,6.16V11.62M7.59,1.68c-.13,0-.26.03-.35.08-.2.1-.41.36-.41.66v43.1c0,.36.19.62.45.74.09.04.2.07.31.07.17,0,.34-.05.48-.18l13.74-12.9,18.66-2.07c.36-.06.59-.25.68-.55.08-.25-.02-.58-.28-.81L8.07,1.85c-.14-.12-.31-.16-.48-.16h0Z"/>' +
       '</svg>';
     div.style.opacity = '0';
     container.appendChild(div);
@@ -975,8 +1080,8 @@ window.Collab = (function () {
       const screenTargetX = c.targetX * zoomLevel + panX;
       const screenTargetY = c.targetY * zoomLevel + panY;
 
-      c.curX = _lerp(c.curX, screenTargetX, 0.35);
-      c.curY = _lerp(c.curY, screenTargetY, 0.35);
+      c.curX = _lerp(c.curX, screenTargetX, 0.5);
+      c.curY = _lerp(c.curY, screenTargetY, 0.5);
 
       if (Math.abs(c.curX - screenTargetX) > 0.5 || Math.abs(c.curY - screenTargetY) > 0.5) {
         anyActive = true;
@@ -985,7 +1090,7 @@ window.Collab = (function () {
       c.el.style.transform = 'translate(' + c.curX + 'px,' + c.curY + 'px)';
     });
 
-    if (anyActive || Object.keys(_remoteCursors).length > 0) {
+    if (anyActive) {
       _cursorRAFId = requestAnimationFrame(_cursorLerpRAF);
     } else {
       _cursorRAFId = null;
@@ -1085,8 +1190,8 @@ window.Collab = (function () {
       const target = _remoteLerpTargets[elId];
       const curX = parseFloat(el.style.left) || 0;
       const curY = parseFloat(el.style.top) || 0;
-      const newX = _lerp(curX, target.x, 0.35);
-      const newY = _lerp(curY, target.y, 0.35);
+      const newX = _lerp(curX, target.x, 0.5);
+      const newY = _lerp(curY, target.y, 0.5);
 
       if (Math.abs(newX - target.x) < 0.5 && Math.abs(newY - target.y) < 0.5) {
         el.style.left = target.x + 'px';
@@ -1142,9 +1247,10 @@ window.Collab = (function () {
   // ── MERGE SESSION → LOCAL (owner only) ────────────────────────────────
 
   async function _mergeSessionToLocal() {
-    if (!_sessionRef) return;
+    const sessionRef = _sessionRef; // capturer avant tout await (évite race condition avec endSession)
+    if (!sessionRef) return;
     try {
-      const elemSnap = await _sessionRef.child('elements').get();
+      const elemSnap = await sessionRef.child('elements').get();
       if (!elemSnap.exists()) return;
       const elements = [];
       elemSnap.forEach((child) => {
@@ -1159,10 +1265,11 @@ window.Collab = (function () {
           h: d.h,
           z: d.z,
           data: d.data || '',
+          style: d.style || null,
         });
       });
       // Ajouter les connexions
-      const connSnap = await _sessionRef.child('connections').get();
+      const connSnap = await sessionRef.child('connections').get();
       if (connSnap.exists()) {
         connSnap.forEach((child) => {
           const d = child.val();
@@ -1170,7 +1277,7 @@ window.Collab = (function () {
         });
       }
       // Ajouter les captions
-      const capSnap = await _sessionRef.child('captions').get();
+      const capSnap = await sessionRef.child('captions').get();
       if (capSnap.exists()) {
         capSnap.forEach((child) => {
           const d = child.val();
@@ -1181,6 +1288,7 @@ window.Collab = (function () {
             width: d.width,
             parentId: d.parentId,
             text: d.text,
+            style: d.style || null,
           });
         });
       }

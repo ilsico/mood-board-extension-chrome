@@ -1,12 +1,30 @@
-# Extension Moodboard — Instructions projet
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Stack & architecture
 - Chrome Extension Manifest V3
 - Un seul fichier JS principal : `app.js` (~3700 lignes), structure IIFE `const App = (function(){...})()`
-- `collab.js` : collaboration Firebase Realtime Database
-- `background.js` : service worker
+- `collab.js` : collaboration Firebase Realtime Database (IIFE exposé comme `window.Collab`)
+- `background.js` : service worker — a son propre accès IndexedDB (même DB que app.js) pour reconstruire les menus contextuels
 - `index.html` : UI statique + tout le CSS inline dans `<style>`
-- Stockage : IndexedDB (clé `mb_boards`) + fallback localStorage
+- `popup.html` / `popup.js` : popup extension (280px, bouton capture + sélecteur de board cible)
+- Stockage : IndexedDB (`MoodboardDB`, store `boards_store`, clé `mb_boards`) + fallback localStorage
+
+## Chargement de l'extension pour tester
+1. Ouvrir `chrome://extensions`
+2. Activer "Mode développeur"
+3. "Charger l'extension non empaquetée" → pointer sur ce dossier
+4. Modifier les fichiers → bouton Actualiser dans chrome://extensions (pas besoin de recharger l'UI si c'est index.html)
+
+## Types d'éléments canvas
+Chaque `.board-element` a un `data-type` parmi :
+- `note` — zone de texte avec `<textarea>`
+- `color` — swatch couleur avec `.color-hex-input`
+- `link` — card lien avec image d'aperçu, titre, URL
+- `image` — image (src stocké dans `_imgStore`, jamais dans le DOM)
+- `connection` — connecteur SVG `.el-connection` (pas un `.board-element`)
+- `caption` — légende texte `.el-caption` (pas un `.board-element`)
 
 ## Règles absolues
 - **Zéro `console.log`** dans app.js ou collab.js
@@ -16,21 +34,36 @@
 - Avant tout edit : lire la section exacte du fichier cible
 
 ## Patterns clés à respecter
-- **Drag RAF** : `dragRAF` / `groupDragRAF` avec lerp + dirty flag `hasMoved`, `cancelAnimationFrame` dans onUp
-- **Historique** : `pushAction({ type, elId, before, after })` + `pushHistory()` — jamais de `pushHistory` sans `pushAction`
-- **`_imgStore`** : Map `id → base64src` hors DOM pour les images — toujours propager sur duplication et remapper dans restoreElement
-- **Listeners** : `setupCanvasEvents`, `setupKeyboard`, `setupUIEvents` appelés UNE SEULE FOIS dans `init()`
-- **Collab sync** : après chaque modification d'élément (position, taille, z-index, data), appeler le `Collab.sync*` correspondant si `Collab.isActive()`
 
-## Fonctions collab à connaître
+### Création d'éléments
+- `makeElement(type, x, y, w, h)` → crée le `.board-element`, lui attache les events via `attachElementEvents()`, l'ajoute au `#canvas`
+- Après un innerHTML restore (undo) ou une duplication, appeler `reattachColorEvents(el)` pour `color` et `reattachNoteEvents(el)` pour `note`
+
+### Drag RAF
+`dragRAF` / `groupDragRAF` avec lerp + dirty flag `hasMoved`, `cancelAnimationFrame` dans onUp
+
+### Historique dual
+- **Mode solo** : `pushHistory()` sérialise `canvas.innerHTML` (max 50 entrées dans `history[]`)
+- **Mode collab** : `pushAction({ type, elId, before, after })` alimente `_actionHistory[]` (max 100 entrées)
+- Règle : **jamais de `pushHistory` sans `pushAction` préalable**
+- Types d'actions : `'move'`, `'resize'`, `'create'`, `'delete'`, `'editText'`, `'editColor'`, `'groupMove'`, `'groupCreate'`, `'generic'`
+
+### `_imgStore`
+Map `id → base64src` hors DOM pour les images — toujours propager sur duplication et remapper dans `restoreElement` (`_imgStore[tempId] → _imgStore[savedId]`)
+
+### Listeners
+`setupCanvasEvents`, `setupKeyboard`, `setupUIEvents` appelés **UNE SEULE FOIS** dans `init()`.
+`initHomePan()` appelé à chaque `renderHome()` (guards internes pour éviter les doubles).
+
+### Collab sync
+Après chaque modification d'élément (position, taille, z-index, data), appeler le `Collab.sync*` correspondant si `Collab.isActive()` :
 - `Collab.syncElementPosition(id, x, y, immediate?)`
 - `Collab.syncElementSize(id, w, h, immediate?)`
 - `Collab.syncElementZ(id, z)`
-- `Collab.syncElementData(id, data)` — pour type, contenu, couleur, etc.
-- `Collab.isActive()` — toujours vérifier avant d'appeler
+- `Collab.syncElementData(id, data)`
 
-## Types d'actions undo/redo
-`'move'`, `'resize'`, `'create'`, `'delete'`, `'editText'`, `'editColor'`, `'groupMove'`, `'groupCreate'`, `'generic'`
+## Bibliothèque
+Catégories fixes : `typographie`, `couleur`, `logo`, `image`, `__trash__`. Chaque board a sa propre `library` sérialisée dans `boards[]`.
 
 ## Curseur
 - Couleur : `#ff3c00` partout (CSS + JS)

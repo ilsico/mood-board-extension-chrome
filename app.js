@@ -5,10 +5,10 @@ const App = (function () {
   let wheelAngle = 0; // angle de rotation courant (rad)
   let wheelTargetAngle = 0; // angle cible (pour easing)
   let wheelRAF = null; // requestAnimationFrame en cours
+  let snapTimeout = null; // timer de snap après scroll (magnétisme)
   let wheelIndex = 0; // index de la carte la plus proche du centre
-  let wheelFilter = ''; // texte du champ de recherche
   let _wheelScrollWired = false; // guard listener (anti-doublon si init() rappelé)
-  const WHEEL_RADIUS = Math.min(window.innerHeight * 0.45, 420);
+  const WHEEL_RADIUS = Math.min(window.innerHeight * 0.36, 336);
   const WHEEL_VISIBLE_COUNT = 8; // nb de cartes rendues simultanément
   let library = {}; // bibliothèque du board courant — chargée dans openBoard()
   let currentBoardId = null;
@@ -336,6 +336,7 @@ const App = (function () {
     setupEdgeHandles();
     setupConnectorTool();
     setupWheelScroll();
+    setupPreviewKeyboard();
     setupActionBar();
     setupWheelSearch();
     document.querySelectorAll('.modal-overlay').forEach((ov) => {
@@ -824,11 +825,8 @@ const App = (function () {
   function renderBoardsWheel() {
     const container = document.getElementById('boards-wheel');
     const empty = document.getElementById('home-empty');
-    const filtered = boards.filter(
-      (b) => !wheelFilter || (b.name || '').toLowerCase().includes(wheelFilter.toLowerCase())
-    );
 
-    if (filtered.length === 0) {
+    if (boards.length === 0) {
       container.innerHTML = '';
       empty.hidden = false;
       return;
@@ -836,7 +834,7 @@ const App = (function () {
     empty.hidden = true;
 
     container.innerHTML = '';
-    filtered.forEach((b, i) => {
+    boards.forEach((b, i) => {
       const card = document.createElement('div');
       card.className = 'wheel-card';
       card.dataset.id = b.id;
@@ -852,19 +850,20 @@ const App = (function () {
       container.appendChild(card);
     });
 
-    updateWheel(filtered);
+    updateWheel();
   }
 
-  function updateWheel(filtered) {
-    filtered =
-      filtered ||
-      boards.filter(
-        (b) => !wheelFilter || (b.name || '').toLowerCase().includes(wheelFilter.toLowerCase())
-      );
-    const N = filtered.length;
+  function getWheelAngleStep() {
+    const N = boards.length;
+    if (N <= 1) return Math.PI / 7;
+    return Math.min(Math.PI / 7, (2 * Math.PI) / N);
+  }
+
+  function updateWheel() {
+    const N = boards.length;
     if (N === 0) return;
 
-    const angleStep = Math.PI / 7; // ~25.7° entre chaque carte
+    const angleStep = getWheelAngleStep();
     const cssCenterX = window.innerWidth * 0.6 - WHEEL_RADIUS;
     const containerH = window.innerHeight;
 
@@ -885,15 +884,15 @@ const App = (function () {
 
       const x = cssCenterX + WHEEL_RADIUS * Math.cos(theta);
       const y = containerH / 2 + WHEEL_RADIUS * Math.sin(theta);
-      const scale = Math.max(0.25, 1 - dist * 0.5);
-      const opacity = dist > 0.75 * Math.PI ? 0 : Math.max(0.15, 1 - dist * 0.6);
+      const scale = Math.max(0.05, 0.1 + (1.98 * (Math.cos(theta) + 1)) / 2);
+      const opacity = 1;
 
       card.style.transform =
         `translate3d(${x - window.innerWidth / 2}px, ${y - containerH / 2}px, 0) ` +
         `scale(${scale})`;
       card.style.opacity = opacity;
       card.style.zIndex = Math.round(1000 - dist * 100);
-      card.style.display = dist > 0.85 * Math.PI ? 'none' : 'block';
+      card.style.display = 'block';
     });
 
     wheelIndex = nearestIdx;
@@ -909,11 +908,26 @@ const App = (function () {
         e.preventDefault();
         wheelTargetAngle += e.deltaY * 0.003; // sensibilité scroll
         if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
+        scheduleWheelSnap();
       },
       { passive: false }
     );
     window.addEventListener('resize', () => updateWheel());
     _wheelScrollWired = true;
+  }
+
+  let _previewKbdWired = false;
+  function setupPreviewKeyboard() {
+    if (_previewKbdWired) return;
+    _previewKbdWired = true;
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const overlay = document.getElementById('board-preview-overlay');
+      if (overlay && !overlay.hidden) {
+        overlay.hidden = true;
+        e.preventDefault();
+      }
+    });
   }
 
   function wheelTick() {
@@ -928,13 +942,22 @@ const App = (function () {
     }
   }
 
+  function scheduleWheelSnap() {
+    if (snapTimeout) clearTimeout(snapTimeout);
+    snapTimeout = setTimeout(() => {
+      const angleStep = getWheelAngleStep();
+      const nearestIndex = Math.round(wheelTargetAngle / -angleStep);
+      wheelTargetAngle = -nearestIndex * angleStep;
+      if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
+    }, 150);
+  }
+
   function onWheelCardClick(index, boardId) {
     if (index === wheelIndex) {
       if (typeof showBoardPreview === 'function') showBoardPreview(boardId);
       return;
     }
-    // angleStep doit correspondre à celui d'updateWheel()
-    const angleStep = Math.PI / 7;
+    const angleStep = getWheelAngleStep();
     wheelTargetAngle = -index * angleStep;
     if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
   }
@@ -1016,10 +1039,15 @@ const App = (function () {
     const input = document.getElementById('wheel-search');
     if (!input) return;
     input.addEventListener('input', (e) => {
-      wheelFilter = e.target.value;
-      wheelAngle = 0;
-      wheelTargetAngle = 0;
-      renderBoardsWheel();
+      const query = (e.target.value || '').toLowerCase().trim();
+      if (!query) return;
+      const matchIndex = boards.findIndex((b) =>
+        (b.name || '').toLowerCase().includes(query)
+      );
+      if (matchIndex === -1) return;
+      const angleStep = getWheelAngleStep();
+      wheelTargetAngle = -matchIndex * angleStep;
+      if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
     });
     _wheelSearchWired = true;
   }

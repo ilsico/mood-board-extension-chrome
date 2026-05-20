@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "serve-handler": "^6.1.7"
+  }
+}

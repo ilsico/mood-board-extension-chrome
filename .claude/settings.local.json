@@ -30,7 +30,12 @@
       "Bash(grep -rn \"element-toolbar\" . --include=\"*.js\" --include=\"*.html\")",
       "Bash(git push *)",
       "Bash(Get-Content \"C:\\\\Users\\\\flore\\\\Desktop\\\\MOODBOARD\\\\Extension Moodboard\\\\background.js\")",
-      "Bash(Measure-Object -Line)"
+      "Bash(Measure-Object -Line)",
+      "Bash(findstr *)",
+      "Bash(grep -n -E \"^}\\\\\\)\\\\\\(\\\\\\);?\\\\s*$|^window\\\\.addEventListener\" app.js)",
+      "Bash(git diff *)",
+      "Bash(grep -n -A 8 \"\\\\.wheel-card {$\" \"C:/Users/flore/Desktop/MOODBOARD/Extension Moodboard/index.html\")",
+      "Bash(git *)"
     ]
   }
 }

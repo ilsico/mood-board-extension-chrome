@@ -1,15 +1,16 @@
 const App = (function () {
   // ── ÉTAT ─────────────────────────────────────────────────────────────────
   let boards = []; // chargé de façon asynchrone dans init() via loadBoardsFromStorage()
-  // ── Roue 3D (étape 3) ──
-  let wheelAngle = 0; // angle de rotation courant (rad)
-  let wheelTargetAngle = 0; // angle cible (pour easing)
+  // ── Roue 3D (pile verticale) ──
+  let wheelPosition = 0; // index float courant de la carte active
+  let wheelTargetPosition = 0; // index float cible (pour easing)
   let wheelRAF = null; // requestAnimationFrame en cours
   let snapTimeout = null; // timer de snap après scroll (magnétisme)
   let wheelIndex = 0; // index de la carte la plus proche du centre
   let _wheelScrollWired = false; // guard listener (anti-doublon si init() rappelé)
-  const WHEEL_RADIUS = Math.min(window.innerHeight * 0.36, 336);
-  const WHEEL_VISIBLE_COUNT = 8; // nb de cartes rendues simultanément
+  let _wheelDetailVisible = false; // panneau d'info affiché sur la carte active
+  let _wheelDetailTimeout = null;  // timer différé pour showWheelDetail (annulable)
+  let _cardTitleTimeout = null;    // timer différé pour afficher le titre de carte
   let library = {}; // bibliothèque du board courant — chargée dans openBoard()
   let currentBoardId = null;
   let currentFolder = 'all';
@@ -166,7 +167,7 @@ const App = (function () {
     document.querySelectorAll('#canvas .board-element').forEach((el) => {
       const _elStyle = (() => {
         if (el.dataset.type !== 'note') return null;
-        const ta = el.querySelector('textarea');
+        const ta = el.querySelector('.el-note-content');
         if (!ta) return null;
         return {
           fontFamily: ta.style.fontFamily || '',
@@ -249,23 +250,23 @@ const App = (function () {
     captureBoardThumbnail()
       .then(({ dataUrl }) => {
         const tc = document.createElement('canvas');
-        tc.width = 300;
-        tc.height = 225;
+        tc.width = 720;
+        tc.height = 1000;
         const ctx2 = tc.getContext('2d');
         ctx2.fillStyle = '#ffffff';
-        ctx2.fillRect(0, 0, 300, 225);
+        ctx2.fillRect(0, 0, 720, 1000);
         const img2 = new Image();
         img2.onload = () => {
           const margin = 0.1;
-          const maxW = 300 * (1 - 2 * margin);
-          const maxH = 225 * (1 - 2 * margin);
+          const maxW = 720 * (1 - 2 * margin);
+          const maxH = 1000 * (1 - 2 * margin);
           const scale = Math.min(maxW / img2.width, maxH / img2.height);
           const dw = img2.width * scale,
             dh = img2.height * scale;
-          const dx = (300 - dw) / 2,
-            dy = (225 - dh) / 2;
+          const dx = (720 - dw) / 2,
+            dy = (1000 - dh) / 2;
           ctx2.drawImage(img2, dx, dy, dw, dh);
-          const thumb = tc.toDataURL('image/jpeg', 0.7);
+          const thumb = tc.toDataURL('image/jpeg', 0.82);
           const board = boards.find((b) => b.id === currentBoardId);
           if (board) {
             board.thumbnail = thumb;
@@ -790,6 +791,10 @@ const App = (function () {
 
     closeCreateBoardModal();
     addBoard(name);
+    const newIdx = boards.length - 1;
+    wheelPosition = newIdx;
+    wheelTargetPosition = newIdx;
+    updateWheel();
   }
 
   function addBoard(name, render = true) {
@@ -823,6 +828,7 @@ const App = (function () {
 
   // ── Roue 3D — étape 3 : base (render, update, scroll) ─────────────────────
   function renderBoardsWheel() {
+    hideWheelDetail();
     const container = document.getElementById('boards-wheel');
     const empty = document.getElementById('home-empty');
 
@@ -853,49 +859,44 @@ const App = (function () {
     updateWheel();
   }
 
-  function getWheelAngleStep() {
-    const N = boards.length;
-    if (N <= 1) return Math.PI / 7;
-    return Math.min(Math.PI / 7, (2 * Math.PI) / N);
-  }
-
   function updateWheel() {
-    const N = boards.length;
+    const cards = document.querySelectorAll('.wheel-card');
+    const N = cards.length;
     if (N === 0) return;
 
-    const angleStep = getWheelAngleStep();
-    const cssCenterX = window.innerWidth * 0.6 - WHEEL_RADIUS;
-    const containerH = window.innerHeight;
-
-    const cards = document.querySelectorAll('.wheel-card');
-    let nearestIdx = 0;
-    let nearestDist = Infinity;
+    const activeIdx = ((Math.round(wheelPosition) % N) + N) % N;
 
     cards.forEach((card, i) => {
-      const theta = i * angleStep + wheelAngle;
-      let normalized = (theta + Math.PI) % (2 * Math.PI);
-      if (normalized < 0) normalized += 2 * Math.PI;
-      const dist = Math.abs(normalized - Math.PI);
+      const rawOffset = i - wheelPosition;
+      let offset = ((rawOffset % N) + N) % N;
+      if (offset > N / 2) offset -= N;
 
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestIdx = i;
+      // Masquer les cartes trop loin (anti-flash antipode).
+      // Math.max(1, ...) évite de cacher la carte adjacente quand N=2.
+      const MAX_VISIBLE = 4;
+      const HIDE_THRESHOLD = Math.min(MAX_VISIBLE, Math.max(1, N / 2 - 0.5));
+      if (Math.abs(offset) > HIDE_THRESHOLD) {
+        card.style.display = 'none';
+        card.style.opacity = 0;
+        return;
       }
 
-      const x = cssCenterX + WHEEL_RADIUS * Math.cos(theta);
-      const y = containerH / 2 + WHEEL_RADIUS * Math.sin(theta);
-      const scale = Math.max(0.05, 0.1 + (1.98 * (Math.cos(theta) + 1)) / 2);
-      const opacity = 1;
+      const CARD_SPACING = 280;
+      const SCALE_FACTOR = 0.72;
+      const scale = Math.pow(SCALE_FACTOR, Math.abs(offset));
+      const translateX = offset * CARD_SPACING;
 
-      card.style.transform =
-        `translate3d(${x - window.innerWidth / 2}px, ${y - containerH / 2}px, 0) ` +
-        `scale(${scale})`;
-      card.style.opacity = opacity;
-      card.style.zIndex = Math.round(1000 - dist * 100);
+      if (_wheelDetailVisible && !wheelRAF && i === activeIdx) {
+        card.style.transform = `translateX(${translateX - 260}px) scale(1.5)`;
+      } else {
+        card.style.transform = `translateX(${translateX}px) scale(${scale.toFixed(4)})`;
+      }
+      card.style.opacity = 1;
+      card.style.zIndex = Math.round(1000 - Math.abs(offset) * 10);
       card.style.display = 'block';
     });
 
-    wheelIndex = nearestIdx;
+    wheelIndex = activeIdx;
   }
 
   function setupWheelScroll() {
@@ -906,13 +907,39 @@ const App = (function () {
       'wheel',
       (e) => {
         e.preventDefault();
-        wheelTargetAngle += e.deltaY * 0.003; // sensibilité scroll
+        hideWheelDetail();
+        if (_cardTitleTimeout) { clearTimeout(_cardTitleTimeout); _cardTitleTimeout = null; }
+        const titleEl = document.getElementById('wheel-card-title');
+        if (titleEl) { titleEl.style.transition = 'none'; titleEl.classList.remove('visible'); requestAnimationFrame(() => { titleEl.style.transition = ''; }); }
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        wheelTargetPosition += delta * 0.002; // sensibilité scroll (unités d'index)
         if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
         scheduleWheelSnap();
       },
       { passive: false }
     );
     window.addEventListener('resize', () => updateWheel());
+    document.addEventListener('keydown', (e) => {
+      if (document.getElementById('home-screen').style.display === 'none') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        hideWheelDetail();
+        if (_cardTitleTimeout) { clearTimeout(_cardTitleTimeout); _cardTitleTimeout = null; }
+        document.getElementById('wheel-card-title')?.classList.remove('visible');
+        wheelTargetPosition -= 1;
+        if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
+        scheduleWheelSnap();
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        hideWheelDetail();
+        if (_cardTitleTimeout) { clearTimeout(_cardTitleTimeout); _cardTitleTimeout = null; }
+        document.getElementById('wheel-card-title')?.classList.remove('visible');
+        wheelTargetPosition += 1;
+        if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
+        scheduleWheelSnap();
+      }
+    });
     _wheelScrollWired = true;
   }
 
@@ -920,94 +947,140 @@ const App = (function () {
   function setupPreviewKeyboard() {
     if (_previewKbdWired) return;
     _previewKbdWired = true;
-    document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
-      const overlay = document.getElementById('board-preview-overlay');
-      if (overlay && !overlay.hidden) {
-        overlay.hidden = true;
-        e.preventDefault();
-      }
-    });
   }
 
   function wheelTick() {
-    wheelAngle += (wheelTargetAngle - wheelAngle) * 0.18; // lerp
+    wheelPosition += (wheelTargetPosition - wheelPosition) * 0.18; // lerp
     updateWheel();
-    if (Math.abs(wheelTargetAngle - wheelAngle) > 0.001) {
+    if (Math.abs(wheelTargetPosition - wheelPosition) > 0.001) {
       wheelRAF = requestAnimationFrame(wheelTick);
     } else {
-      wheelAngle = wheelTargetAngle;
+      wheelPosition = wheelTargetPosition;
       updateWheel();
       wheelRAF = null;
+      if (_cardTitleTimeout) { clearTimeout(_cardTitleTimeout); _cardTitleTimeout = null; }
+      _cardTitleTimeout = setTimeout(() => {
+        _cardTitleTimeout = null;
+        if (_wheelDetailVisible) return;
+        const titleEl = document.getElementById('wheel-card-title');
+        if (titleEl && boards.length > 0) {
+          const idx = ((Math.round(wheelPosition) % boards.length) + boards.length) % boards.length;
+          const b = boards[idx];
+          titleEl.textContent = b ? (b.name || '') : '';
+          titleEl.classList.add('visible');
+        }
+      }, 300);
     }
   }
 
   function scheduleWheelSnap() {
     if (snapTimeout) clearTimeout(snapTimeout);
     snapTimeout = setTimeout(() => {
-      const angleStep = getWheelAngleStep();
-      const nearestIndex = Math.round(wheelTargetAngle / -angleStep);
-      wheelTargetAngle = -nearestIndex * angleStep;
+      const N = boards.length;
+      if (N === 0) return;
+      wheelTargetPosition = Math.round(wheelTargetPosition);
+      // Aucun clamp — la roue est infinie, wheelPosition peut être n'importe quel entier
       if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
-    }, 150);
+    }, 20);
   }
 
   function onWheelCardClick(index, boardId) {
+    document.getElementById('wheel-card-title')?.classList.remove('visible');
     if (index === wheelIndex) {
-      if (typeof showBoardPreview === 'function') showBoardPreview(boardId);
+      if (_wheelDetailVisible) {
+        openBoard(boardId);
+      } else {
+        showWheelDetail();
+      }
       return;
     }
-    const angleStep = getWheelAngleStep();
-    wheelTargetAngle = -index * angleStep;
+    hideWheelDetail();
+    const N = boards.length;
+    let diff = index - wheelIndex;
+    if (diff > N / 2) diff -= N;
+    else if (diff < -N / 2) diff += N;
+    wheelTargetPosition += diff;
     if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
   }
 
-  function showBoardPreview(boardId) {
-    const b = boards.find((x) => x.id === boardId);
+  function showWheelDetail() {
+    const N = boards.length;
+    if (N === 0) return;
+    const idx = ((Math.round(wheelPosition) % N) + N) % N;
+    const b = boards[idx];
     if (!b) return;
-    const overlay = document.getElementById('board-preview-overlay');
-    if (!overlay) return;
 
-    const thumb = overlay.querySelector('.board-preview-thumb');
-    thumb.src = b.thumbnail || '';
-    thumb.style.display = b.thumbnail ? '' : 'none';
+    const panel = document.getElementById('wheel-info-panel');
+    if (!panel) return;
 
-    overlay.querySelector('.board-preview-name').textContent = b.name || '';
+    panel.querySelector('.wip-title').textContent = b.name || '';
 
-    const createdTxt = formatSavedAt(b.createdAt).date;
-    overlay.querySelector('[data-field="created"]').textContent = createdTxt
-      ? 'Créé ' + createdTxt
+    const createdFmt = b.createdAt ? formatSavedAt(b.createdAt) : null;
+    const createdStr = createdFmt ? createdFmt.date : (b.created || '');
+    panel.querySelector('[data-field="created"]').textContent = createdStr
+      ? 'Créé le ' + createdStr
       : '';
 
-    const savedTxt = formatSavedAt(b.savedAt).date;
-    overlay.querySelector('[data-field="saved"]').textContent = savedTxt
-      ? 'Sauvegardé ' + savedTxt
+    const savedFmt = formatSavedAt(b.savedAt);
+    panel.querySelector('[data-field="saved"]').textContent = savedFmt.date
+      ? 'Modifié le ' + savedFmt.date + (savedFmt.time ? ' à ' + savedFmt.time : '')
       : '';
 
-    overlay.querySelector('[data-field="count"]').textContent =
+    panel.querySelector('[data-field="count"]').textContent =
       (b.elements?.length || 0) + ' éléments';
 
-    let collabTxt = 'Solo';
+    const collabEl = panel.querySelector('[data-field="collab"]');
     if (b.isCollaborative) {
       const getCount = window.Collab && window.Collab.getParticipantCount;
-      if (typeof getCount === 'function') {
-        const n = getCount(b.collabId);
-        collabTxt = `Collab · ${n} participant(s)`;
-      } else {
-        collabTxt = 'Collab activée';
-      }
+      const n = typeof getCount === 'function' ? getCount(b.collabId) : null;
+      collabEl.textContent = n !== null ? `Collab · ${n} participant(s)` : 'Collab activée';
+      collabEl.style.color = '#0b36ed';
+    } else {
+      collabEl.textContent = 'Solo';
+      collabEl.style.color = '#ff3c00';
     }
-    overlay.querySelector('[data-field="collab"]').textContent = collabTxt;
 
-    overlay.querySelector('.board-preview-open').onclick = () => {
-      overlay.hidden = true;
-      openBoard(boardId);
-    };
-    overlay.querySelector('.board-preview-close').onclick = () => {
-      overlay.hidden = true;
+    const editThumbBtn = panel.querySelector('.wip-btn-edit-thumb');
+    editThumbBtn.textContent = b.thumbnail ? 'Changer l\'image' : 'Ajouter une image';
+    editThumbBtn.onclick = () => openImagePickerForBoard(b.id);
+    panel.querySelector('.wip-btn-delete').onclick = () => {
+      if (!confirm('Supprimer ce board ? Cette action est définitive.')) return;
+      deleteBoard(b.id);
     };
 
-    overlay.hidden = false;
+    if (_cardTitleTimeout) { clearTimeout(_cardTitleTimeout); _cardTitleTimeout = null; }
+    document.getElementById('wheel-card-title')?.classList.remove('visible');
+    _wheelDetailVisible = true;
+    panel.classList.add('visible');
+    updateWheel();
+
+    // Masquer les cartes non-actives directement (sans passer par updateWheel)
+    const cards = document.querySelectorAll('.wheel-card');
+    const nCards = cards.length;
+    const activeIdx = ((Math.round(wheelPosition) % nCards) + nCards) % nCards;
+    cards.forEach((card, i) => {
+      if (i !== activeIdx) {
+        card.style.opacity = '0';
+        card.style.pointerEvents = 'none';
+      }
+    });
+  }
+
+  function hideWheelDetail() {
+    if (_wheelDetailTimeout) { clearTimeout(_wheelDetailTimeout); _wheelDetailTimeout = null; }
+    if (!_wheelDetailVisible) return;
+    _wheelDetailVisible = false;
+    const panel = document.getElementById('wheel-info-panel');
+    if (panel) panel.classList.remove('visible');
+
+    // Restaurer la visibilité de toutes les cartes
+    const cards = document.querySelectorAll('.wheel-card');
+    cards.forEach(card => {
+      card.style.opacity = '1';
+      card.style.pointerEvents = '';
+    });
+
+    updateWheel();
   }
 
   let _actionBarWired = false;
@@ -1017,11 +1090,16 @@ const App = (function () {
     if (!bar) return;
 
     const btnCreate = bar.querySelector('.action-create');
-    const btnImport = bar.querySelector('.action-import');
+    const btnCollab = bar.querySelector('.action-collab');
     const btnSettings = bar.querySelector('.action-settings');
 
     if (btnCreate) btnCreate.addEventListener('click', () => createBoard());
-    if (btnImport) btnImport.addEventListener('click', () => toast('Import — bientôt disponible'));
+    if (btnCollab) btnCollab.addEventListener('click', () => {
+      const input = document.getElementById('join-board-input');
+      if (input) input.value = '';
+      openModal('join-board-modal');
+      setTimeout(() => { if (input) input.focus(); }, 80);
+    });
     if (btnSettings) {
       btnSettings.addEventListener('click', () => toast('Paramètres — bientôt disponible'));
     }
@@ -1039,14 +1117,16 @@ const App = (function () {
     const input = document.getElementById('wheel-search');
     if (!input) return;
     input.addEventListener('input', (e) => {
+      hideWheelDetail();
       const query = (e.target.value || '').toLowerCase().trim();
       if (!query) return;
-      const matchIndex = boards.findIndex((b) =>
-        (b.name || '').toLowerCase().includes(query)
-      );
+      const matchIndex = boards.findIndex((b) => (b.name || '').toLowerCase().includes(query));
       if (matchIndex === -1) return;
-      const angleStep = getWheelAngleStep();
-      wheelTargetAngle = -matchIndex * angleStep;
+      const N = boards.length;
+      let diff = matchIndex - wheelIndex;
+      if (diff > N / 2) diff -= N;
+      else if (diff < -N / 2) diff += N;
+      wheelTargetPosition += diff;
       if (!wheelRAF) wheelRAF = requestAnimationFrame(wheelTick);
     });
     _wheelSearchWired = true;
@@ -1057,10 +1137,17 @@ const App = (function () {
     if (!board) return;
 
     // Si le board a une session collab dans Firebase, le traiter comme collaboratif
-    if (!board.isCollaborative && window._fbDb) {
+    // Uniquement si on est connecté (navigator.onLine) pour éviter de bloquer indéfiniment
+    if (!board.isCollaborative && window._fbDb && navigator.onLine) {
       try {
-        if (window._fbAuthReady) await window._fbAuthReady;
-        var collabCheck = await window._fbDb.ref('collabSessions/' + id + '/elements').get();
+        if (window._fbAuthReady) await Promise.race([
+          window._fbAuthReady,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('auth timeout')), 3000))
+        ]);
+        var collabCheck = await Promise.race([
+          window._fbDb.ref('collabSessions/' + id + '/elements').get(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('firebase timeout')), 3000))
+        ]);
         if (collabCheck.exists()) {
           board.isCollaborative = true;
           saveBoards();
@@ -1361,6 +1448,12 @@ const App = (function () {
       s: { left: (r.left + r.right) / 2, top: r.bottom },
       w: { left: r.left, top: (r.top + r.bottom) / 2 },
     };
+    const edgeSize = {
+      n: { width: r.right - r.left, height: 12 },
+      s: { width: r.right - r.left, height: 12 },
+      e: { width: 12, height: r.bottom - r.top },
+      w: { width: 12, height: r.bottom - r.top },
+    };
     edges.forEach((edge) => {
       const h = document.getElementById('resize-edge-' + edge);
       if (!h) return;
@@ -1371,6 +1464,8 @@ const App = (function () {
       h.style.display = 'block';
       h.style.left = edgePos[edge].left + 'px';
       h.style.top = edgePos[edge].top + 'px';
+      h.style.width = edgeSize[edge].width + 'px';
+      h.style.height = edgeSize[edge].height + 'px';
     });
   }
 
@@ -1709,6 +1804,39 @@ const App = (function () {
         if (_isBoardLoading()) {
           e.preventDefault();
           e.stopImmediatePropagation();
+          return;
+        }
+        const boardScreen = document.getElementById('board-screen');
+        if (boardScreen && boardScreen.style.display !== 'none') {
+          const libPanel = document.getElementById('lib-panel');
+          if (libPanel && libPanel.contains(e.target)) return;
+          e.preventDefault();
+          // Les resize handles sont position:fixed rattachés au body (hors canvas-wrapper).
+          // Si le target n'est pas dans le wrapper, on applique manuellement le zoom/pan
+          // car le handler du wrapper ne sera jamais atteint via le bubbling.
+          const wrapperEl = document.getElementById('canvas-wrapper');
+          if (wrapperEl && !wrapperEl.contains(e.target)) {
+            if (e.altKey || e.ctrlKey) {
+              const rawMul = Math.exp(-e.deltaY * 0.01);
+              const cappedMul = Math.min(Math.max(rawMul, 0.5), 2.0);
+              const newZ = Math.min(Math.max(zoomLevel * cappedMul, 0.15), 4);
+              if (Math.abs(newZ - zoomLevel) > 0.001) {
+                const rect = wrapperEl.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                panX = mx - (mx - panX) * (newZ / zoomLevel);
+                panY = my - (my - panY) * (newZ / zoomLevel);
+                zoomLevel = newZ;
+                applyTransform();
+                updateZoomDisplay();
+              }
+            } else {
+              panX -= e.deltaX;
+              panY -= e.deltaY;
+              clampPan();
+              applyTransform();
+            }
+          }
         }
       },
       { capture: true, passive: false }
@@ -2520,12 +2648,10 @@ const App = (function () {
       .forEach((inp) => {
         if (inp.value) inp.setAttribute('value', inp.value);
       });
-    // Synchroniser le texte des notes (textarea.value non capturé par innerHTML)
-    document.querySelectorAll('#canvas .board-element[data-type="note"] textarea').forEach((ta) => {
-      ta.setAttribute('data-snap-value', ta.value);
-      // Mettre aussi à jour dataset.savedata sur l'élément parent
-      const el = ta.closest('.board-element');
-      if (el) el.dataset.savedata = ta.value;
+    // Synchroniser dataset.savedata des notes (le innerHTML du contenteditable est déjà dans le DOM)
+    document.querySelectorAll('#canvas .board-element[data-type="note"] .el-note-content').forEach((div) => {
+      const el = div.closest('.board-element');
+      if (el) el.dataset.savedata = div.innerHTML;
     });
     const snap = document.getElementById('canvas').innerHTML;
     if (historyIndex < history.length - 1) history = history.slice(0, historyIndex + 1);
@@ -2607,11 +2733,8 @@ const App = (function () {
         if (!el) break;
         el.dataset.savedata = action.before.data;
         if (action.type === 'editText') {
-          const ta = el.querySelector('textarea');
-          if (ta) {
-            ta.value = action.before.data;
-            ta.setAttribute('data-snap-value', action.before.data);
-          }
+          const ta = el.querySelector('.el-note-content');
+          if (ta) ta.innerHTML = _noteDataToHtml(action.before.data);
         } else {
           const swatch = el.querySelector('.color-swatch');
           if (swatch) swatch.style.backgroundColor = action.before.data;
@@ -2722,11 +2845,8 @@ const App = (function () {
         if (!el) break;
         el.dataset.savedata = action.after.data;
         if (action.type === 'editText') {
-          const ta = el.querySelector('textarea');
-          if (ta) {
-            ta.value = action.after.data;
-            ta.setAttribute('data-snap-value', action.after.data);
-          }
+          const ta = el.querySelector('.el-note-content');
+          if (ta) ta.innerHTML = _noteDataToHtml(action.after.data);
         } else {
           const swatch = el.querySelector('.color-swatch');
           if (swatch) swatch.style.backgroundColor = action.after.data;
@@ -2883,17 +3003,14 @@ const App = (function () {
     if (el._noteEventsAttached) return;
     el._noteEventsAttached = true;
     const wrap = el.querySelector('.el-note');
-    const ta = el.querySelector('textarea');
+    const ta = el.querySelector('.el-note-content');
     if (!wrap || !ta) return;
-    // Restaurer la valeur depuis data-snap-value (persisté dans innerHTML) ou dataset.savedata
-    const snapVal = ta.getAttribute('data-snap-value');
-    if (snapVal !== null && ta.value !== snapVal) ta.value = snapVal;
-    else if (el.dataset.savedata && ta.value !== el.dataset.savedata)
-      ta.value = el.dataset.savedata;
+    // Restaurer le contenu depuis dataset.savedata si le div est vide
+    if (el.dataset.savedata && !ta.innerHTML.trim())
+      ta.innerHTML = _noteDataToHtml(el.dataset.savedata);
     let _noteValueOnFocus = '';
     function activateNoteEdit(e) {
       if (document.body.classList.contains('readonly-mode')) return;
-      // Collab: vérifier le lock
       if (
         typeof Collab !== 'undefined' &&
         Collab.isActive() &&
@@ -2904,13 +3021,11 @@ const App = (function () {
       }
       e.stopPropagation();
       e.preventDefault();
-      ta.style.pointerEvents = 'auto';
-      ta.style.cursor = 'text';
+      ta.contentEditable = 'true';
       el.dataset.editing = '1';
-      _noteValueOnFocus = ta.value;
+      _noteValueOnFocus = ta.innerHTML;
       ta.focus();
       showTextEditPanel(el);
-      // Collab: acquérir le lock
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.acquireLock(el.dataset.id);
       }
@@ -2918,34 +3033,28 @@ const App = (function () {
     wrap.addEventListener('dblclick', activateNoteEdit);
     ta.addEventListener('dblclick', activateNoteEdit);
     ta.addEventListener('mousedown', (e) => {
-      if (ta.style.pointerEvents === 'auto') e.stopPropagation();
+      if (ta.contentEditable === 'true') e.stopPropagation();
     });
     ta.addEventListener('input', () => {
-      el.dataset.savedata = ta.value;
-      // Collab: sync texte debounced
+      el.dataset.savedata = ta.innerHTML;
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.syncElementData(el.dataset.id, ta.value);
+        Collab.syncElementData(el.dataset.id, ta.innerHTML);
       }
     });
     ta.addEventListener('blur', (e) => {
       const panel = document.getElementById('text-edit-panel');
       const goingToPanel = panel && e.relatedTarget && panel.contains(e.relatedTarget);
       if (goingToPanel || window._textPanelKeepOpen) return;
-      ta.style.pointerEvents = 'none';
-      ta.style.cursor = 'move';
-      ta.scrollTop = 0;
+      ta.contentEditable = 'false';
       delete el.dataset.editing;
       hideTextEditPanel();
-      // Collab: force une synchro immédiate du texte avant de libérer le lock
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.syncElementData(el.dataset.id, ta.value, true);
+        Collab.syncElementData(el.dataset.id, ta.innerHTML, true);
       }
-      // Collab: libérer le lock
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.releaseLock(el.dataset.id);
       }
-      if (!ta.value.trim()) {
-        // Action-based undo for delete (empty note)
+      if (!ta.innerText.trim()) {
         pushAction({
           type: 'delete',
           elId: el.dataset.id,
@@ -2959,24 +3068,20 @@ const App = (function () {
             data: _noteValueOnFocus,
           },
         });
-        if (hoveredEl === el) {
-          hoveredEl = null;
-          updateCornerHandles();
-        }
+        if (hoveredEl === el) { hoveredEl = null; updateCornerHandles(); }
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
         pushHistory();
-        // Collab: sync suppression
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
           Collab.syncElementDelete(el.dataset.id);
         }
-      } else if (ta.value !== _noteValueOnFocus) {
+      } else if (ta.innerHTML !== _noteValueOnFocus) {
         pushAction({
           type: 'editText',
           elId: el.dataset.id,
           before: { data: _noteValueOnFocus },
-          after: { data: ta.value },
+          after: { data: ta.innerHTML },
         });
         pushHistory();
       }
@@ -4562,7 +4667,7 @@ const App = (function () {
   // ── RESTORE ──────────────────────────────────────────────────────────────
   function _applyStyleToEl(el, style) {
     if (!el || !style) return;
-    const target = el.tagName === 'TEXTAREA' ? el : el.querySelector('textarea') || el;
+    const target = el.querySelector('.el-note-content') || el;
     if (style.fontFamily) target.style.fontFamily = style.fontFamily;
     if (style.fontWeight) target.style.fontWeight = style.fontWeight;
     if (style.fontSize) target.style.fontSize = style.fontSize;
@@ -5317,6 +5422,18 @@ const App = (function () {
     if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
     pushHistory();
   }
+  function _noteDataToHtml(data) {
+    if (!data) return '';
+    // Si le contenu ressemble à du HTML (déjà formaté), l'utiliser tel quel
+    if (/<[a-z][\s\S]*?>/i.test(data)) return data;
+    // Sinon : texte brut → échapper + convertir \n en <br>
+    return data
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+  }
+
   function createNoteElement(content, x, y, w, h) {
     w = w || 230;
     h = h || 160;
@@ -5324,25 +5441,23 @@ const App = (function () {
     el.dataset.savedata = content;
     const wrap = document.createElement('div');
     wrap.className = 'el-note';
-    const ta = document.createElement('textarea');
-    ta.placeholder = 'Écrire une note...';
-    ta.value = content;
-    // Par défaut : non-interactif (1 clic = déplacer)
-    ta.style.pointerEvents = 'none';
-    ta.style.cursor = 'move';
+    const ta = document.createElement('div');
+    ta.className = 'el-note-content';
+    ta.dataset.placeholder = 'Écrire une note...';
+    ta.contentEditable = 'false';
+    ta.innerHTML = _noteDataToHtml(content);
+
     ta.addEventListener('input', () => {
-      el.dataset.savedata = ta.value;
-      // Collab: sync texte debounced
+      el.dataset.savedata = ta.innerHTML;
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.syncElementData(el.dataset.id, ta.value);
+        Collab.syncElementData(el.dataset.id, ta.innerHTML);
       }
     });
-    // Valeur au moment de l'entrée en édition — pour détecter un changement au blur
+
     let _noteValueOnFocus = '';
-    // Double-clic sur le wrapper ou le textarea : activer l'édition + panneau texte
+
     function activateNoteEdit(e) {
       if (document.body.classList.contains('readonly-mode')) return;
-      // Collab: vérifier le lock
       if (
         typeof Collab !== 'undefined' &&
         Collab.isActive() &&
@@ -5353,61 +5468,49 @@ const App = (function () {
       }
       e.stopPropagation();
       e.preventDefault();
-      ta.style.pointerEvents = 'auto';
-      ta.style.cursor = 'text';
-      el.dataset.editing = '1'; // signal pour isTyping() — bloque Ctrl+Z
-      _noteValueOnFocus = ta.value; // mémoriser pour comparer au blur
+      ta.contentEditable = 'true';
+      el.dataset.editing = '1';
+      _noteValueOnFocus = ta.innerHTML;
       ta.focus();
       showTextEditPanel(el);
-      // Collab: acquérir le lock
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.acquireLock(el.dataset.id);
       }
     }
+
     wrap.addEventListener('dblclick', activateNoteEdit);
     ta.addEventListener('dblclick', activateNoteEdit);
-    // Un seul clic sur la textarea si déjà en mode édition → garder le focus
     ta.addEventListener('mousedown', (e) => {
-      if (ta.style.pointerEvents === 'auto') e.stopPropagation();
+      if (ta.contentEditable === 'true') e.stopPropagation();
     });
-    // Quand le textarea perd le focus : revenir en mode déplacement
-    // Si la note est vide, la supprimer. Si le texte a changé, sauvegarder un état historique.
+
     ta.addEventListener('blur', (e) => {
-      // Ne pas fermer si l'utilisateur clique dans le panneau texte
       const panel = document.getElementById('text-edit-panel');
       const goingToPanel = panel && e.relatedTarget && panel.contains(e.relatedTarget);
       if (goingToPanel || window._textPanelKeepOpen) return;
-      ta.style.pointerEvents = 'none';
-      ta.style.cursor = 'move';
-      ta.scrollTop = 0;
+      ta.contentEditable = 'false';
       delete el.dataset.editing;
       hideTextEditPanel();
-      // Collab: force une synchro immédiate du texte avant de libérer le lock
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.syncElementData(el.dataset.id, ta.value, true);
+        Collab.syncElementData(el.dataset.id, ta.innerHTML, true);
       }
-      // Collab: libérer le lock
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.releaseLock(el.dataset.id);
       }
-      if (!ta.value.trim()) {
-        if (hoveredEl === el) {
-          hoveredEl = null;
-          updateCornerHandles();
-        }
+      if (!ta.innerText.trim()) {
+        if (hoveredEl === el) { hoveredEl = null; updateCornerHandles(); }
         el.remove();
-        // Collab: sync suppression
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
           Collab.syncElementDelete(el.dataset.id);
         }
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
         pushHistory();
-      } else if (ta.value !== _noteValueOnFocus) {
-        // Le texte a changé pendant l'édition → créer un état historique
+      } else if (ta.innerHTML !== _noteValueOnFocus) {
         pushHistory();
       }
     });
+
     wrap.appendChild(ta);
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
     return el;
@@ -6824,8 +6927,8 @@ const App = (function () {
     const panel = document.getElementById('text-edit-panel');
     panel.classList.add('active');
 
-    // Déterminer la cible du style (le textarea dans une note, ou l'élément lui-même si c'est une caption)
-    const target = el.querySelector('textarea') || el;
+    // Déterminer la cible du style (le div note-content dans une note, ou l'élément lui-même si c'est une caption)
+    const target = el.querySelector('.el-note-content') || el;
 
     if (target) {
       const sz = parseInt(target.style.fontSize) || 12; // 12px par défaut pour caption
@@ -6894,25 +6997,47 @@ const App = (function () {
   function applyTextFont(val) {
     if (!textEditTarget) return;
 
-    // On cible soit le textarea (pour les notes), soit l'élément lui-même (si c'est une caption)
-    const ta =
-      textEditTarget.querySelector('textarea') ||
-      (textEditTarget.classList.contains('el-caption') ? textEditTarget : null);
-
+    const noteDiv = textEditTarget.querySelector('.el-note-content');
+    const caption = textEditTarget.classList.contains('el-caption') ? textEditTarget : null;
+    const ta = noteDiv || caption;
     if (!ta) return;
 
-    const fontMap = {
-      'helvetica-roman': "'HelveticaRoman','Helvetica Neue',Helvetica,Arial,sans-serif",
-      'helvetica-bold': "'HelveticaBold','Helvetica Neue',Helvetica,Arial,sans-serif",
-    };
+    const fontFamily = val === 'helvetica-bold'
+      ? "'HelveticaBold','Helvetica Neue',Helvetica,Arial,sans-serif"
+      : "'HelveticaRoman','Helvetica Neue',Helvetica,Arial,sans-serif";
+    const fontWeight = val === 'helvetica-bold' ? '700' : '400';
 
-    if (fontMap[val]) {
-      ta.style.fontFamily = fontMap[val];
-      // Important : pour les captions, il faut forcer le poids de la police
-      ta.style.fontWeight = val === 'helvetica-bold' ? '700' : '400';
+    if (noteDiv) {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && !sel.isCollapsed && noteDiv.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+        // Sélection active dans la note → formater uniquement le texte sélectionné
+        const range = sel.getRangeAt(0);
+        const span = document.createElement('span');
+        span.style.fontFamily = fontFamily;
+        span.style.fontWeight = fontWeight;
+        try {
+          range.surroundContents(span);
+        } catch (_) {
+          // Sélection multi-nœuds : extraire + envelopper
+          const frag = range.extractContents();
+          span.appendChild(frag);
+          range.insertNode(span);
+        }
+        sel.removeAllRanges();
+        const newRange = document.createRange();
+        newRange.selectNodeContents(span);
+        sel.addRange(newRange);
+      } else {
+        // Pas de sélection → appliquer à toute la note
+        noteDiv.style.fontFamily = fontFamily;
+        noteDiv.style.fontWeight = fontWeight;
+      }
+      textEditTarget.dataset.savedata = noteDiv.innerHTML;
+    } else {
+      ta.style.fontFamily = fontFamily;
+      ta.style.fontWeight = fontWeight;
     }
 
-    // Mettre à jour l'état visuel des boutons dans le panneau
     document.querySelectorAll('.text-font-btn').forEach((b) => b.classList.remove('active'));
     const activeBtn = document.getElementById(val === 'helvetica-bold' ? 'tp-bold' : 'tp-roman');
     if (activeBtn) activeBtn.classList.add('active');
@@ -6921,7 +7046,7 @@ const App = (function () {
   }
   function applyTextSizeDelta(delta) {
     if (!textEditTarget) return;
-    const ta = textEditTarget.querySelector('textarea') || textEditTarget;
+    const ta = textEditTarget.querySelector('.el-note-content') || textEditTarget;
     if (!ta) return;
     const current = parseInt(ta.style.fontSize) || 14;
     const next = Math.min(Math.max(current + delta, 8), 72);
@@ -6933,8 +7058,16 @@ const App = (function () {
   }
   function applyTextAlign(align) {
     if (!textEditTarget) return;
-    const ta = textEditTarget.querySelector('textarea') || textEditTarget;
-    if (ta) ta.style.textAlign = align;
+    const noteDiv = textEditTarget.querySelector('.el-note-content');
+    if (noteDiv) {
+      noteDiv.focus();
+      const cmdMap = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' };
+      document.execCommand(cmdMap[align]);
+      textEditTarget.dataset.savedata = noteDiv.innerHTML;
+    } else {
+      const ta = textEditTarget;
+      if (ta) ta.style.textAlign = align;
+    }
     document.querySelectorAll('.text-align-btn').forEach((b) => b.classList.remove('active'));
     const id = { left: 'ta-left', center: 'ta-center', right: 'ta-right' }[align];
     const btn = document.getElementById(id);
@@ -7743,23 +7876,12 @@ const App = (function () {
       ghostCanvas.querySelectorAll('.el-note').forEach((noteWrap) => {
         noteWrap.style.backgroundColor = '#ffffff';
         noteWrap.style.boxShadow = 'none';
-        const ta = noteWrap.querySelector('textarea');
-        if (!ta) return;
-        const div = document.createElement('div');
-        div.style.width = '100%';
-        div.style.flex = '1';
-        div.style.fontFamily = ta.style.fontFamily || '';
-        div.style.fontSize = ta.style.fontSize || '';
-        div.style.fontWeight = ta.style.fontWeight || '';
-        div.style.textAlign = ta.style.textAlign || '';
-        div.style.color = '#2d2d2d';
-        div.style.backgroundColor = 'transparent';
-        div.style.lineHeight = '1.6';
+        const div = noteWrap.querySelector('.el-note-content');
+        if (!div) return;
+        div.removeAttribute('contenteditable');
         div.style.overflow = 'hidden';
         div.style.wordBreak = 'break-word';
         div.style.whiteSpace = 'pre-wrap';
-        div.textContent = ta.value || ta.getAttribute('data-snap-value') || '';
-        noteWrap.replaceChild(div, ta);
       });
 
       // Bug 3 : cartes fichier — dimensions réelles + contenu scalé proportionnellement.
@@ -7970,6 +8092,42 @@ const App = (function () {
   function closeEditBoardModal() {
     closeModal('edit-board-modal');
     _editBoardId = null;
+    document.getElementById('edit-board-name-section').style.display = '';
+    document.getElementById('edit-board-cover-section').style.display = '';
+  }
+
+  function openImagePickerForBoard(id) {
+    _editBoardId = id;
+    const b = boards.find((b) => b.id === id);
+    if (!b) return;
+    _editImg = { src: null, naturalW: 0, naturalH: 0, scale: 1, offsetX: 0, offsetY: 0 };
+
+    const tmpInput = document.createElement('input');
+    tmpInput.type = 'file';
+    tmpInput.accept = '.jpg,.jpeg,.png,.webp';
+    tmpInput.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(tmpInput);
+
+    tmpInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      document.body.removeChild(tmpInput);
+      if (!file) return;
+
+      document.getElementById('edit-board-name').value = b.name || '';
+      document.getElementById('edit-board-editor').style.display = 'none';
+      document.getElementById('edit-board-zoom').value = 1;
+      document.getElementById('edit-board-name-section').style.display = 'none';
+      document.getElementById('edit-board-cover-section').style.display = 'none';
+
+      openModal('edit-board-modal');
+      _setupEditBoardImageEditor();
+
+      const reader = new FileReader();
+      reader.onload = (ev) => _loadEditBoardImage(ev.target.result);
+      reader.readAsDataURL(file);
+    });
+
+    tmpInput.click();
   }
 
   function confirmEditBoard() {
@@ -8025,9 +8183,9 @@ const App = (function () {
       _editImg.naturalW = tmp.naturalWidth;
       _editImg.naturalH = tmp.naturalHeight;
 
-      // Scale initial : couvrir entièrement le cadre 4:3
+      // Scale initial : couvrir entièrement le cadre paysage 500:340
       const pw = preview.offsetWidth || 280;
-      const ph = pw * 0.75;
+      const ph = pw * (340 / 500);
       const coverScale = Math.max(pw / tmp.naturalWidth, ph / tmp.naturalHeight);
       _editImg.scale = coverScale;
       _editImg.offsetX = 0;
@@ -8048,7 +8206,7 @@ const App = (function () {
     const img = document.getElementById('edit-board-img');
     const preview = document.getElementById('edit-board-preview');
     const pw = preview.offsetWidth;
-    const ph = pw * 0.75;
+    const ph = pw * (340 / 500);
 
     const iw = _editImg.naturalW * _editImg.scale;
     const ih = _editImg.naturalH * _editImg.scale;
@@ -8105,15 +8263,15 @@ const App = (function () {
     const pw = preview.offsetWidth;
 
     const canvas = document.createElement('canvas');
-    canvas.width = 360;
-    canvas.height = 270;
+    canvas.width = 1000;
+    canvas.height = 680;
     const ctx = canvas.getContext('2d');
 
-    const scaleToCanvas = 360 / pw;
+    const scaleToCanvas = 1000 / pw;
     const iw = _editImg.naturalW * _editImg.scale * scaleToCanvas;
     const ih = _editImg.naturalH * _editImg.scale * scaleToCanvas;
-    const dx = 360 / 2 - iw / 2 + _editImg.offsetX * scaleToCanvas;
-    const dy = 270 / 2 - ih / 2 + _editImg.offsetY * scaleToCanvas;
+    const dx = 1000 / 2 - iw / 2 + _editImg.offsetX * scaleToCanvas;
+    const dy = 680 / 2 - ih / 2 + _editImg.offsetY * scaleToCanvas;
 
     const img = new Image();
     img.src = _editImg.src;
@@ -8168,7 +8326,7 @@ const App = (function () {
   // ── COLLAB HELPERS ─────────────────────────────────────────────────────
   function _collabSyncStyle() {
     if (typeof Collab === 'undefined' || !Collab.isActive() || !textEditTarget) return;
-    var ta = textEditTarget.querySelector('textarea') || textEditTarget;
+    var ta = textEditTarget.querySelector('.el-note-content') || textEditTarget;
     if (!ta) return;
     var styleObj = {
       fontFamily: ta.style.fontFamily || '',
@@ -8199,7 +8357,7 @@ const App = (function () {
     }
     var elStyle = null;
     if (elType === 'note') {
-      var ta = el.querySelector('textarea');
+      var ta = el.querySelector('.el-note-content');
       if (ta)
         elStyle = {
           fontFamily: ta.style.fontFamily || '',
@@ -8276,7 +8434,7 @@ const App = (function () {
     document.querySelectorAll('#canvas .board-element').forEach((el) => {
       const _elStyle = (() => {
         if (el.dataset.type !== 'note') return null;
-        const ta = el.querySelector('textarea');
+        const ta = el.querySelector('.el-note-content');
         if (!ta) return null;
         return {
           fontFamily: ta.style.fontFamily || '',

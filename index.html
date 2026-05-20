@@ -2,6 +2,8 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#ff3c00">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MoodBoard App</title>
     <script src="html2canvas.min.js"></script>
@@ -120,8 +122,9 @@
       /* ── Edit board modal image editor ── */
       #edit-board-preview {
         position: relative;
-        width: 100%;
-        padding-top: 75%; /* 4:3 ratio */
+        width: 85%;
+        margin: 0 auto;
+        padding-top: 57.8%; /* 85% × 68% — ratio paysage carte 500:340 */
         background: #111;
         overflow: hidden;
         cursor: grab;
@@ -1161,8 +1164,7 @@
       }
       #resize-edge-n,
       #resize-edge-s {
-        width: 44px;
-        height: 24px;
+        height: 12px;
         cursor: n-resize;
       }
       #resize-edge-s {
@@ -1170,8 +1172,7 @@
       }
       #resize-edge-e,
       #resize-edge-w {
-        width: 24px;
-        height: 44px;
+        width: 12px;
         cursor: e-resize;
       }
       #resize-edge-w {
@@ -1225,12 +1226,11 @@
         width: 100%;
         height: 100%;
       }
-      .el-note textarea {
+      .el-note-content {
         width: 100%;
         flex: 1;
         border: none;
         outline: none;
-        resize: none;
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         font-size: 14px;
         color: #2d2d2d;
@@ -1238,6 +1238,19 @@
         line-height: 1.6;
         overflow-y: auto;
         overflow-x: hidden;
+        white-space: pre-wrap;
+        word-break: break-word;
+        cursor: move;
+        user-select: none;
+      }
+      .el-note-content[contenteditable="true"] {
+        cursor: text;
+        user-select: text;
+      }
+      .el-note-content:empty::before {
+        content: attr(data-placeholder);
+        color: #aaa;
+        pointer-events: none;
       }
 
       .board-element[data-type='color'] {
@@ -2147,7 +2160,7 @@
 
       /* ===== COLLABORATION ===== */
       .collab-btn {
-        background: #ff3c00;
+        background: #0b36ed;
         color: #fff;
         border: 2px solid transparent;
         padding: 3.75px 14px;
@@ -2165,12 +2178,12 @@
         gap: 6px;
       }
       .collab-btn:hover {
-        background: #e03500;
+        background: #0929c4;
       }
       #collab-btn.collab-active {
         background-color: #ffffff !important;
-        color: #ff3c00 !important;
-        border: 2px solid #ff3c00 !important;
+        color: #0b36ed !important;
+        border: 2px solid #0b36ed !important;
       }
 
       #collab-cursors,
@@ -2239,8 +2252,12 @@
       }
 
       @keyframes fadeIn {
-        from { opacity: 0; }
-        to   { opacity: 1; }
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
       }
 
       .home-header {
@@ -2268,28 +2285,26 @@
       .boards-wheel {
         position: absolute;
         inset: 0;
+        transform-style: preserve-3d;
       }
 
       .wheel-card {
         position: absolute;
-        width: 200px;
-        height: 140px;
+        width: 500px;
+        height: 340px;
         top: 50%;
         left: 50%;
-        margin-top: -70px;
-        margin-left: -100px;
+        margin-top: -170px;
+        margin-left: -250px;
         border-radius: 0;
         overflow: hidden;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
         background: #000;
-        cursor:
-          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 48 48'%3E%3Cpolygon fill='%23fff' points='9.33 6.2 36.21 29.13 20.7 30.84 9.33 41.53 9.33 6.2'/%3E%3Cpath fill='%23ff3c00' d='M11.83,11.62l18.36,15.66-8.93.99-1.66.18-1.22,1.14-6.56,6.16V11.62M7.59,1.68c-.13,0-.26.03-.35.08-.2.1-.41.36-.41.66v43.1c0,.36.19.62.45.74.09.04.2.07.31.07.17,0,.34-.05.48-.18l13.74-12.9,18.66-2.07c.36-.06.59-.25.68-.55.08-.25-.02-.58-.28-.81L8.07,1.85c-.14-.12-.31-.16-.48-.16h0Z'/%3E%3C/svg%3E")
-            3 1,
-          default;
-        will-change: transform, opacity;
-        transition:
-          transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-          opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+        cursor: pointer;
+        transform-origin: 50% 50%;
+        transform-style: preserve-3d;
+        backface-visibility: visible;
+        will-change: transform;
+        transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
       }
 
       .wheel-card.dragging {
@@ -2365,6 +2380,112 @@
         cursor: pointer;
       }
 
+      .board-preview-action {
+        border: none;
+        background: #f4f4f6;
+        color: #1a1a1a;
+        padding: 10px 20px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        margin-left: 8px;
+        transition: background 0.15s;
+      }
+      .board-preview-action:hover {
+        background: #e6e6ea;
+      }
+      .board-preview-delete {
+        color: #c00;
+      }
+      .board-preview-delete:hover {
+        background: #fee2e2;
+      }
+
+      /* ── Titre flottant au-dessus de la carte active ── */
+      #wheel-card-title {
+        position: fixed;
+        top: calc(50% - 205px);
+        left: 50%;
+        transform: translateX(-50%);
+        font-family: 'HelveticaBold', sans-serif;
+        font-size: 17px;
+        font-weight: 700;
+        color: #1a1a1a;
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.12s ease;
+        z-index: 15;
+      }
+      #wheel-card-title.visible {
+        opacity: 1;
+        transition: opacity 0.3s ease;
+      }
+
+      /* ── Wheel info panel (détail carte active) ── */
+      #wheel-info-panel {
+        position: fixed;
+        top: calc(50% - 235px);
+        left: calc(50% + 160px);
+        width: 350px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.12s ease;
+        z-index: 20;
+      }
+      #wheel-info-panel.visible {
+        opacity: 1;
+        pointer-events: auto;
+        transition: opacity 0.35s ease;
+      }
+      .wip-title {
+        font-family: 'HelveticaBold', sans-serif;
+        font-size: 26px;
+        color: #1a1a1a;
+        margin: 0 0 18px;
+        line-height: 1.15;
+        word-break: break-word;
+      }
+      .wip-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 12px;
+        color: #888;
+        margin-bottom: 28px;
+      }
+      .wip-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .wip-btn {
+        border: none;
+        padding: 9px 20px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          color 0.15s;
+        font-family: inherit;
+      }
+      .wip-btn-edit-thumb {
+        background: #ff3c00;
+        color: #fff;
+      }
+      .wip-btn-edit-thumb:hover {
+        background: #e63500;
+      }
+      .wip-btn-delete {
+        background: rgba(200, 0, 0, 0.08);
+        color: #c00;
+      }
+
       .home-search-bottom {
         position: fixed;
         bottom: 80px; /* juste au-dessus de .home-action-bar */
@@ -2423,6 +2544,13 @@
       .action-create:hover {
         background: #e63500;
       }
+      .action-collab {
+        background: #0b36ed;
+        color: #fff;
+      }
+      .action-collab:hover {
+        background: #0929c4;
+      }
 
       .home-empty {
         position: absolute;
@@ -2441,28 +2569,25 @@
       <div class="loader-frame"></div>
     </div>
     <div id="home-screen">
-      <header class="home-header">
-        <h1 class="home-main-title">MOODBOARDS</h1>
-      </header>
+      <header class="home-header"></header>
 
       <div class="boards-wheel-container" id="boards-wheel-container">
         <div class="boards-wheel" id="boards-wheel"></div>
       </div>
 
-      <div class="board-preview-overlay" id="board-preview-overlay" hidden>
-        <div class="board-preview-card">
-          <img class="board-preview-thumb" alt="" />
-          <div class="board-preview-info">
-            <h2 class="board-preview-name"></h2>
-            <div class="board-preview-meta">
-              <span data-field="created"></span>
-              <span data-field="saved"></span>
-              <span data-field="count"></span>
-              <span data-field="collab"></span>
-            </div>
-            <button class="board-preview-open">Ouvrir</button>
-            <button class="board-preview-close" aria-label="Fermer">×</button>
-          </div>
+      <div id="wheel-card-title"></div>
+
+      <div id="wheel-info-panel">
+        <h2 class="wip-title"></h2>
+        <div class="wip-meta">
+          <span data-field="created"></span>
+          <span data-field="saved"></span>
+          <span data-field="count"></span>
+          <span data-field="collab"></span>
+        </div>
+        <div class="wip-actions">
+          <button class="wip-btn wip-btn-edit-thumb">Changer l'image</button>
+          <button class="wip-btn wip-btn-delete">Supprimer</button>
         </div>
       </div>
 
@@ -2472,7 +2597,7 @@
 
       <div class="home-action-bar" id="home-action-bar">
         <button class="action-btn action-create">+ Nouveau board</button>
-        <button class="action-btn action-import">Importer</button>
+        <button class="action-btn action-collab">Collaborer</button>
         <button class="action-btn action-settings" aria-label="Paramètres">⚙</button>
       </div>
 
@@ -3312,11 +3437,11 @@
     <div class="modal-overlay hidden" id="edit-board-modal">
       <div class="modal" style="width: 460px">
         <div class="modal-header">
-          <h2>Modifier le moodboard</h2>
+          <h2>Modifier l'image</h2>
           <button class="modal-close" id="edit-board-close-btn">&#x2715;</button>
         </div>
         <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 16px">
-          <div>
+          <div id="edit-board-name-section">
             <label
               style="
                 font-size: 12px;
@@ -3337,7 +3462,7 @@
               style="width: 100%; box-sizing: border-box"
             />
           </div>
-          <div>
+          <div id="edit-board-cover-section">
             <label
               style="
                 font-size: 12px;
@@ -3355,7 +3480,22 @@
               class="form-submit"
               style="width: 100%; margin-bottom: 10px"
             >
-              📁 Choisir une image
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="vertical-align: middle; margin-right: 6px"
+              >
+                <path
+                  d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+                /></svg
+              >Choisir une image
             </button>
             <input id="edit-board-file-input" type="file" accept=".jpg,.jpeg,.png,.webp" hidden />
           </div>
@@ -3364,7 +3504,7 @@
               <img id="edit-board-img" draggable="false" />
             </div>
             <div style="display: flex; align-items: center; gap: 8px">
-              <span style="font-size: 13px">🔍</span>
+              <span style="font-size: 16px; line-height: 1; color: #888">−</span>
               <input
                 type="range"
                 id="edit-board-zoom"
@@ -3372,7 +3512,7 @@
                 max="3"
                 step="0.01"
                 value="1"
-                style="flex: 1"
+                style="flex: 1; accent-color: #0b36ed"
               />
               <span style="font-size: 18px; line-height: 1">+</span>
             </div>
@@ -3418,5 +3558,10 @@
     <div id="resize-edge-e"></div>
     <div id="resize-edge-s"></div>
     <div id="resize-edge-w"></div>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
+  </script>
   </body>
 </html>

@@ -1,6 +1,7 @@
-const CACHE = 'moodboard-v1';
+const CACHE = 'moodboard-v3';
 const ASSETS = [
   './index.html',
+  './pwa-init.js',
   './app.js',
   './collab.js',
   './firebase-app-compat.js',

@@ -3558,17 +3558,6 @@
     <div id="resize-edge-e"></div>
     <div id="resize-edge-s"></div>
     <div id="resize-edge-w"></div>
-    <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js');
-      }
-      // Plein écran automatique au lancement PWA
-      window.addEventListener('load', () => {
-        if (window.matchMedia('(display-mode: fullscreen)').matches ||
-            window.matchMedia('(display-mode: standalone)').matches) {
-          document.documentElement.requestFullscreen?.().catch(() => {});
-        }
-      });
-    </script>
+    <script src="./pwa-init.js"></script>
   </body>
 </html>

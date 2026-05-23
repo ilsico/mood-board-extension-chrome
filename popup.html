@@ -98,6 +98,25 @@
         color: #888;
         line-height: 1.5;
       }
+
+      #figma-export-btn {
+        background: #1a1a2e;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      #figma-export-btn:hover { background: #2a2a4e; }
+      #figma-export-btn.loading { opacity: 0.6; pointer-events: none; }
+      #figma-status {
+        font-size: 11px;
+        line-height: 1.5;
+        min-height: 16px;
+        color: #888;
+      }
+      #figma-status.ok  { color: #080; }
+      #figma-status.err { color: #c00; }
     </style>
   </head>
   <body>
@@ -113,6 +132,11 @@
     <button id="capture-btn">Activer le mode capture</button>
 
     <p class="help-text">Cliquez sur les images de la page pour les ajouter au board sélectionné. Echap ou re-clic pour quitter.</p>
+
+    <hr class="separator" />
+
+    <button id="figma-export-btn">⬡ Exporter → Figma</button>
+    <p class="help-text" id="figma-status"></p>
 
     <script src="popup.js"></script>
   </body>

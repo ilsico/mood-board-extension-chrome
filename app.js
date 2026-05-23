@@ -3069,6 +3069,7 @@ const App = (function () {
           },
         });
         if (hoveredEl === el) { hoveredEl = null; updateCornerHandles(); }
+        removeConnectionsForEl(el);
         el.remove();
         if (selectedEl === el) selectedEl = null;
         multiSelected.delete(el);
@@ -5868,7 +5869,7 @@ const App = (function () {
     }
     const body = document.createElement('div');
     body.className = 'link-body';
-    body.innerHTML = `<div class="link-title">${escHtml(title)}</div><div class="link-url"><img class="link-url-icon" src="PNG/lien.png" alt=""><span>${escHtml(_shortUrl(url))}</span></div>`;
+    body.innerHTML = `<div class="link-title">${escHtml(title)}</div><div class="link-url"><svg class="link-url-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>${escHtml(_shortUrl(url))}</span></div>`;
     wrap.appendChild(body);
     wrap.addEventListener('dblclick', () => window.open(url, '_blank'));
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
@@ -8601,6 +8602,11 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
         App.syncLibraryFromStorage();
         App.toast('Image ajoutée au Moodboard !');
       }
+    } else if (msg.type === 'MB_FIGMA_EXPORT') {
+      const s = document.createElement('script');
+      s.src = chrome.runtime.getURL('figma-export.js');
+      document.head.appendChild(s);
+      s.addEventListener('load', () => s.remove());
     }
   });
 }

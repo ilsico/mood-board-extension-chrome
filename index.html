@@ -453,6 +453,8 @@
 
       body.preview-mode #header,
       body.preview-mode #toolbar,
+      body.preview-mode #toolbar-dock,
+      body.preview-mode #export-dock,
       body.preview-mode #align-panel,
       body.preview-mode #lib-panel,
       body.preview-mode .fit-btn-group,
@@ -485,70 +487,158 @@
         min-height: 0;
       }
 
-      .toolbar {
-        width: 80px;
-        min-width: 80px;
-        background: #fff;
-        border-right: 1px solid #eaeaf0;
+      /* ===== TOOLBAR FLOTTANTE (bas, centré) ===== */
+      #toolbar-dock {
+        position: fixed;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 200;
+        width: 240px;
+        height: 90px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        z-index: 100;
-        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
-        padding: 16px 0;
-        gap: 4px;
+        justify-content: flex-end;
+        gap: 8px;
+        padding-bottom: 10px;
+        pointer-events: none;
+      }
+      .toolbar {
+        width: 208px;
+        height: 44px;
+        padding: 6px;
+        background: #2c2c2c;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 9px;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
         flex-shrink: 0;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(10px);
+        transition:
+          opacity 0.22s ease,
+          transform 0.22s ease,
+          visibility 0s linear 0.22s;
+        pointer-events: auto;
+      }
+      #toolbar-handle {
+        width: 60px;
+        height: 6px;
+        background: #2c2c2c;
+        border-radius: 3px;
+        cursor: pointer;
+        flex-shrink: 0;
+        pointer-events: auto;
+        position: relative;
+      }
+      #toolbar-handle::before {
+        content: '';
+        position: absolute;
+        left: -90px;
+        right: -90px;
+        top: -16px;
+        bottom: -12px;
+      }
+      #toolbar-dock:hover .toolbar,
+      .toolbar:hover {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+        transition:
+          opacity 0.22s ease,
+          transform 0.22s ease,
+          visibility 0s linear 0s;
+      }
+      /* Si le JS cache la toolbar (text-edit / multi-sélection), cacher aussi le handle */
+      #toolbar[style*='display: none'] ~ #toolbar-handle {
+        display: none;
       }
       .tool-btn {
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 5px;
-        width: 64px;
-        padding: 10px 4px;
+        width: 32px;
+        height: 32px;
+        padding: 0;
         border: none;
-        background: none;
+        background: transparent;
+        border-radius: 4px;
         cursor: pointer;
+        flex-shrink: 0;
         transition:
           background 0.15s,
-          transform 0.15s;
+          transform 0.12s;
       }
-      .tool-btn:hover {
-        background: rgba(255, 60, 0, 0.07);
-        transform: translateY(-2px) scale(1.06);
-      }
-      .tool-btn:hover img {
-        filter: brightness(0) saturate(100%) invert(20%) sepia(90%) saturate(2500%) hue-rotate(5deg)
-          brightness(115%);
-      }
-      .tool-btn:hover .tool-label {
-        color: #ff3c00;
+      .tool-btn:hover,
+      .tool-btn.active {
+        background: #ff3c00;
       }
       .tool-btn:active {
         transform: scale(0.94);
       }
-      .tool-btn.active {
-        background: rgba(255, 60, 0, 0.08);
-      }
-      .tool-btn img {
-        width: 28px;
-        height: 28px;
-        object-fit: contain;
-        display: block;
-        transition: filter 0.15s;
-      }
       .tool-btn svg {
-        width: 28px;
-        height: 28px;
+        width: 20px;
+        height: 20px;
         display: block;
+        color: #fff !important;
+        stroke: #fff;
         transition: color 0.15s;
       }
-      .tool-btn:hover svg {
-        color: #ff3c00 !important;
+      .tool-btn:hover svg,
+      .tool-btn.active svg {
+        color: #fff !important;
+        stroke: #fff;
       }
-      #tool-connector.active svg {
-        color: #ff3c00 !important;
+      .tool-btn .tool-label {
+        display: none;
+      }
+
+      /* ===== EXPORT DOCK (droite, statique, suit le panneau biblio) ===== */
+      #export-dock {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 200;
+        width: 44px;
+        height: 44px;
+        pointer-events: none;
+        transition: right 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      body:has(#lib-panel.open) #export-dock {
+        right: calc(24px + 300px);
+      }
+      #tool-export {
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: none;
+        background: #2c2c2c;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+        pointer-events: auto;
+        transition: background 0.15s;
+      }
+      #tool-export:hover {
+        background: #ff3c00;
+      }
+      #tool-export svg {
+        width: 20px;
+        height: 20px;
+        display: block;
+        color: #fff !important;
+        stroke: #fff;
+      }
+      #tool-export .tool-label {
+        display: none;
       }
       body.connector-mode,
       body.connector-mode .canvas-wrapper,
@@ -573,26 +663,6 @@
         stroke-linecap: round;
         stroke-dasharray: 5 4;
       }
-      .tool-btn .tool-label {
-        font-size: 10px;
-        color: #777;
-        font-weight: 500;
-        text-align: center;
-        white-space: nowrap;
-        line-height: 1;
-        transition: color 0.15s;
-      }
-      .tool-btn.active .tool-label {
-        color: #ff3c00;
-      }
-      .toolbar-divider {
-        width: 44px;
-        height: 1px;
-        background: #f0f0f6;
-        margin: 4px 0;
-        flex-shrink: 0;
-      }
-
       .canvas-wrapper {
         flex: 1;
         position: relative;
@@ -860,6 +930,10 @@
       }
       #lib-toggle-btn:hover {
         background: #f5f5fb;
+      }
+      #lib-toggle-btn:focus,
+      #lib-toggle-btn:focus-visible {
+        outline: none;
       }
       #lib-toggle-btn img {
         width: 18px;
@@ -1367,7 +1441,6 @@
         width: 1em;
         height: 1em;
         flex-shrink: 0;
-        object-fit: contain;
       }
       .el-link .link-url span {
         white-space: nowrap;
@@ -2685,6 +2758,7 @@
       </div>
 
       <div class="board-body">
+        <div id="toolbar-dock">
         <div class="toolbar" id="toolbar">
           <button
             id="tool-note"
@@ -2702,12 +2776,12 @@
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
-              style="pointer-events: none; color: #000"
+              style="pointer-events: none"
             >
+              <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path
-                d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"
+                d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"
               />
-              <path d="M15 3v5a1 1 0 0 0 1 1h5" />
             </svg>
             <span class="tool-label">Note</span>
           </button>
@@ -2755,11 +2829,10 @@
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
-              style="pointer-events: none; color: #000"
+              style="pointer-events: none"
             >
-              <path d="M9 17H7A5 5 0 0 1 7 7h2" />
-              <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
-              <line x1="8" x2="16" y1="12" y2="12" />
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
             </svg>
             <span class="tool-label">Lien</span>
           </button>
@@ -2792,24 +2865,6 @@
           </button>
           <button id="tool-connector" class="tool-btn" title="Connecteur — relier deux éléments">
             <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              style="pointer-events: none; color: #1a1a2e"
-            >
-              <path d="M 3 12 L 15 12" />
-              <circle cx="18" cy="12" r="3" />
-            </svg>
-            <span class="tool-label">Connecteur</span>
-          </button>
-          <div class="toolbar-divider"></div>
-          <button id="tool-export" class="tool-btn" title="Exporter">
-            <svg
               xmlns="http://www.w3.org/2000/svg"
               width="24"
               height="24"
@@ -2819,13 +2874,37 @@
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
-              style="pointer-events: none; color: #ff3c00"
+              style="pointer-events: none"
+            >
+              <rect width="8" height="8" x="3" y="3" rx="2" />
+              <path d="M7 11v4a2 2 0 0 0 2 2h4" />
+              <rect width="8" height="8" x="13" y="13" rx="2" />
+            </svg>
+            <span class="tool-label">Connecteur</span>
+          </button>
+        </div>
+          <div id="toolbar-handle"></div>
+        </div>
+
+        <div id="export-dock">
+          <button id="tool-export" title="Exporter">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="pointer-events: none; color: #fff"
             >
               <path
                 d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
               />
               <path d="M12 10v6" />
-              <path d="m9 13 3-3 3 3" />
+              <path d="m15 13-3 3-3-3" />
             </svg>
             <span class="tool-label">Exporter</span>
           </button>

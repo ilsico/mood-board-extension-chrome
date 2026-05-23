@@ -16,7 +16,6 @@ try {
       .auth()
       .signInAnonymously()
       .then(function (cred) {
-        console.log('Firebase auth OK — uid:', cred.user.uid);
         window._fbUid = cred.user.uid;
       })
       .catch(function (err) {
@@ -39,7 +38,6 @@ try {
   var isExtension = !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
   if (isExtension && window._fbDb && window._fbDb.INTERNAL && typeof window._fbDb.INTERNAL.forceWebSockets === 'function') {
     window._fbDb.INTERNAL.forceWebSockets();
-    console.log('Firebase: WebSocket transport forcé (MV3 mode)');
   }
 
   // Moniteur de connexion pour la collaboration

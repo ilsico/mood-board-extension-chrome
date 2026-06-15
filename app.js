@@ -26,6 +26,7 @@ const App = (function () {
   let isPanningMode = false;
   let panStart = { x: 0, y: 0 };
   let history = [];
+  let historySelections = [];
   let historyIndex = -1;
   let selectedEl = null; // élément unique sélectionné
   let multiSelected = new Set(); // sélection multiple
@@ -733,29 +734,29 @@ const App = (function () {
     });
     addEvt('submit-create-board', 'click', () => confirmCreateBoard());
 
-    // Modale export
-    addEvt('close-export-modal', 'click', () => closeExportModal());
-    // Mettre à jour le style des labels format au clic
-    document.querySelectorAll('input[name="export-format"]').forEach((radio) => {
-      radio.addEventListener('change', () => {
-        document.querySelectorAll('input[name="export-format"]').forEach((r) => {
-          const lbl = r.closest('label');
-          if (r.checked) {
-            lbl.style.borderColor = '#ff3c00';
-            lbl.style.color = '#ff3c00';
-          } else {
-            lbl.style.borderColor = '#eaeaf0';
-            lbl.style.color = '#888';
-          }
-        });
-      });
+    // Panneau export — sélection format
+    addEvt('export-fmt-pdf', 'click', () => {
+      document.getElementById('export-fmt-pdf').classList.add('active');
+      document.getElementById('export-fmt-png').classList.remove('active');
+    });
+    addEvt('export-fmt-png', 'click', () => {
+      document.getElementById('export-fmt-png').classList.add('active');
+      document.getElementById('export-fmt-pdf').classList.remove('active');
     });
     addEvt('export-do-btn', 'click', () => {
-      const quality = parseInt(document.getElementById('export-quality-slider').value);
-      const format = document.querySelector('input[name="export-format"]:checked').value;
-      closeExportModal();
-      if (format === 'pdf') exportPDF(quality);
+      const quality = parseInt(document.getElementById('export-quality-select').value);
+      const isPdf = document.getElementById('export-fmt-pdf').classList.contains('active');
+      closeExportPanel();
+      if (isPdf) exportPDF(quality);
       else exportPNG(quality);
+    });
+    document.addEventListener('mousedown', (e) => {
+      const ep = document.getElementById('export-panel');
+      if (!ep || !ep.classList.contains('active')) return;
+      const exportBtn = document.getElementById('tool-export');
+      if (!ep.contains(e.target) && (!exportBtn || !exportBtn.contains(e.target))) {
+        closeExportPanel();
+      }
     });
 
     // Menu contextuel
@@ -1197,6 +1198,7 @@ const App = (function () {
         panY = 0;
         nextZ = 100;
         history = [];
+        historySelections = [];
         historyIndex = -1;
         selectedEl = null;
         multiSelected.clear();
@@ -1498,8 +1500,8 @@ const App = (function () {
         }
         isResizing = true;
         resizeEl = _target;
-        resizeStartW = parseFloat(_target.style.width) || _target.offsetWidth;
-        resizeStartH = parseFloat(_target.style.height) || _target.offsetHeight;
+        resizeStartW = _target.offsetWidth;
+        resizeStartH = _target.offsetHeight;
         resizeStartLeft = parseFloat(_target.style.left) || 0;
         resizeStartTop = parseFloat(_target.style.top) || 0;
         _resizeTargetW = resizeStartW;
@@ -1550,8 +1552,8 @@ const App = (function () {
         }
         isResizing = true;
         resizeEl = _target;
-        resizeStartW = parseFloat(_target.style.width) || _target.offsetWidth;
-        resizeStartH = parseFloat(_target.style.height) || _target.offsetHeight;
+        resizeStartW = _target.offsetWidth;
+        resizeStartH = _target.offsetHeight;
         resizeStartLeft = parseFloat(_target.style.left) || 0;
         resizeStartTop = parseFloat(_target.style.top) || 0;
         _resizeTargetW = resizeStartW;
@@ -2654,9 +2656,14 @@ const App = (function () {
       if (el) el.dataset.savedata = div.innerHTML;
     });
     const snap = document.getElementById('canvas').innerHTML;
-    if (historyIndex < history.length - 1) history = history.slice(0, historyIndex + 1);
+    const selSnap = [...multiSelected].map(el => el.dataset.id).filter(Boolean);
+    if (historyIndex < history.length - 1) {
+      history = history.slice(0, historyIndex + 1);
+      historySelections = historySelections.slice(0, historyIndex + 1);
+    }
     history.push(snap);
-    if (history.length > 50) history.shift();
+    historySelections.push(selSnap);
+    if (history.length > 50) { history.shift(); historySelections.shift(); }
     historyIndex = history.length - 1;
   }
 
@@ -2778,6 +2785,12 @@ const App = (function () {
             Collab.syncElementPosition(id, action.before[i].x, action.before[i].y, true);
         });
         deselectAll();
+        action.elId.forEach((id) => {
+          const el = document.querySelector('[data-id="' + id + '"]');
+          if (el) { el.classList.add('multi-selected'); multiSelected.add(el); }
+        });
+        updateAlignPanel();
+        updateMultiResizeHandle();
         break;
       }
       case 'groupCreate': {
@@ -2883,6 +2896,13 @@ const App = (function () {
           updateConnectionsForEl(el);
           if (isCollab) Collab.syncElementPosition(id, action.after[i].x, action.after[i].y, true);
         });
+        deselectAll();
+        action.elId.forEach((id) => {
+          const el = document.querySelector('[data-id="' + id + '"]');
+          if (el) { el.classList.add('multi-selected'); multiSelected.add(el); }
+        });
+        updateAlignPanel();
+        updateMultiResizeHandle();
         break;
       }
       case 'groupCreate': {
@@ -2959,10 +2979,24 @@ const App = (function () {
     if (historyIndex <= 0) {
       return;
     }
+    const _undoSelIds = historySelections[historyIndex] || [];
     historyIndex--;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
-    deselectAll();
+    selectedEl = null;
+    multiSelected.clear();
+    if (_undoSelIds.length > 1) {
+      _undoSelIds.forEach(id => {
+        const el = document.querySelector('[data-id="' + id + '"]');
+        if (el) { el.classList.add('multi-selected'); multiSelected.add(el); }
+      });
+      updateAlignPanel();
+      updateMultiResizeHandle();
+      updateCornerHandles();
+      updateAllConnections();
+    } else {
+      deselectAll();
+    }
   }
 
   function redo() {
@@ -2985,9 +3019,23 @@ const App = (function () {
       return;
     }
     historyIndex++;
+    const _redoSelIds = historySelections[historyIndex] || [];
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
-    deselectAll();
+    selectedEl = null;
+    multiSelected.clear();
+    if (_redoSelIds.length > 1) {
+      _redoSelIds.forEach(id => {
+        const el = document.querySelector('[data-id="' + id + '"]');
+        if (el) { el.classList.add('multi-selected'); multiSelected.add(el); }
+      });
+      updateAlignPanel();
+      updateMultiResizeHandle();
+      updateCornerHandles();
+      updateAllConnections();
+    } else {
+      deselectAll();
+    }
   }
   function reattachAllEvents() {
     document.querySelectorAll('#canvas .board-element').forEach((el) => {
@@ -3768,7 +3816,7 @@ const App = (function () {
       }
 
       if (multiSelected.has(el) && multiSelected.size > 1) {
-        if (_keyObjectMode) _setKeyObject(el);
+        _setKeyObject(el);
         startGroupDrag(e, multiSelected);
         return;
       }
@@ -4528,7 +4576,7 @@ const App = (function () {
       const hasLinkImg = el && el.querySelector('.link-image');
       return { w: 270, h: hasLinkImg ? 200 : 73 };
     }
-    if (t === 'color') return { w: 153, h: 127 };
+    if (t === 'color') return { w: 130, h: 127 };
     if (t === 'file') return { w: 260, h: 76 };
     if (t === 'note') return { w: 160, h: 54 };
     return { w: 60, h: 40 };
@@ -4952,6 +5000,7 @@ const App = (function () {
         panY = 0;
         nextZ = 100;
         history = [];
+        historySelections = [];
         historyIndex = -1;
         selectedEl = null;
         multiSelected.clear();
@@ -5070,6 +5119,7 @@ const App = (function () {
         panY = 0;
         nextZ = 100;
         history = [];
+        historySelections = [];
         historyIndex = -1;
         selectedEl = null;
         multiSelected.clear();
@@ -5120,6 +5170,7 @@ const App = (function () {
     panY = 0;
     nextZ = 100;
     history = [];
+    historySelections = [];
     historyIndex = -1;
     selectedEl = null;
     multiSelected.clear();
@@ -5500,6 +5551,7 @@ const App = (function () {
       }
       if (!ta.innerText.trim()) {
         if (hoveredEl === el) { hoveredEl = null; updateCornerHandles(); }
+        removeConnectionsForEl(el);
         el.remove();
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
           Collab.syncElementDelete(el.dataset.id);
@@ -6778,6 +6830,7 @@ const App = (function () {
       const toggle = document.getElementById('key-object-toggle');
       if (toggle) toggle.classList.remove('active');
     }
+    updateExportPanelPosition();
   }
 
   function alignElements(type) {
@@ -8003,16 +8056,37 @@ const App = (function () {
     [
       'link-modal',
       'rename-modal',
-      'export-modal',
       'create-board-modal',
       'join-board-modal',
     ].forEach(closeModal);
   }
   function openExportModal() {
-    openModal('export-modal');
+    const panel = document.getElementById('export-panel');
+    if (!panel) return;
+    if (panel.classList.contains('active')) {
+      panel.classList.remove('active');
+      return;
+    }
+    panel.classList.add('active');
+    updateExportPanelPosition();
+  }
+  function closeExportPanel() {
+    const panel = document.getElementById('export-panel');
+    if (panel) panel.classList.remove('active');
+    updateExportPanelPosition();
   }
   function closeExportModal() {
-    closeModal('export-modal');
+    closeExportPanel();
+  }
+  function updateExportPanelPosition() {
+    const ep = document.getElementById('export-panel');
+    const ap = document.getElementById('align-panel');
+    if (!ap) return;
+    if (ep && ep.classList.contains('active')) {
+      ap.style.bottom = (90 + ep.offsetHeight + 8) + 'px';
+    } else {
+      ap.style.bottom = '';
+    }
   }
 
   // ── CUSTOM CURSOR ─────────────────────────────────────────────────────────

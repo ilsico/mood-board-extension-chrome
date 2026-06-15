@@ -39,10 +39,21 @@
         margin: 0;
         padding: 0;
       }
+
+      /* ===== DESIGN TOKENS ===== */
+      :root {
+        --bg-app: #222222;
+        --bg-canvas: #2c2c2c;
+        --bg-input: #3d3d3d;
+        --fg: #ffffff;
+        --fg-inv: #222222;
+        --accent: #dc4111;
+      }
+
       body {
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        background: #f4f4f6;
-        color: #1a1a2e;
+        background: var(--bg-canvas);
+        color: var(--fg);
         user-select: none;
         overflow: hidden;
         height: 100vh;
@@ -281,15 +292,15 @@
 
       #board-header {
         width: 100%;
-        height: 48px;
-        background: #fff;
-        border-bottom: 1px solid #eaeaf0;
+        height: 32px;
+        background: var(--bg-app);
+        border-bottom: none;
         display: flex;
         align-items: center;
         justify-content: space-between;
         flex-shrink: 0;
         z-index: 200;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        box-shadow: none;
         padding: 0 12px;
         position: relative;
       }
@@ -297,44 +308,44 @@
         background: none;
         border: none;
         cursor: pointer;
-        color: #999;
+        color: var(--fg);
         font-size: 18px;
-        padding: 6px 8px;
-        transition: all 0.15s;
+        padding: 4px 6px;
+        transition: opacity 0.15s;
         display: flex;
         align-items: center;
         line-height: 1;
       }
       .back-btn:hover {
-        background: #f0f0f6;
-        color: #2d2d2d;
+        opacity: 0.7;
+        background: none;
+        color: var(--fg);
       }
       .share-btn {
-        background: #ff3c00;
-        color: #fff;
+        background: var(--fg);
+        color: var(--fg-inv);
         border: none;
-        padding: 7px 14px;
+        width: 48px;
+        height: 48px;
+        border-radius: 8px;
         cursor: pointer;
-        font-size: 13px;
-        font-weight: 700;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        transition: background 0.15s;
-        white-space: nowrap;
         display: flex;
         align-items: center;
-        gap: 6px;
+        justify-content: center;
+        transition: opacity 0.15s;
+        flex-shrink: 0;
       }
       .share-btn:hover {
-        background: #ff3c00;
+        opacity: 0.85;
       }
       .share-menu {
         position: absolute;
-        top: calc(100% + 6px);
+        bottom: calc(100% + 8px);
         right: 0;
-        background: #fff;
-        border: 1px solid #e0e0e8;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-        border-radius: 6px;
+        background: var(--bg-app);
+        border: none;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        border-radius: 8px;
         padding: 4px;
         display: flex;
         flex-direction: column;
@@ -352,7 +363,7 @@
         font-size: 12px;
         font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         font-weight: 500;
-        color: #1a1a2e;
+        color: var(--fg);
         cursor: pointer;
         text-align: left;
         border-radius: 4px;
@@ -361,14 +372,14 @@
           color 0.15s;
       }
       .share-menu-item:hover {
-        background: rgba(255, 60, 0, 0.08);
-        color: #ff3c00;
+        background: var(--bg-input);
+        color: var(--fg);
       }
       #board-header .board-title-display {
         font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        font-size: 15px;
+        font-size: 13px;
         font-weight: 700;
-        color: #1a1a2e;
+        color: var(--fg);
         position: absolute;
         left: 50%;
         transform: translateX(-50%);
@@ -379,38 +390,38 @@
         cursor: text;
       }
       .fit-btn-group {
-        position: absolute;
-        top: 60px;
+        position: fixed;
+        top: 44px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
-        gap: 4px;
+        gap: 8px;
         z-index: 300;
         opacity: 0;
         transition: opacity 0.3s ease;
-        padding: 14px;
+        padding: 8px;
       }
       .fit-btn-group.fit-visible {
         opacity: 1;
       }
       .fit-screen-btn,
       .preview-btn {
-        width: 36px;
-        height: 36px;
-        background: #ff3c00;
-        color: #fff;
+        width: 48px;
+        height: 48px;
+        background: var(--bg-app);
+        color: var(--fg);
         border: none;
-        border-radius: 0;
+        border-radius: 8px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 15px;
+        line-height: 0;
         transition: background 0.15s;
       }
       .fit-screen-btn:hover,
       .preview-btn:hover {
-        background: #ff3c00;
+        background: var(--bg-input);
       }
       .exit-preview-btn {
         position: fixed;
@@ -454,9 +465,11 @@
       body.preview-mode #header,
       body.preview-mode #toolbar,
       body.preview-mode #toolbar-dock,
-      body.preview-mode #export-dock,
+      body.preview-mode #share-collab-dock,
       body.preview-mode #align-panel,
+      body.preview-mode #export-panel,
       body.preview-mode #lib-panel,
+      body.preview-mode #lib-toggle-btn,
       body.preview-mode .fit-btn-group,
       body.preview-mode #zoom-toast,
       body.preview-mode #context-menu,
@@ -494,28 +507,27 @@
         left: 50%;
         transform: translateX(-50%);
         z-index: 200;
-        width: 240px;
-        height: 90px;
+        width: 256px;
+        height: 82px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: flex-end;
-        gap: 8px;
-        padding-bottom: 10px;
+        gap: 12px;
+        padding-bottom: 16px;
         pointer-events: none;
       }
       .toolbar {
-        width: 208px;
-        height: 44px;
-        padding: 6px;
-        background: #2c2c2c;
+        width: 232px;
+        height: 48px;
+        padding: 8px 12px;
+        background: var(--bg-app);
         border-radius: 8px;
         display: flex;
         flex-direction: row;
         align-items: center;
         justify-content: flex-start;
-        gap: 9px;
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+        gap: 12px;
         flex-shrink: 0;
         opacity: 0;
         visibility: hidden;
@@ -527,9 +539,9 @@
         pointer-events: auto;
       }
       #toolbar-handle {
-        width: 60px;
+        width: 110px;
         height: 6px;
-        background: #2c2c2c;
+        background: var(--bg-app);
         border-radius: 3px;
         cursor: pointer;
         flex-shrink: 0;
@@ -576,7 +588,7 @@
       }
       .tool-btn:hover,
       .tool-btn.active {
-        background: #ff3c00;
+        background: var(--bg-input);
       }
       .tool-btn:active {
         transform: scale(0.94);
@@ -598,47 +610,39 @@
         display: none;
       }
 
-      /* ===== EXPORT DOCK (droite, statique, suit le panneau biblio) ===== */
-      #export-dock {
+      /* ===== DOCK SHARE / COLLAB ===== */
+      #share-collab-dock {
         position: fixed;
-        right: 24px;
-        bottom: 24px;
-        z-index: 200;
-        width: 44px;
-        height: 44px;
-        pointer-events: none;
-        transition: right 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+        bottom: 16px;
+        right: 16px;
+        z-index: 300;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
       }
-      body:has(#lib-panel.open) #export-dock {
-        right: calc(24px + 300px);
-      }
-      #tool-export {
-        width: 44px;
-        height: 44px;
-        padding: 0;
+      .collab-btn {
+        background: var(--bg-app);
+        color: var(--fg);
         border: none;
-        background: #2c2c2c;
+        width: 48px;
+        height: 48px;
         border-radius: 8px;
+        cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-        pointer-events: auto;
         transition: background 0.15s;
       }
-      #tool-export:hover {
-        background: #ff3c00;
+      .collab-btn:hover {
+        background: var(--bg-input);
       }
-      #tool-export svg {
-        width: 20px;
-        height: 20px;
-        display: block;
-        color: #fff !important;
-        stroke: #fff;
+      #collab-btn.collab-active {
+        background: var(--fg) !important;
+        color: var(--fg-inv) !important;
       }
-      #tool-export .tool-label {
-        display: none;
+      #tool-export {
+        line-height: 0;
       }
       body.connector-mode,
       body.connector-mode .canvas-wrapper,
@@ -667,7 +671,7 @@
         flex: 1;
         position: relative;
         overflow: hidden;
-        background: #f8f8fb;
+        background: var(--bg-canvas);
         touch-action: none !important;
         cursor:
           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 48 48'%3E%3Cpolygon fill='%23fff' points='9.33 6.2 36.21 29.13 20.7 30.84 9.33 41.53 9.33 6.2'/%3E%3Cpath fill='%23ff3c00' d='M11.83,11.62l18.36,15.66-8.93.99-1.66.18-1.22,1.14-6.56,6.16V11.62M7.59,1.68c-.13,0-.26.03-.35.08-.2.1-.41.36-.41.66v43.1c0,.36.19.62.45.74.09.04.2.07.31.07.17,0,.34-.05.48-.18l13.74-12.9,18.66-2.07c.36-.06.59-.25.68-.55.08-.25-.02-.58-.28-.81L8.07,1.85c-.14-.12-.31-.16-.48-.16h0Z'/%3E%3C/svg%3E")
@@ -734,84 +738,187 @@
         display: flex;
       }
       #align-panel {
-        width: 80px;
-        min-width: 80px;
-        background: #fff;
-        border-right: 1px solid #eaeaf0;
+        position: fixed;
+        left: 50%;
+        bottom: 90px;
+        transform: translateX(-50%);
+        width: 168px;
+        background: var(--bg-app);
+        border-radius: 8px;
         display: none;
         flex-direction: column;
-        align-items: center;
-        z-index: 101;
-        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
-        padding: 12px 0;
-        gap: 6px;
+        z-index: 400;
+        padding: 12px 12px 16px;
+        gap: 12px;
         flex-shrink: 0;
       }
       #align-panel.active {
         display: flex;
       }
-      .align-btns-row {
-        display: flex;
-        gap: 3px;
-        justify-content: center;
+      .align-panel-title {
+        font-size: 12px;
+        color: #ffffff;
+        font-weight: 600;
+        font-family: 'Inter', sans-serif;
+        text-align: center;
+        width: 100%;
+      }
+      .align-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 20px);
+        grid-template-rows: repeat(2, 20px);
+        column-gap: 16px;
+        row-gap: 12px;
+        padding: 0 8px;
       }
       .align-btn {
         width: 20px;
         height: 20px;
-        border: 1px solid #eaeaf0;
+        border: none;
         background: none;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 0;
-        border-radius: 2px;
-        color: #333;
-        transition:
-          background 0.12s,
-          border-color 0.12s;
+        border-radius: 3px;
+        transition: background 0.12s;
       }
       .align-btn:hover {
-        background: #f5f5fb;
+        background: var(--bg-input);
       }
       .align-btn:active {
-        background: rgba(255, 60, 0, 0.08);
-        border-color: #ff3c00;
+        background: var(--accent);
       }
       .align-divider {
-        width: 56px;
+        width: 100%;
         height: 1px;
-        background: #eaeaf0;
+        background: rgba(255, 255, 255, 0.1);
         margin: 2px 0;
       }
       #key-object-toggle {
-        width: 68px;
-        padding: 5px 4px;
+        width: 100%;
+        padding: 5px 8px;
         font-size: 10px;
         text-align: center;
-        border: 1px solid #eaeaf0;
+        border: 1px solid rgba(255, 255, 255, 0.2);
         background: none;
         cursor: pointer;
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        border-radius: 2px;
-        color: #333;
+        border-radius: 4px;
+        color: var(--fg);
         line-height: 1.3;
         transition:
           background 0.12s,
-          border-color 0.12s,
-          color 0.12s;
+          border-color 0.12s;
+        display: none;
       }
       #key-object-toggle:hover {
-        background: #f5f5fb;
+        background: var(--bg-input);
       }
       #key-object-toggle.active {
-        background: rgba(255, 60, 0, 0.08);
-        border-color: #ff3c00;
-        color: #ff3c00;
+        background: rgba(220, 65, 17, 0.2);
+        border-color: var(--accent);
+        color: var(--accent);
       }
       .board-element.key-object {
         outline: 2.5px solid #ff3c00 !important;
         outline-offset: 3px;
+      }
+      #export-panel {
+        position: fixed;
+        left: 50%;
+        bottom: 90px;
+        transform: translateX(-50%);
+        width: 240px;
+        background: var(--bg-app);
+        border-radius: 8px;
+        display: none;
+        flex-direction: column;
+        z-index: 400;
+        padding: 12px 12px 14px;
+        gap: 10px;
+        flex-shrink: 0;
+      }
+      #export-panel.active {
+        display: flex;
+      }
+      .export-select-wrap {
+        position: relative;
+        width: 100%;
+      }
+      .export-select-wrap::after {
+        content: '';
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 5px solid rgba(255,255,255,0.7);
+        pointer-events: none;
+      }
+      #export-quality-select {
+        width: 100%;
+        background: #3d3d3d;
+        border: none;
+        border-radius: 4px;
+        color: white;
+        font-size: 12px;
+        font-family: 'Inter', sans-serif;
+        padding: 5px 28px 5px 9px;
+        height: 28px;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        outline: none;
+      }
+      #export-quality-select option {
+        background: #3d3d3d;
+      }
+      .export-panel-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .export-fmt-btn {
+        background: #3d3d3d;
+        border: 1.5px solid transparent;
+        border-radius: 4px;
+        color: white;
+        font-size: 12px;
+        font-weight: 600;
+        font-family: 'Inter', sans-serif;
+        padding: 0 12px;
+        height: 28px;
+        cursor: pointer;
+        transition: border-color 0.12s, background 0.12s;
+        flex-shrink: 0;
+      }
+      .export-fmt-btn:hover {
+        background: #4a4a4a;
+      }
+      .export-fmt-btn.active {
+        border-color: rgba(255,255,255,0.8);
+      }
+      #export-do-btn {
+        flex: 1;
+        background: var(--accent);
+        border: none;
+        border-radius: 4px;
+        color: white;
+        font-size: 12px;
+        font-weight: 700;
+        font-family: 'Inter', sans-serif;
+        padding: 0 12px;
+        height: 28px;
+        cursor: pointer;
+        transition: opacity 0.12s;
+      }
+      #export-do-btn:hover {
+        opacity: 0.85;
       }
       .text-font-btn,
       .text-size-btn,
@@ -901,8 +1008,9 @@
       #lib-panel.open {
         width: 300px;
         min-width: 300px;
-        border-left: 1px solid #eaeaf0;
-        box-shadow: -2px 0 14px rgba(0, 0, 0, 0.06);
+        border-left: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.4);
+        background: var(--bg-app);
       }
       /* Wrapper interne : remplace overflow:hidden du panneau pour permettre à l'onglet de déborder */
       #lib-panel-inner {
@@ -910,39 +1018,33 @@
         inset: 0;
         overflow: hidden;
       }
-      /* Onglet/tab qui dépasse à gauche du panneau */
+      /* Bouton bibliothèque — fixe haut-droite */
       #lib-toggle-btn {
-        position: absolute;
-        left: -38px;
-        width: 38px;
-        height: 80px;
-        background: #fff;
-        border: 1px solid #eaeaf0;
-        border-right: none;
-
-        box-shadow: -4px 2px 12px rgba(0, 0, 0, 0.08);
+        position: fixed;
+        top: 48px;
+        right: 16px;
+        width: 48px;
+        height: 48px;
+        background: var(--fg);
+        color: var(--fg-inv);
+        border: none;
+        border-radius: 8px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 101;
-        transition: background 0.15s;
+        z-index: 300;
+        transition: opacity 0.15s;
       }
       #lib-toggle-btn:hover {
-        background: #f5f5fb;
+        opacity: 0.85;
       }
       #lib-toggle-btn:focus,
       #lib-toggle-btn:focus-visible {
         outline: none;
       }
-      #lib-toggle-btn img {
-        width: 18px;
-        height: 18px;
-        transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
-        flex-shrink: 0;
-      }
-      #lib-panel.open #lib-toggle-btn img {
-        transform: rotate(180deg);
+      body:has(#lib-panel.open) #lib-toggle-btn {
+        right: calc(300px + 16px);
       }
       #lib-panel-content {
         width: 300px;
@@ -1328,7 +1430,7 @@
       }
 
       .board-element[data-type='color'] {
-        min-width: 153px;
+        min-width: 130px;
         min-height: 127px;
       }
       .el-color {
@@ -1637,82 +1739,85 @@
         display: none;
       }
       .modal {
-        background: #fff;
-        border-radius: 0;
-        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+        background: var(--bg-app);
+        border-radius: 8px;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
         overflow: hidden;
         display: flex;
         flex-direction: column;
       }
       .modal-header {
-        padding: 22px 26px 16px;
-        border-bottom: 1px solid #f0f0f6;
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         display: flex;
         align-items: center;
         justify-content: space-between;
         flex-shrink: 0;
       }
       .modal-header h2 {
-        font-size: 18px;
+        font-size: 15px;
         font-weight: 700;
-        color: #1a1a2e;
+        color: var(--fg);
       }
       .modal-close {
         background: none;
         border: none;
         cursor: pointer;
-        font-size: 20px;
-        color: #bbb;
+        font-size: 18px;
+        color: rgba(255, 255, 255, 0.5);
         padding: 4px;
-        transition: all 0.15s;
+        transition: color 0.15s;
         line-height: 1;
       }
       .modal-close:hover {
-        background: #f5f5fb;
-        color: #2d2d2d;
+        background: none;
+        color: var(--fg);
       }
 
       .form-wrap {
-        padding: 22px 26px;
+        padding: 16px 20px;
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 14px;
       }
       .form-group label {
         display: block;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 700;
-        color: #999;
+        color: rgba(255, 255, 255, 0.5);
         margin-bottom: 7px;
         text-transform: uppercase;
         letter-spacing: 0.6px;
       }
       .form-input {
         width: 100%;
-        padding: 11px 14px;
-        border: 1px solid #eaeaf0;
-        font-size: 14px;
+        padding: 10px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 4px;
+        font-size: 13px;
         outline: none;
         transition: border-color 0.15s;
-        color: #2d2d2d;
+        color: var(--fg);
+        background: var(--bg-input);
         font-family: inherit;
       }
       .form-input:focus {
-        border-color: #ff3c00;
+        border-color: var(--accent);
       }
       .form-submit {
-        padding: 12px;
-        background: #ff3c00;
+        padding: 10px;
+        background: var(--accent);
         color: #fff;
         border: none;
+        border-radius: 4px;
         cursor: pointer;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
-        transition: background 0.15s;
+        transition: opacity 0.15s;
         font-family: inherit;
       }
       .form-submit:hover {
-        background: #e03500;
+        opacity: 0.85;
       }
 
       #context-menu {
@@ -2196,8 +2301,11 @@
 
       /* ===== MODE LECTURE SEULE ===== */
       body.readonly-mode #toolbar,
+      body.readonly-mode #toolbar-dock,
       body.readonly-mode #align-panel,
+      body.readonly-mode #export-panel,
       body.readonly-mode #lib-panel,
+      body.readonly-mode #lib-toggle-btn,
       body.readonly-mode #back-btn,
       body.readonly-mode #share-btn,
       body.readonly-mode #share-wrap,
@@ -2232,32 +2340,6 @@
       }
 
       /* ===== COLLABORATION ===== */
-      .collab-btn {
-        background: #0b36ed;
-        color: #fff;
-        border: 2px solid transparent;
-        padding: 3.75px 14px;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 700;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        transition:
-          background 0.15s,
-          border-color 0.15s,
-          color 0.15s;
-        white-space: nowrap;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .collab-btn:hover {
-        background: #0929c4;
-      }
-      #collab-btn.collab-active {
-        background-color: #ffffff !important;
-        color: #0b36ed !important;
-        border: 2px solid #0b36ed !important;
-      }
 
       #collab-cursors,
       #collab-sel-rects {
@@ -2686,58 +2768,42 @@
           <img src="PNG/retour.png" alt="" style="width: 16px; height: 16px" />
         </button>
         <div class="board-title-display" id="board-title-display">Moodboard</div>
-        <div style="display: flex; align-items: center; gap: 6px">
-          <div id="share-wrap" style="position: relative; display: none">
-            <button id="share-btn" class="share-btn" title="Partager ce board">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                style="flex-shrink: 0; color: #fff"
-              >
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <line x1="8.59" x2="15.42" y1="13.51" y2="17.49" />
-                <line x1="15.41" x2="8.59" y1="6.51" y2="10.49" />
-              </svg>
-              Partager
-            </button>
-            <div id="share-menu" class="share-menu hidden">
-              <button class="share-menu-item" id="share-copy-id">Copier l'ID du board</button>
-              <button class="share-menu-item" id="share-copy-url">
-                Copier le lien de lecture seule
-              </button>
-            </div>
-          </div>
-          <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              style="flex-shrink: 0; color: #fff"
-            >
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <path d="M16 3.128a4 4 0 0 1 0 7.744" />
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-              <circle cx="9" cy="7" r="4" />
-            </svg>
-            Collaborer
-          </button>
-        </div>
       </header>
+
+      <div id="share-collab-dock">
+        <button id="tool-export" class="collab-btn" title="Exporter">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+            <path d="M12 10v6"/>
+            <path d="m15 13-3 3-3-3"/>
+          </svg>
+        </button>
+        <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <path d="M16 3.128a4 4 0 0 1 0 7.744"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <circle cx="9" cy="7" r="4"/>
+          </svg>
+        </button>
+        <div id="share-wrap" style="position: relative; display: none">
+          <button id="share-btn" class="share-btn" title="Partager ce board">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#222222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="5" r="3"/>
+              <circle cx="6" cy="12" r="3"/>
+              <circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/>
+              <line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/>
+            </svg>
+          </button>
+          <div id="share-menu" class="share-menu hidden">
+            <button class="share-menu-item" id="share-copy-id">Copier l'ID du board</button>
+            <button class="share-menu-item" id="share-copy-url">
+              Copier le lien de lecture seule
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div id="broken-images-banner" class="hidden">
         <span class="bib-icon">⚠</span>
@@ -2747,13 +2813,15 @@
       </div>
 
       <div class="fit-btn-group">
-        <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">⊡</button>
-        <button
-          id="preview-btn"
-          class="preview-btn"
-          title="Aperçu plein écran (Échap pour quitter)"
-        >
-          ⛶
+        <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">
+          <svg width="20" height="20" viewBox="13 25 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button id="preview-btn" class="preview-btn" title="Aperçu plein écran (Échap pour quitter)">
+          <svg width="20" height="20" viewBox="13 25 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556M19.5556 31.5556H28.4445C29.0581 31.5556 29.5556 32.053 29.5556 32.6667V39.3333C29.5556 39.947 29.0581 40.4444 28.4445 40.4444H19.5556C18.9419 40.4444 18.4445 39.947 18.4445 39.3333V32.6667C18.4445 32.053 18.9419 31.5556 19.5556 31.5556Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </button>
       </div>
 
@@ -2886,31 +2954,7 @@
           <div id="toolbar-handle"></div>
         </div>
 
-        <div id="export-dock">
-          <button id="tool-export" title="Exporter">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              style="pointer-events: none; color: #fff"
-            >
-              <path
-                d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
-              />
-              <path d="M12 10v6" />
-              <path d="m15 13-3 3-3-3" />
-            </svg>
-            <span class="tool-label">Exporter</span>
-          </button>
-        </div>
-
-        <div id="text-edit-panel">
+<div id="text-edit-panel">
           <span class="text-panel-label">Police</span>
           <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Roman</button>
           <button class="text-font-btn" id="tp-bold" title="Helvetica Bold"><b>Bold</b></button>
@@ -2929,202 +2973,66 @@
         </div>
 
         <div id="align-panel">
-          <span class="text-panel-label">ALIGNER</span>
-          <div class="align-btns-row">
+          <span class="align-panel-title">Aligner</span>
+          <div class="align-grid">
             <button class="align-btn" id="align-left" title="Aligner les bords gauches">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="2.75"
-                  y1="1"
-                  x2="2.75"
-                  y2="15"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <rect x="4" y="3" width="7" height="3.5" rx="0.5" fill="currentColor" />
-                <rect x="4" y="9.5" width="10" height="3.5" rx="0.5" fill="currentColor" />
+              <svg width="20" height="20" viewBox="7 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 1V21M14 13H19C20.1046 13 21 13.8954 21 15V17C21 18.1046 20.1046 19 19 19H14C12.8954 19 12 18.1046 12 17V15C12 13.8954 12.8954 13 14 13ZM14 3H26C27.1046 3 28 3.89543 28 5V7C28 8.10457 27.1046 9 26 9H14C12.8954 9 12 8.10457 12 7V5C12 3.89543 12.8954 3 14 3Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="align-center-h" title="Centrer horizontalement">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="8"
-                  y1="1"
-                  x2="8"
-                  y2="15"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <rect x="4.5" y="3" width="7" height="3.5" rx="0.5" fill="currentColor" />
-                <rect x="2" y="9.5" width="12" height="3.5" rx="0.5" fill="currentColor" />
+              <svg width="20" height="20" viewBox="43 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M54 1V21M50 9H46C45.4696 9 44.9609 8.78929 44.5858 8.41421C44.2107 8.03914 44 7.53043 44 7V5C44 3.9 44.9 3 46 3H50M58 9H62C62.5304 9 63.0391 8.78929 63.4142 8.41421C63.7893 8.03914 64 7.53043 64 7V5C64 4.46957 63.7893 3.96086 63.4142 3.58579C63.0391 3.21071 62.5304 3 62 3H58M50 19H49C48.4696 19 47.9609 18.7893 47.5858 18.4142C47.2107 18.0391 47 17.5304 47 17V15C47 13.9 47.9 13 49 13H50M58 13H59C59.5304 13 60.0391 13.2107 60.4142 13.5858C60.7893 13.9609 61 14.4696 61 15V17C61 17.5304 60.7893 18.0391 60.4142 18.4142C60.0391 18.7893 59.5304 19 59 19H58" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="align-right" title="Aligner les bords droits">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="13.25"
-                  y1="1"
-                  x2="13.25"
-                  y2="15"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <rect x="5" y="3" width="7" height="3.5" rx="0.5" fill="currentColor" />
-                <rect x="2" y="9.5" width="10" height="3.5" rx="0.5" fill="currentColor" />
+              <svg width="20" height="20" viewBox="79 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M100 21V1M82 3H94C95.1046 3 96 3.89543 96 5V7C96 8.10457 95.1046 9 94 9H82C80.8954 9 80 8.10457 80 7V5C80 3.89543 80.8954 3 82 3ZM89 13H94C95.1046 13 96 13.8954 96 15V17C96 18.1046 95.1046 19 94 19H89C87.8954 19 87 18.1046 87 17V15C87 13.8954 87.8954 13 89 13Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
-          </div>
-          <div class="align-btns-row">
+            <button class="align-btn" id="distrib-h" title="Répartir l'espacement horizontal">
+              <svg width="20" height="20" viewBox="115 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M132.25 21V16M132.25 6V1M119.75 21V18M119.75 4V1M118.5 4H121C122.381 4 123.5 4.89543 123.5 6V16C123.5 17.1046 122.381 18 121 18H118.5C117.119 18 116 17.1046 116 16V6C116 4.89543 117.119 4 118.5 4ZM131 6H133.5C134.881 6 136 6.89543 136 8V14C136 15.1046 134.881 16 133.5 16H131C129.619 16 128.5 15.1046 128.5 14V8C128.5 6.89543 129.619 6 131 6Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
             <button class="align-btn" id="align-top" title="Aligner les bords supérieurs">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="1"
-                  y1="2.75"
-                  x2="15"
-                  y2="2.75"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <rect x="3" y="4" width="3.5" height="7" rx="0.5" fill="currentColor" />
-                <rect x="9.5" y="4" width="3.5" height="10" rx="0.5" fill="currentColor" />
+              <svg width="20" height="20" viewBox="7 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M28 33H8M12 37H14C15.1046 37 16 37.8954 16 39V51C16 52.1046 15.1046 53 14 53H12C10.8954 53 10 52.1046 10 51V39C10 37.8954 10.8954 37 12 37ZM22 37H24C25.1046 37 26 37.8954 26 39V44C26 45.1046 25.1046 46 24 46H22C20.8954 46 20 45.1046 20 44V39C20 37.8954 20.8954 37 22 37Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="align-center-v" title="Centrer verticalement">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="1"
-                  y1="8"
-                  x2="15"
-                  y2="8"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <rect x="3" y="4.5" width="3.5" height="7" rx="0.5" fill="currentColor" />
-                <rect x="9.5" y="2" width="3.5" height="12" rx="0.5" fill="currentColor" />
+              <svg width="20" height="20" viewBox="43 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M44 43H64M52 47V51C52 51.5304 51.7893 52.0391 51.4142 52.4142C51.0391 52.7893 50.5304 53 50 53H48C47.4696 53 46.9609 52.7893 46.5858 52.4142C46.2107 52.0391 46 51.5304 46 51V47M52 39V35C52 34.4696 51.7893 33.9609 51.4142 33.5858C51.0391 33.2107 50.5304 33 50 33H48C47.4696 33 46.9609 33.2107 46.5858 33.5858C46.2107 33.9609 46 34.4696 46 35V39M62 47V48C62 48.5304 61.7893 49.0391 61.4142 49.4142C61.0391 49.7893 60.5304 50 60 50H58C57.4696 50 56.9609 49.7893 56.5858 49.4142C56.2107 49.0391 56 48.5304 56 48V47M56 39V38C56 36.9 56.9 36 58 36H60C60.5304 36 61.0391 36.2107 61.4142 36.5858C61.7893 36.9609 62 37.4696 62 38V39" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="align-bottom" title="Aligner les bords inférieurs">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="1"
-                  y1="13.25"
-                  x2="15"
-                  y2="13.25"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <rect x="3" y="5" width="3.5" height="7" rx="0.5" fill="currentColor" />
-                <rect x="9.5" y="2" width="3.5" height="10" rx="0.5" fill="currentColor" />
-              </svg>
-            </button>
-          </div>
-          <span class="text-panel-label">RÉPARTIR</span>
-          <div class="align-btns-row">
-            <button class="align-btn" id="distrib-h" title="Répartir l'espacement horizontal">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="1.75"
-                  y1="2"
-                  x2="1.75"
-                  y2="14"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <line
-                  x1="14.25"
-                  y1="2"
-                  x2="14.25"
-                  y2="14"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <rect x="4.5" y="5" width="2.5" height="6" rx="0.5" fill="currentColor" />
-                <rect x="9" y="5" width="2.5" height="6" rx="0.5" fill="currentColor" />
+              <svg width="20" height="20" viewBox="79 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M100 53H80M84 33H86C87.1046 33 88 33.8954 88 35V47C88 48.1046 87.1046 49 86 49H84C82.8954 49 82 48.1046 82 47V35C82 33.8954 82.8954 33 84 33ZM94 40H96C97.1046 40 98 40.8954 98 42V47C98 48.1046 97.1046 49 96 49H94C92.8954 49 92 48.1046 92 47V42C92 40.8954 92.8954 40 94 40Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="distrib-v" title="Répartir l'espacement vertical">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <line
-                  x1="2"
-                  y1="1.75"
-                  x2="14"
-                  y2="1.75"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <line
-                  x1="2"
-                  y1="14.25"
-                  x2="14"
-                  y2="14.25"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-                <rect x="5" y="4.5" width="6" height="2.5" rx="0.5" fill="currentColor" />
-                <rect x="5" y="9" width="6" height="2.5" rx="0.5" fill="currentColor" />
+              <svg width="20" height="20" viewBox="115 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M136 49.25H133M136 36.75H131M119 49.25H116M121 36.75H116M121 45.5H131C132.105 45.5 133 46.6193 133 48V50.5C133 51.8807 132.105 53 131 53H121C119.895 53 119 51.8807 119 50.5V48C119 46.6193 119.895 45.5 121 45.5ZM123 33H129C130.105 33 131 34.1193 131 35.5V38C131 39.3807 130.105 40.5 129 40.5H123C121.895 40.5 121 39.3807 121 38V35.5C121 34.1193 121.895 33 123 33Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
           </div>
-          <div class="align-divider"></div>
           <button id="key-object-toggle" title="Aligner sur objet clé">Objet clé</button>
+        </div>
+
+        <div id="export-panel">
+          <span class="align-panel-title">Exporter</span>
+          <div class="export-select-wrap">
+            <select id="export-quality-select">
+              <option value="1">Basse qualité</option>
+              <option value="2" selected>Bonne qualité</option>
+              <option value="3">Meilleure qualité</option>
+            </select>
+          </div>
+          <div class="export-panel-actions">
+            <button class="export-fmt-btn" id="export-fmt-pdf">PDF</button>
+            <button class="export-fmt-btn active" id="export-fmt-png">PNG</button>
+            <button id="export-do-btn">Exporter</button>
+          </div>
         </div>
 
         <div class="canvas-wrapper" id="canvas-wrapper">
@@ -3137,19 +3045,13 @@
           <div id="zoom-toast"></div>
         </div>
 
-        <div id="lib-panel">
-          <button id="lib-toggle-btn" title="Bibliothèque d'images">
-            <img
-              src="PNG/retour.png"
-              alt=""
-              style="
-                width: 18px;
-                height: 18px;
-                transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
-              "
-            />
-          </button>
+        <button id="lib-toggle-btn" title="Bibliothèque d'images">
+          <svg width="24" height="24" viewBox="11 11 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20.2506 24H24.0006M24.0006 24H27.7506M24.0006 24V20.25M24.0006 24V27.75M30.5 28.5H34C35.1046 28.5 36 27.6046 36 26.5V21.5C36 20.3954 35.1046 19.5 34 19.5H30.5C29.3954 19.5 28.5 18.6046 28.5 17.5V14C28.5 12.8954 27.6046 12 26.5 12H21.5C20.3954 12 19.5 12.8954 19.5 14V17.5C19.5 18.6046 18.6046 19.5 17.5 19.5H14C12.8954 19.5 12 20.3954 12 21.5V26.5C12 27.6046 12.8954 28.5 14 28.5H17.5C18.6046 28.5 19.5 29.3954 19.5 30.5V34C19.5 35.1046 20.3954 36 21.5 36H26.5C27.6046 36 28.5 35.1046 28.5 34V30.5C28.5 29.3954 29.3954 28.5 30.5 28.5Z" stroke="#222222" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
 
+        <div id="lib-panel">
           <div id="lib-panel-inner">
             <div id="lib-panel-content">
               <div class="lib-panel-header">
@@ -3312,123 +3214,6 @@
             />
           </div>
           <button id="submit-create-board" class="form-submit">Créer</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-overlay hidden" id="export-modal">
-      <div class="modal" style="width: 340px">
-        <div class="modal-header">
-          <h2>Exporter</h2>
-          <button id="close-export-modal" class="modal-close">&#x2715;</button>
-        </div>
-        <div style="padding: 24px 26px; display: flex; flex-direction: column; gap: 20px">
-          <!-- Qualité -->
-          <div>
-            <div
-              style="
-                font-size: 12px;
-                font-weight: 700;
-                color: #888;
-                text-transform: uppercase;
-                letter-spacing: 0.06em;
-                margin-bottom: 12px;
-              "
-            >
-              Qualité
-            </div>
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                font-size: 12px;
-                color: #aaa;
-                margin-bottom: 6px;
-              "
-            >
-              <span>Basse</span><span>Moyenne</span><span>Haute</span>
-            </div>
-            <input
-              type="range"
-              id="export-quality-slider"
-              min="1"
-              max="3"
-              step="1"
-              value="2"
-              style="width: 100%; accent-color: #ff3c00; cursor: pointer"
-            />
-          </div>
-
-          <!-- Format -->
-          <div>
-            <div
-              style="
-                font-size: 12px;
-                font-weight: 700;
-                color: #888;
-                text-transform: uppercase;
-                letter-spacing: 0.06em;
-                margin-bottom: 12px;
-              "
-            >
-              Format
-            </div>
-            <div style="display: flex; gap: 10px">
-              <label
-                style="
-                  flex: 1;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  gap: 8px;
-                  padding: 10px;
-                  border: 2px solid #ff3c00;
-                  border-radius: 4px;
-                  cursor: pointer;
-                  font-weight: 700;
-                  font-size: 14px;
-                  background: #fff;
-                  color: #ff3c00;
-                "
-              >
-                <input
-                  type="radio"
-                  name="export-format"
-                  value="png"
-                  checked
-                  style="accent-color: #ff3c00"
-                />
-                PNG
-              </label>
-              <label
-                style="
-                  flex: 1;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  gap: 8px;
-                  padding: 10px;
-                  border: 2px solid #eaeaf0;
-                  border-radius: 4px;
-                  cursor: pointer;
-                  font-weight: 700;
-                  font-size: 14px;
-                  background: #fff;
-                  color: #888;
-                "
-              >
-                <input
-                  type="radio"
-                  name="export-format"
-                  value="pdf"
-                  style="accent-color: #ff3c00"
-                />
-                PDF
-              </label>
-            </div>
-          </div>
-
-          <button id="export-do-btn" class="form-submit" style="margin-top: 4px">Exporter</button>
         </div>
       </div>
     </div>

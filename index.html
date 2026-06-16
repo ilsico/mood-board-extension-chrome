@@ -671,6 +671,7 @@
         flex: 1;
         position: relative;
         overflow: hidden;
+        isolation: isolate;
         background: var(--bg-canvas);
         touch-action: none !important;
         cursor:
@@ -721,17 +722,19 @@
       }
 
       #text-edit-panel {
-        width: 80px;
-        min-width: 80px;
-        background: #fff;
-        border-right: 1px solid #eaeaf0;
+        position: fixed;
+        left: 50%;
+        bottom: 90px;
+        transform: translateX(-50%);
+        width: 133px;
+        background: #222222;
+        border-radius: 8px;
         display: none;
         flex-direction: column;
         align-items: center;
-        z-index: 101;
-        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
-        padding: 12px 0;
-        gap: 6px;
+        z-index: 400;
+        padding: 10px 8px 12px;
+        gap: 10px;
         flex-shrink: 0;
       }
       #text-edit-panel.active {
@@ -923,65 +926,81 @@
       .text-font-btn,
       .text-size-btn,
       .text-align-btn {
-        border: 1px solid #eaeaf0;
+        border: none;
         background: none;
         cursor: pointer;
+        color: white;
       }
       .text-font-btn {
-        width: 68px;
-        padding: 5px 4px;
+        flex: 1;
+        height: 22px;
+        padding: 0 4px;
         font-size: 11px;
         text-align: center;
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        background: #3d3d3d;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
       }
       .text-size-btn {
-        width: 24px;
-        height: 24px;
-        font-size: 15px;
+        width: 18px;
+        height: 18px;
         display: flex;
         align-items: center;
         justify-content: center;
+        padding: 0;
+        border-radius: 3px;
       }
       .text-align-btn {
-        width: 30px;
+        width: 32px;
         height: 28px;
-        font-size: 13px;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.15s;
+        padding: 0;
+        border-radius: 4px;
+        transition: background 0.12s;
       }
       .text-font-btn:hover,
       .text-size-btn:hover,
       .text-align-btn:hover {
-        background: #f5f5fb;
+        background: rgba(255, 255, 255, 0.12);
       }
       .text-font-btn.active,
       .text-align-btn.active {
-        background: rgba(255, 60, 0, 0.08);
-        border-color: #ff3c00;
-        color: #ff3c00;
+        background: #3d3d3d;
+        border: 1px solid white;
+        color: white;
       }
       .text-size-row {
         display: flex;
         align-items: center;
-        gap: 4px;
-        width: 68px;
-        justify-content: center;
+        background: #3d3d3d;
+        border-radius: 4px;
+        padding: 0 6px;
+        height: 24px;
+        width: 88px;
+        justify-content: space-between;
       }
       .text-size-val {
         font-size: 12px;
         font-weight: 700;
-        min-width: 20px;
+        min-width: 24px;
         text-align: center;
-        color: #444;
+        color: white;
       }
       .text-align-btns {
         display: flex;
-        flex-wrap: wrap;
-        gap: 3px;
-        width: 68px;
-        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        justify-content: space-around;
+        padding: 0 2px;
+      }
+      .text-font-btns-row {
+        display: flex;
+        gap: 6px;
+        width: 100%;
+        padding: 0 2px;
       }
       .text-panel-label {
         font-size: 9px;
@@ -2838,7 +2857,7 @@
               xmlns="http://www.w3.org/2000/svg"
               width="24"
               height="24"
-              viewBox="0 0 24 24"
+              viewBox="1 1 22 22"
               fill="none"
               stroke="currentColor"
               stroke-width="2"
@@ -2863,7 +2882,7 @@
               xmlns="http://www.w3.org/2000/svg"
               width="24"
               height="24"
-              viewBox="0 0 24 24"
+              viewBox="1 1 22 22"
               fill="none"
               stroke="currentColor"
               stroke-width="2"
@@ -2891,7 +2910,7 @@
               xmlns="http://www.w3.org/2000/svg"
               width="24"
               height="24"
-              viewBox="0 0 24 24"
+              viewBox="1 1 22 22"
               fill="none"
               stroke="currentColor"
               stroke-width="2"
@@ -2914,7 +2933,7 @@
               xmlns="http://www.w3.org/2000/svg"
               width="24"
               height="24"
-              viewBox="0 0 24 24"
+              viewBox="1 1 22 22"
               fill="none"
               stroke="currentColor"
               stroke-width="2"
@@ -2936,7 +2955,7 @@
               xmlns="http://www.w3.org/2000/svg"
               width="24"
               height="24"
-              viewBox="0 0 24 24"
+              viewBox="1 1 22 22"
               fill="none"
               stroke="currentColor"
               stroke-width="2"
@@ -2955,20 +2974,40 @@
         </div>
 
 <div id="text-edit-panel">
-          <span class="text-panel-label">Police</span>
-          <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Roman</button>
-          <button class="text-font-btn" id="tp-bold" title="Helvetica Bold"><b>Bold</b></button>
-          <span class="text-panel-label">Taille</span>
-          <div class="text-size-row">
-            <button class="text-size-btn" id="text-size-minus">−</button>
-            <span class="text-size-val" id="text-size-val">14</span>
-            <button class="text-size-btn" id="text-size-plus">+</button>
-          </div>
-          <span class="text-panel-label">Alignement</span>
+          <span class="align-panel-title">Texte</span>
           <div class="text-align-btns">
-            <button class="text-align-btn" id="ta-left" title="Gauche">⬅</button>
-            <button class="text-align-btn" id="ta-center" title="Centre">☰</button>
-            <button class="text-align-btn" id="ta-right" title="Droite">➡</button>
+            <button class="text-align-btn" id="ta-left" title="Gauche">
+              <svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 3H18M2 8H13M2 13H15" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="text-align-btn" id="ta-center" title="Centre">
+              <svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 3H18M5 8H15M4 13H16" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="text-align-btn" id="ta-right" title="Droite">
+              <svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 3H18M7 8H18M5 13H18" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="text-size-row">
+            <button class="text-size-btn" id="text-size-minus">
+              <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 1L2 5L6 9" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <span class="text-size-val" id="text-size-val">14</span>
+            <button class="text-size-btn" id="text-size-plus">
+              <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 1L6 5L2 9" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="text-font-btns-row">
+            <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Roman</button>
+            <button class="text-font-btn" id="tp-bold" title="Helvetica Bold">Bold</button>
           </div>
         </div>
 

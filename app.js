@@ -2277,7 +2277,7 @@ const App = (function () {
           if (ne) pushAction({ type: 'create', elId: ne.dataset.id, after: _captureElState(ne) });
           pushHistory();
         } else if (type === 'color') {
-          const ce = createColorElement('#000000', x - 65, y - 70, 130, 140);
+          const ce = createColorElement('#000000', x - 65, y - 64, 130, 127);
           _collabSyncCreatedEl(ce);
           if (ce) pushAction({ type: 'create', elId: ce.dataset.id, after: _captureElState(ce) });
           pushHistory();
@@ -3453,7 +3453,6 @@ const App = (function () {
     if (typeof Collab !== 'undefined' && Collab.isActive()) {
       toDelete.forEach((el) => Collab.syncElementDelete(el.dataset.id));
     }
-    toast(toDelete.length > 1 ? toDelete.length + ' éléments supprimés' : 'Supprimé');
     toDelete.forEach((el) => {
       if (hoveredEl === el) hoveredEl = null;
     });
@@ -3476,7 +3475,6 @@ const App = (function () {
     multiSelected.clear();
     pushHistory();
 
-    toast('Board vidé');
   }
 
   // ── SNAP ─────────────────────────────────────────────────────────────────
@@ -3816,8 +3814,7 @@ const App = (function () {
       }
 
       if (multiSelected.has(el) && multiSelected.size > 1) {
-        _setKeyObject(el);
-        startGroupDrag(e, multiSelected);
+        startGroupDrag(e, multiSelected, el);
         return;
       }
 
@@ -4229,7 +4226,7 @@ const App = (function () {
     });
   }
 
-  function startGroupDrag(e, group) {
+  function startGroupDrag(e, group, clickedEl) {
     // Collab: vérifier que aucun élément du groupe n'est locké par un autre
     if (typeof Collab !== 'undefined' && Collab.isActive()) {
       for (const el of group) {
@@ -4495,6 +4492,7 @@ const App = (function () {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       clearSnapGuides();
+      if (!moved && !duplicated && clickedEl) _setKeyObject(clickedEl);
       if (moved || duplicated) {
         pushHistory();
         // Action-based undo: enregistrer le groupMove
@@ -6371,7 +6369,6 @@ const App = (function () {
           }
         });
       });
-      toast(toDelete.length + ' éléments supprimés');
     } else {
       // Action-based undo for delete (single)
       pushAction({ type: 'delete', elId: el.dataset.id, before: _captureElState(el) });
@@ -6980,6 +6977,7 @@ const App = (function () {
     if (alignPanel) alignPanel.classList.remove('active');
     const panel = document.getElementById('text-edit-panel');
     panel.classList.add('active');
+    updateExportPanelPosition();
 
     // Déterminer la cible du style (le div note-content dans une note, ou l'élément lui-même si c'est une caption)
     const target = el.querySelector('.el-note-content') || el;
@@ -8003,7 +8001,6 @@ const App = (function () {
     }
     const scale = _EXPORT_SCALES[quality] || 2;
     const labels = { 1: 'Basse', 2: 'Moyenne', 3: 'Haute' };
-    toast('Export PNG — ' + (labels[quality] || 'Moyenne') + ' qualité…');
 
     captureBoard(scale)
       .then(({ canvas }) => {
@@ -8013,9 +8010,8 @@ const App = (function () {
         a.download = (b ? b.name : 'moodboard') + '.png';
         a.href = dataUrl;
         a.click();
-        toast('PNG exporté !');
       })
-      .catch((msg) => toast(msg || 'Erreur export PNG'));
+      .catch(() => {});
   }
 
   function exportPDF(quality = 2) {
@@ -8026,7 +8022,6 @@ const App = (function () {
     const scale = _EXPORT_SCALES[quality] || 2;
     const jpegQ = _EXPORT_JPEG_Q[quality] || 0.82;
     const labels = { 1: 'Basse', 2: 'Moyenne', 3: 'Haute' };
-    toast('Export PDF — ' + (labels[quality] || 'Moyenne') + ' qualité…');
 
     captureBoard(scale)
       .then(({ canvas, w, h }) => {
@@ -8040,9 +8035,8 @@ const App = (function () {
         pdf.addImage(dataUrl, 'JPEG', 0, 0, w, h);
         const board = boards.find((b) => b.id === currentBoardId);
         pdf.save((board ? board.name : 'moodboard') + '.pdf');
-        toast('PDF exporté !');
       })
-      .catch((msg) => toast(msg || 'Erreur export PDF'));
+      .catch(() => {});
   }
 
   // ── MODALES ───────────────────────────────────────────────────────────────
@@ -8065,6 +8059,7 @@ const App = (function () {
     if (!panel) return;
     if (panel.classList.contains('active')) {
       panel.classList.remove('active');
+      updateExportPanelPosition();
       return;
     }
     panel.classList.add('active');
@@ -8081,11 +8076,14 @@ const App = (function () {
   function updateExportPanelPosition() {
     const ep = document.getElementById('export-panel');
     const ap = document.getElementById('align-panel');
-    if (!ap) return;
+    const tp = document.getElementById('text-edit-panel');
     if (ep && ep.classList.contains('active')) {
-      ap.style.bottom = (90 + ep.offsetHeight + 8) + 'px';
+      const offset = (90 + ep.offsetHeight + 8) + 'px';
+      if (ap) ap.style.bottom = offset;
+      if (tp) tp.style.bottom = offset;
     } else {
-      ap.style.bottom = '';
+      if (ap) ap.style.bottom = '';
+      if (tp) tp.style.bottom = '';
     }
   }
 

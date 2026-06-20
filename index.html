@@ -50,6 +50,27 @@
         --accent: #dc4111;
       }
 
+      /* ===== LIGHT MODE OVERRIDES ===== */
+      body.light-mode {
+        --bg-app: #C7C7C7;
+        --bg-canvas: #F2F2F2;
+        --bg-input: #b0b0b0;
+        --fg: #222222;
+        --fg-inv: #F2F2F2;
+      }
+      body.light-mode .el-connection line {
+        stroke: #2C2C2C;
+      }
+      body.light-mode .tool-btn svg {
+        color: #222222 !important;
+        stroke: #222222;
+      }
+      body.light-mode .tool-btn:hover svg,
+      body.light-mode .tool-btn.active svg {
+        color: #222222 !important;
+        stroke: #222222;
+      }
+
       body {
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         background: var(--bg-canvas);
@@ -2051,7 +2072,7 @@
         transform: translateZ(0);
       }
       .el-connection line {
-        stroke: #1a1a2e;
+        stroke: #F2F2F2;
         stroke-width: 1.5;
         stroke-linecap: round;
       }

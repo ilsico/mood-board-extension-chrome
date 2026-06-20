@@ -487,6 +487,7 @@
       body.preview-mode #toolbar,
       body.preview-mode #toolbar-dock,
       body.preview-mode #share-collab-dock,
+      body.preview-mode #theme-dock,
       body.preview-mode #align-panel,
       body.preview-mode #export-panel,
       body.preview-mode #lib-panel,
@@ -642,6 +643,19 @@
         align-items: center;
         gap: 12px;
       }
+
+      /* ===== DOCK THÈME (bas gauche) ===== */
+      #theme-dock {
+        position: fixed;
+        bottom: 16px;
+        left: 16px;
+        z-index: 300;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+      }
+
       .collab-btn {
         background: var(--bg-app);
         color: var(--fg);
@@ -2350,6 +2364,7 @@
       body.readonly-mode #share-btn,
       body.readonly-mode #share-wrap,
       body.readonly-mode #collab-btn,
+      body.readonly-mode #theme-dock,
       body.readonly-mode #multi-resize-handle,
       body.readonly-mode #resize-corner-nw,
       body.readonly-mode #resize-corner-ne,
@@ -2812,14 +2827,14 @@
 
       <div id="share-collab-dock">
         <button id="tool-export" class="collab-btn" title="Exporter">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
             <path d="M12 10v6"/>
             <path d="m15 13-3 3-3-3"/>
           </svg>
         </button>
         <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
             <path d="M16 3.128a4 4 0 0 1 0 7.744"/>
             <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
@@ -2843,6 +2858,14 @@
             </button>
           </div>
         </div>
+      </div>
+
+      <div id="theme-dock">
+        <button id="theme-toggle-btn" class="collab-btn" title="Basculer mode clair / sombre">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>
+          </svg>
+        </button>
       </div>
 
       <div id="broken-images-banner" class="hidden">

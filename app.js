@@ -219,6 +219,7 @@ const App = (function () {
       });
     });
     board.elements = elements;
+    board.theme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
     board.savedAt = Date.now();
     saveBoards();
     // Sync Firebase (fire-and-forget, silencieux)
@@ -440,6 +441,24 @@ const App = (function () {
     setupUIEvents(); // <-- APPEL DE LA FONCTION (très important)
   } // <--- ACCOLADE MANQUANTE POUR FERMER LA FONCTION init()
 
+  // ── THÈME CLAIR/SOMBRE ───────
+  const _ICON_MOON = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>';
+  const _ICON_SUN = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>';
+
+  function _updateThemeIcon() {
+    const btn = document.getElementById('theme-toggle-btn');
+    if (!btn) return;
+    const isLight = document.body.classList.contains('light-mode');
+    btn.innerHTML = isLight ? _ICON_SUN : _ICON_MOON;
+    btn.title = isLight ? 'Passer en mode sombre' : 'Passer en mode clair';
+  }
+
+  function toggleTheme() {
+    document.body.classList.toggle('light-mode');
+    _updateThemeIcon();
+    saveCurrentBoard();
+  }
+
   // ── ÉVÉNEMENTS UI ───────
   function setupUIEvents() {
     // Utilitaire pour éviter de crasher si un élément n'existe pas dans le HTML
@@ -474,6 +493,7 @@ const App = (function () {
 
     // Header board
     addEvt('back-btn', 'click', () => goHome());
+    addEvt('theme-toggle-btn', 'click', toggleTheme);
 
     // Double-clic sur le titre → édition inline
     const titleEl = document.getElementById('board-title-display');
@@ -1204,6 +1224,9 @@ const App = (function () {
         multiSelected.clear();
         applyTransform();
         updateZoomDisplay();
+        const _theme = board.theme || 'dark';
+        document.body.classList.toggle('light-mode', _theme === 'light');
+        _updateThemeIcon();
         if (board.elements && board.elements.length) {
           board.elements.forEach((e) => restoreElement(e));
           // Attendre le rendu (les images sont asynchrones), puis centrer
@@ -1242,6 +1265,7 @@ const App = (function () {
     } catch (e) {
       console.warn('Erreur sauvegarde:', e);
     }
+    document.body.classList.remove('light-mode');
     document.getElementById('board-screen').style.display = 'none';
     document.getElementById('home-screen').style.display = 'flex';
     const shareWrap = document.getElementById('share-wrap');

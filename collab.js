@@ -786,7 +786,7 @@ window.Collab = (function () {
     if (data.w !== undefined && data.w !== null) {
       el.style.width = data.w + 'px';
     }
-    if (data.h !== undefined && data.h !== null) {
+    if (data.h !== undefined && data.h !== null && el.dataset.type !== 'note') {
       el.style.height = data.h + 'px';
     }
     // File card : scaler le contenu interne proportionnellement (miroir de handleResizeMouse)

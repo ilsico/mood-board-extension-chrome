@@ -1459,14 +1459,15 @@ const App = (function () {
       sw: { left: r.left, top: r.bottom },
       se: { left: r.right, top: r.bottom },
     };
+    const t = target.dataset.type;
     corners.forEach((c) => {
       const h = document.getElementById('resize-corner-' + c);
       if (!h) return;
+      if (t === 'note') { h.style.display = 'none'; return; }
       h.style.display = 'block';
       h.style.left = pos[c].left + 'px';
       h.style.top = pos[c].top + 'px';
     });
-    const t = target.dataset.type;
     const showEdges = t === 'note' || t === 'color';
     const edgePos = {
       n: { left: (r.left + r.right) / 2, top: r.top },
@@ -1483,7 +1484,7 @@ const App = (function () {
     edges.forEach((edge) => {
       const h = document.getElementById('resize-edge-' + edge);
       if (!h) return;
-      if (!showEdges) {
+      if (!showEdges || (t === 'note' && (edge === 'n' || edge === 's'))) {
         h.style.display = 'none';
         return;
       }
@@ -1811,6 +1812,13 @@ const App = (function () {
     const canvas = document.getElementById('canvas');
     const selRect = document.getElementById('selection-rect');
 
+    // Prevent the browser from scrolling canvas-wrapper when a focused contenteditable
+    // grows beyond the visible area — this scroll corrupts all getBoundingClientRect coords.
+    wrapper.addEventListener('scroll', () => {
+      wrapper.scrollTop = 0;
+      wrapper.scrollLeft = 0;
+    }, { passive: true });
+
     let wheelTargetX = null;
     let wheelTargetY = null;
 
@@ -1832,6 +1840,7 @@ const App = (function () {
           e.stopImmediatePropagation();
           return;
         }
+        if (document.getElementById('_csp_panel')) { e.preventDefault(); return; }
         const boardScreen = document.getElementById('board-screen');
         if (boardScreen && boardScreen.style.display !== 'none') {
           const libPanel = document.getElementById('lib-panel');
@@ -1884,6 +1893,7 @@ const App = (function () {
           e.preventDefault();
           return;
         }
+        if (document.getElementById('_csp_panel')) { e.preventDefault(); return; }
         e.preventDefault();
 
         // Détecte soit Alt + Molette, soit le Pinch du pavé tactile
@@ -2036,6 +2046,7 @@ const App = (function () {
     wrapper.addEventListener(
       'mousedown',
       (e) => {
+        if (document.getElementById('_csp_panel')) return;
         if (e.button === 1 || (isPanningMode && e.button === 0)) {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -2063,6 +2074,7 @@ const App = (function () {
 
     // Clic molette (button 1) sur n'importe quelle zone = pan
     wrapper.addEventListener('mousedown', (e) => {
+      if (document.getElementById('_csp_panel')) return;
       if (e.button === 1) {
         e.preventDefault();
         isPanning = true;
@@ -2107,6 +2119,7 @@ const App = (function () {
         multiSelected.clear();
       }
       isSelecting = true;
+      document.body.classList.add('is-selecting');
       const wRect = wrapper.getBoundingClientRect();
       selRectStart = { x: e.clientX - wRect.left, y: e.clientY - wRect.top };
       selRect.style.left = selRectStart.x + 'px';
@@ -2173,7 +2186,7 @@ const App = (function () {
         }
         if (resizeEl) {
           resizeEl.style.width = _resizeTargetW + 'px';
-          resizeEl.style.height = _resizeTargetH + 'px';
+          if (resizeEl.dataset.type !== 'note') resizeEl.style.height = _resizeTargetH + 'px';
           resizeEl.style.left = _resizeTargetLeft + 'px';
           resizeEl.style.top = _resizeTargetTop + 'px';
           if (resizeEl.dataset.type === 'file') {
@@ -2233,6 +2246,7 @@ const App = (function () {
       }
       if (isSelecting) {
         isSelecting = false;
+        document.body.classList.remove('is-selecting');
         selRect.style.display = 'none';
         // Effacer le rectangle de sélection distant
         if (typeof Collab !== 'undefined' && Collab.isActive()) Collab.clearSelectionRect();
@@ -2747,7 +2761,7 @@ const App = (function () {
         const el = document.querySelector('[data-id="' + action.elId + '"]');
         if (!el) break;
         if (action.before.w) el.style.width = action.before.w + 'px';
-        if (action.before.h) el.style.height = action.before.h + 'px';
+        if (action.before.h && el.dataset.type !== 'note') el.style.height = action.before.h + 'px';
         if (action.before.x != null) el.style.left = action.before.x + 'px';
         if (action.before.y != null) el.style.top = action.before.y + 'px';
         updateConnectionsForEl(el);
@@ -2865,7 +2879,7 @@ const App = (function () {
         const el = document.querySelector('[data-id="' + action.elId + '"]');
         if (!el) break;
         if (action.after.w) el.style.width = action.after.w + 'px';
-        if (action.after.h) el.style.height = action.after.h + 'px';
+        if (action.after.h && el.dataset.type !== 'note') el.style.height = action.after.h + 'px';
         if (action.after.x != null) el.style.left = action.after.x + 'px';
         if (action.after.y != null) el.style.top = action.after.y + 'px';
         updateConnectionsForEl(el);
@@ -3228,97 +3242,16 @@ const App = (function () {
       swatch.style.background = el.dataset.savedata;
       _syncColorInfo(el, el.dataset.savedata);
     }
-    let _colorValueOnFocus = el.dataset.savedata || '#000000';
-    // Readonly par défaut, éditable au double-clic
+    // Lecture seule — pas d'édition directe
     hexInput.readOnly = true;
-    // Bloquer le drag depuis l'input
     hexInput.addEventListener('mousedown', (e) => e.stopPropagation());
     hexInput.addEventListener('pointerdown', (e) => e.stopPropagation());
-    hexInput.addEventListener('dblclick', (e) => {
-      e.stopPropagation();
-      hexInput.readOnly = false;
-      hexInput.focus();
-      hexInput.select();
-    });
-    hexInput.addEventListener('focus', () => {
-      _colorValueOnFocus = el.dataset.savedata || '#000000';
-      // Collab: vérifier et acquérir le lock
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        if (Collab.isLockedByOther(el.dataset.id)) {
-          toast("Élément en cours d'édition");
-          hexInput.blur();
-          return;
-        }
-        Collab.acquireLock(el.dataset.id);
-      }
-    });
-    function applyHexColor(val) {
-      let v = val.trim().toUpperCase();
-      if (!v.startsWith('#')) v = '#' + v;
-      if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) {
-        swatch.style.background = v;
-        el.dataset.savedata = v;
-        hexInput.value = v;
-        // Collab: sync couleur
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          Collab.syncElementData(el.dataset.id, v);
-        }
-        if (v !== _colorValueOnFocus) {
-          pushAction({
-            type: 'editColor',
-            elId: el.dataset.id,
-            before: { data: _colorValueOnFocus },
-            after: { data: v },
-          });
-        }
-        pushHistory();
-        _syncColorInfo(el, v);
-        return true;
-      }
-      return false;
-    }
-    hexInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        hexInput.blur();
-      }
-      e.stopPropagation();
-    });
-    hexInput.addEventListener('blur', () => {
-      if (!applyHexColor(hexInput.value))
-        hexInput.value = (el.dataset.savedata || '#000000').toUpperCase();
-      hexInput.readOnly = true;
-      // Collab: libérer le lock
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.releaseLock(el.dataset.id);
-      }
-    });
-    hexInput.addEventListener('input', () => {
-      hexInput.value = hexInput.value.toUpperCase();
-      let v = hexInput.value.trim();
-      if (!v.startsWith('#')) v = '#' + v;
-      if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) swatch.style.background = v;
-    });
-    // Empêcher le drag natif de l'image pipette
-    const eyeImg = eyeBtn.querySelector('img');
-    if (eyeImg) {
-      eyeImg.draggable = false;
-      eyeImg.style.pointerEvents = 'none';
-    }
+
     eyeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
     eyeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      // Collab: vérifier le lock avant eyedropper
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        if (Collab.isLockedByOther(el.dataset.id)) {
-          toast("Élément en cours d'édition");
-          return;
-        }
-        _colorValueOnFocus = el.dataset.savedata || '#000000';
-        Collab.acquireLock(el.dataset.id);
-      }
-      activateEyedropper(el, swatch, hexInput);
+      openColorSpectrumPicker(el, swatch, hexInput, el);
     });
   }
 
@@ -3678,10 +3611,10 @@ const App = (function () {
     // Dessiner le cadre de sélection englobant tout le groupe
     if (bbox) {
       bbox.style.display = 'block';
-      bbox.style.left = minL - 6 + 'px';
-      bbox.style.top = minT - 6 + 'px';
-      bbox.style.width = maxR - minL + 12 + 'px';
-      bbox.style.height = maxB - minT + 12 + 'px';
+      bbox.style.left = minL + 'px';
+      bbox.style.top = minT + 'px';
+      bbox.style.width = maxR - minL + 'px';
+      bbox.style.height = maxB - minT + 'px';
     }
     updateAlignPanel();
   }
@@ -3753,10 +3686,10 @@ const App = (function () {
           if (r.ratio) {
             const nw = Math.max(40, Math.round(r.w * scale));
             el.style.width = nw + 'px';
-            el.style.height = Math.round(nw / r.ratio) + 'px';
+            if (el.dataset.type !== 'note') el.style.height = Math.round(nw / r.ratio) + 'px';
           } else {
             el.style.width = Math.max(40, Math.round(r.w * scale)) + 'px';
-            el.style.height = Math.max(20, Math.round(r.h * scale)) + 'px';
+            if (el.dataset.type !== 'note') el.style.height = Math.max(20, Math.round(r.h * scale)) + 'px';
           }
         });
         updateMultiResizeHandle();
@@ -4288,6 +4221,11 @@ const App = (function () {
     let curDX = 0,
       curDY = 0;
 
+    // Snap sticky style Illustrator — verrou X/Y indépendants
+    const _SNAP_ACQUIRE = 10;
+    const _SNAP_RELEASE = 28;
+    let _snapLock = { x: null, y: null }; // { raw, snap, guides[] } par axe
+
     function doDuplicateGroup() {
       if (duplicated) return;
       duplicated = true;
@@ -4460,38 +4398,52 @@ const App = (function () {
       targetDX = dx;
       targetDY = dy;
 
-      // Snap uniquement si Ctrl enfoncé (calculé sur position cible, appliqué via RAF)
+      // Snap sticky style Illustrator — bounding box du groupe entier
       if (ctrlSnap) {
         const others = getAllElements(excludeSet);
         if (others.length) {
-          const pivotEl = [...activeGroup][0];
-          const s = starts.get(pivotEl);
-          if (s) {
-            const snapRect = {
-              l: s.left + dx,
-              t: s.top + dy,
-              r: s.left + dx + pivotEl.offsetWidth,
-              b: s.top + dy + pivotEl.offsetHeight,
-              w: pivotEl.offsetWidth,
-              h: pivotEl.offsetHeight,
-            };
-            const { dx: sdx, dy: sdy, guidesH, guidesV } = computeSnap(snapRect, others);
-            clearSnapGuides();
-            if (sdx || sdy) {
-              targetDX += sdx;
-              targetDY += sdy;
+          // Relâcher le verrou si assez éloigné
+          if (_snapLock.x && Math.abs(dx - _snapLock.x.raw) > _SNAP_RELEASE) _snapLock.x = null;
+          if (_snapLock.y && Math.abs(dy - _snapLock.y.raw) > _SNAP_RELEASE) _snapLock.y = null;
+
+          // Tenter d'acquérir sur les axes non verrouillés
+          if (!_snapLock.x || !_snapLock.y) {
+            const applyDX = _snapLock.x ? _snapLock.x.raw + _snapLock.x.snap : dx;
+            const applyDY = _snapLock.y ? _snapLock.y.raw + _snapLock.y.snap : dy;
+            let minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+            activeGroup.forEach((el) => {
+              const s = starts.get(el); if (!s) return;
+              const l = s.left + applyDX, t = s.top + applyDY;
+              const r = l + el.offsetWidth, b = t + el.offsetHeight;
+              if (l < minL) minL = l; if (t < minT) minT = t;
+              if (r > maxR) maxR = r; if (b > maxB) maxB = b;
+            });
+            if (minL !== Infinity) {
+              const snapRect = { l: minL, t: minT, r: maxR, b: maxB, w: maxR-minL, h: maxB-minT };
+              const { dx: sdx, dy: sdy, guidesH, guidesV } = computeSnap(snapRect, others);
+              if (!_snapLock.x && sdx) _snapLock.x = { raw: dx, snap: sdx, guides: guidesV };
+              if (!_snapLock.y && sdy) _snapLock.y = { raw: dy, snap: sdy, guides: guidesH };
             }
-            guidesH.forEach((pos) => showSnapGuide(true, pos));
-            guidesV.forEach((pos) => showSnapGuide(false, pos));
           }
+
+          // Appliquer les verrous
+          targetDX = _snapLock.x ? _snapLock.x.raw + _snapLock.x.snap : dx;
+          targetDY = _snapLock.y ? _snapLock.y.raw + _snapLock.y.snap : dy;
+
+          // Guides stockés au moment de l'accroche
+          clearSnapGuides();
+          if (_snapLock.x) _snapLock.x.guides.forEach((pos) => showSnapGuide(false, pos));
+          if (_snapLock.y) _snapLock.y.guides.forEach((pos) => showSnapGuide(true, pos));
         }
       } else {
+        _snapLock.x = null; _snapLock.y = null;
         clearSnapGuides();
       }
     };
 
     const onUp = () => {
       groupDragActive = false;
+      _snapLock.x = null; _snapLock.y = null;
       document.body.classList.remove('is-dragging-el'); // <-- RETRAIT ICI
       activeGroup.forEach((el) => el.classList.remove('is-dragging'));
 
@@ -4499,6 +4451,27 @@ const App = (function () {
         cancelAnimationFrame(groupRafId);
         groupRafId = null;
       }
+      // Snap final sur la bounding box du groupe avant d'écrire les positions
+      if (ctrlSnap) {
+        const others = getAllElements(excludeSet);
+        if (others.length) {
+          let minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+          activeGroup.forEach((el) => {
+            const s = starts.get(el); if (!s) return;
+            const l = s.left + targetDX, t = s.top + targetDY;
+            const r = l + el.offsetWidth, b = t + el.offsetHeight;
+            if (l < minL) minL = l; if (t < minT) minT = t;
+            if (r > maxR) maxR = r; if (b > maxB) maxB = b;
+          });
+          if (minL !== Infinity) {
+            const snapRect = { l: minL, t: minT, r: maxR, b: maxB, w: maxR-minL, h: maxB-minT };
+            const { dx: sdx, dy: sdy } = computeSnap(snapRect, others);
+            if (sdx) targetDX += sdx;
+            if (sdy) targetDY += sdy;
+          }
+        }
+      }
+      clearSnapGuides();
       // Appliquer la position finale exacte
       activeGroup.forEach((el) => {
         const s = starts.get(el);
@@ -4610,7 +4583,7 @@ const App = (function () {
       _resizeRafId = null;
       if (!isResizing || !resizeEl) return;
       resizeEl.style.width = _resizeTargetW + 'px';
-      resizeEl.style.height = _resizeTargetH + 'px';
+      if (resizeEl.dataset.type !== 'note') resizeEl.style.height = _resizeTargetH + 'px';
       resizeEl.style.left = _resizeTargetLeft + 'px';
       resizeEl.style.top = _resizeTargetTop + 'px';
       if (resizeEl.dataset.type === 'file') {
@@ -5508,10 +5481,9 @@ const App = (function () {
       .replace(/\n/g, '<br>');
   }
 
-  function createNoteElement(content, x, y, w, h) {
+  function createNoteElement(content, x, y, w) {
     w = w || 230;
-    h = h || 160;
-    const el = makeElement('note', x || 100, y || 100, w, h);
+    const el = makeElement('note', x || 100, y || 100, w);
     el.dataset.savedata = content;
     const wrap = document.createElement('div');
     wrap.className = 'el-note';
@@ -5622,84 +5594,14 @@ const App = (function () {
     hexInput.spellcheck = false;
     hexInput.readOnly = true;
 
-    // Empêcher le drag de l'élément quand on clique sur l'input
+    // Lecture seule — pas d'édition directe
     hexInput.addEventListener('mousedown', (e) => e.stopPropagation());
     hexInput.addEventListener('pointerdown', (e) => e.stopPropagation());
-    // Double-clic : passer en mode édition
-    hexInput.addEventListener('dblclick', (e) => {
-      e.stopPropagation();
-      hexInput.readOnly = false;
-      hexInput.focus();
-      hexInput.select();
-    });
 
-    let _colorValueOnFocus = hex || '#000000';
-    hexInput.addEventListener('focus', () => {
-      _colorValueOnFocus = el.dataset.savedata || '#000000';
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        if (Collab.isLockedByOther(el.dataset.id)) {
-          toast("Élément en cours d'édition");
-          hexInput.blur();
-          return;
-        }
-        Collab.acquireLock(el.dataset.id);
-      }
-    });
-
-    // Mise à jour de la couleur à la saisie (hex toujours en majuscules)
-    function applyHexColor(val) {
-      let v = val.trim().toUpperCase();
-      if (!v.startsWith('#')) v = '#' + v;
-      if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) {
-        swatch.style.background = v;
-        el.dataset.savedata = v;
-        hexInput.value = v;
-        if (v !== _colorValueOnFocus) {
-          pushAction({
-            type: 'editColor',
-            elId: el.dataset.id,
-            before: { data: _colorValueOnFocus },
-            after: { data: v },
-          });
-        }
-        pushHistory();
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          Collab.syncElementData(el.dataset.id, v);
-        }
-        _syncColorInfo(el, v);
-        return true;
-      }
-      return false;
-    }
-    hexInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        hexInput.blur();
-      }
-      e.stopPropagation();
-    });
-    hexInput.addEventListener('blur', () => {
-      if (!applyHexColor(hexInput.value)) {
-        hexInput.value = (el.dataset.savedata || hex || '#000000').toUpperCase();
-      }
-      hexInput.readOnly = true;
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.releaseLock(el.dataset.id);
-      }
-    });
-    hexInput.addEventListener('input', () => {
-      hexInput.value = hexInput.value.toUpperCase();
-      let v = hexInput.value.trim();
-      if (!v.startsWith('#')) v = '#' + v;
-      if (/^#[0-9A-F]{3}$/.test(v) || /^#[0-9A-F]{6}$/.test(v)) {
-        swatch.style.background = v;
-      }
-    });
-
-    // Bouton pipette
+    // Bouton qui ouvre le spectre de couleur
     const eyeBtn = document.createElement('button');
     eyeBtn.className = 'color-eyedropper';
-    eyeBtn.title = 'Pipette — cliquer sur le canvas pour prendre une couleur';
+    eyeBtn.title = 'Choisir une couleur';
     eyeBtn.innerHTML = `
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:14px; height:14px; display:block; pointer-events:none;">
     <path stroke-linecap="round" stroke-linejoin="round" d="M4.098 19.902a3.75 3.75 0 0 0 5.304 0l6.401-6.402M6.75 21A3.75 3.75 0 0 1 3 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 0 0 3.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.44.44 1.152 0 1.59l-2.879 2.88M6.75 17.25h.008v.008H6.75v-.008Z" />
@@ -5709,7 +5611,7 @@ const App = (function () {
     eyeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      activateEyedropper(el, swatch, hexInput);
+      openColorSpectrumPicker(el, swatch, hexInput, el);
     });
 
     info.appendChild(hexInput);
@@ -5841,6 +5743,196 @@ const App = (function () {
       }
     };
     document.addEventListener('keydown', onKey, true);
+  }
+
+  // ── SPECTRE COULEUR ──────────────────────────────────────────────────────
+  function openColorSpectrumPicker(colorEl, swatch, hexInput, anchorEl) {
+    const existing = document.getElementById('_csp_panel');
+    if (existing) existing.remove();
+
+    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+      if (Collab.isLockedByOther(colorEl.dataset.id)) { toast("Élément en cours d'édition"); return; }
+      Collab.acquireLock(colorEl.dataset.id);
+    }
+
+    const prevColor = colorEl.dataset.savedata || '#000000';
+    let currentHex = prevColor;
+
+    function hexToHsv(hex) {
+      let h = hex.replace('#', '');
+      if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+      const r = parseInt(h.slice(0,2),16)/255, g = parseInt(h.slice(2,4),16)/255, b = parseInt(h.slice(4,6),16)/255;
+      const max = Math.max(r,g,b), min = Math.min(r,g,b);
+      let hue = 0, sat = 0, val = max;
+      const d = max - min;
+      if (d > 0) {
+        sat = d / max;
+        switch(max) {
+          case r: hue = ((g-b)/d + (g<b?6:0))/6; break;
+          case g: hue = ((b-r)/d + 2)/6; break;
+          case b: hue = ((r-g)/d + 4)/6; break;
+        }
+      }
+      return [hue*360, sat, val];
+    }
+    function hsvToHex(h, s, v) {
+      const i = Math.floor(h/60)%6, f = h/60 - Math.floor(h/60);
+      const p = v*(1-s), q = v*(1-f*s), t = v*(1-(1-f)*s);
+      let r,g,b;
+      switch(i){ case 0:r=v;g=t;b=p;break; case 1:r=q;g=v;b=p;break; case 2:r=p;g=v;b=t;break; case 3:r=p;g=q;b=v;break; case 4:r=t;g=p;b=v;break; default:r=v;g=p;b=q; }
+      return '#'+[r,g,b].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join('').toUpperCase();
+    }
+
+    const [initH, initS, initV] = hexToHsv(prevColor);
+    let hue = initH, sat = initS, val = initV;
+
+    const panel = document.createElement('div');
+    panel.id = '_csp_panel';
+    panel.className = 'color-spectrum-picker';
+
+    const gradArea = document.createElement('div'); gradArea.className = 'csp-gradient-area';
+    const whiteOv = document.createElement('div'); whiteOv.className = 'csp-white-overlay';
+    const blackOv = document.createElement('div'); blackOv.className = 'csp-black-overlay';
+    const handle = document.createElement('div'); handle.className = 'csp-handle';
+    gradArea.appendChild(whiteOv); gradArea.appendChild(blackOv); gradArea.appendChild(handle);
+
+    const hueSlider = document.createElement('input');
+    hueSlider.type = 'range'; hueSlider.className = 'csp-hue-slider';
+    hueSlider.min = 0; hueSlider.max = 360; hueSlider.step = 1; hueSlider.value = Math.round(hue);
+
+    const bottom = document.createElement('div'); bottom.className = 'csp-bottom';
+    const preview = document.createElement('div'); preview.className = 'csp-preview';
+
+    const hexLabel = document.createElement('input');
+    hexLabel.type = 'text'; hexLabel.className = 'csp-hex-label';
+    hexLabel.spellcheck = false; hexLabel.maxLength = 7;
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'csp-copy-btn'; copyBtn.title = 'Copier le code hex';
+    copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+
+    const eyeBtn2 = document.createElement('button');
+    eyeBtn2.className = 'csp-eyedropper-btn'; eyeBtn2.title = "Pipette — sélectionner une couleur à l'écran";
+    eyeBtn2.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 9-8.414 8.414A2 2 0 0 0 3 18.828v1.344a2 2 0 0 1-.586 1.414A2 2 0 0 1 3.828 21h1.344a2 2 0 0 0 1.414-.586L15 12"/><path d="m18 9 .4.4a1 1 0 1 1-3 3l-3.8-3.8a1 1 0 1 1 3-3l.4.4 3.4-3.4a1 1 0 1 1 3 3z"/><path d="m2 22 .414-.414"/></svg>`;
+
+    bottom.appendChild(preview); bottom.appendChild(hexLabel); bottom.appendChild(copyBtn); bottom.appendChild(eyeBtn2);
+    panel.appendChild(gradArea); panel.appendChild(hueSlider); panel.appendChild(bottom);
+    document.body.appendChild(panel);
+
+    function updateUI() {
+      gradArea.style.background = `hsl(${hue}, 100%, 50%)`;
+      handle.style.left = (sat * 100) + '%';
+      handle.style.top = ((1 - val) * 100) + '%';
+      currentHex = hsvToHex(hue, sat, val);
+      preview.style.background = currentHex;
+      if (document.activeElement !== hexLabel) hexLabel.value = currentHex.slice(1);
+      swatch.style.background = currentHex;
+      hexInput.value = currentHex;
+      colorEl.dataset.savedata = currentHex;
+      _syncColorInfo(colorEl, currentHex);
+      if (typeof Collab !== 'undefined' && Collab.isActive()) Collab.syncElementData(colorEl.dataset.id, currentHex);
+    }
+
+    function positionPanel() {
+      const rect = anchorEl.getBoundingClientRect();
+      const pw = panel.offsetWidth || 280, ph = panel.offsetHeight || 330;
+      let top = rect.bottom + 8, left = rect.left;
+      if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+      if (left < 8) left = 8;
+      if (top + ph > window.innerHeight - 8) top = rect.top - ph - 8;
+      panel.style.left = left + 'px'; panel.style.top = top + 'px';
+    }
+
+    updateUI(); positionPanel();
+
+    // Drag gradient
+    let draggingGrad = false;
+    function onGradDown(e) {
+      if (e.button !== 0) return;
+      draggingGrad = true; onGradMove(e); e.preventDefault(); e.stopPropagation();
+    }
+    function onGradMove(e) {
+      if (!draggingGrad) return;
+      const rect = gradArea.getBoundingClientRect();
+      sat = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      val = Math.max(0, Math.min(1, 1 - (e.clientY - rect.top) / rect.height));
+      updateUI();
+    }
+    function onGradUp() { draggingGrad = false; }
+    gradArea.addEventListener('mousedown', onGradDown);
+    window.addEventListener('mousemove', onGradMove);
+    window.addEventListener('mouseup', onGradUp);
+
+    hueSlider.addEventListener('input', () => { hue = parseFloat(hueSlider.value); updateUI(); });
+    hueSlider.addEventListener('mousedown', (e) => e.stopPropagation());
+    hueSlider.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+    // Champ hex éditable — # optionnel
+    hexLabel.addEventListener('mousedown', (e) => e.stopPropagation());
+    hexLabel.addEventListener('pointerdown', (e) => e.stopPropagation());
+    hexLabel.addEventListener('focus', () => hexLabel.select());
+    hexLabel.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); hexLabel.blur(); } e.stopPropagation(); });
+    hexLabel.addEventListener('input', () => {
+      const raw = hexLabel.value;
+      const hadHash = raw.startsWith('#');
+      let v = raw.replace(/#/g, '').toUpperCase();
+      hexLabel.value = (hadHash ? '#' : '') + v;
+      const full = '#' + (v.length === 3 ? v[0]+v[0]+v[1]+v[1]+v[2]+v[2] : v);
+      if (/^#[0-9A-F]{6}$/.test(full)) {
+        const [h, s, vv] = hexToHsv(full);
+        hue = h; sat = s; val = vv;
+        hueSlider.value = Math.round(hue);
+        currentHex = full;
+        preview.style.background = full;
+        gradArea.style.background = `hsl(${hue}, 100%, 50%)`;
+        handle.style.left = (sat * 100) + '%';
+        handle.style.top = ((1 - val) * 100) + '%';
+        swatch.style.background = full; hexInput.value = full;
+        colorEl.dataset.savedata = full; _syncColorInfo(colorEl, full);
+        if (typeof Collab !== 'undefined' && Collab.isActive()) Collab.syncElementData(colorEl.dataset.id, full);
+      }
+    });
+    hexLabel.addEventListener('blur', () => { hexLabel.value = currentHex.slice(1); });
+
+    // Bouton copier
+    const _copyOrigHTML = copyBtn.innerHTML;
+    copyBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+    copyBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (navigator.clipboard) navigator.clipboard.writeText(currentHex);
+      copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+      copyBtn.style.background = '#ff3c00'; copyBtn.style.color = '#fff';
+      setTimeout(() => { copyBtn.innerHTML = _copyOrigHTML; copyBtn.style.background = ''; copyBtn.style.color = ''; }, 1000);
+    });
+
+    // Bouton pipette
+    eyeBtn2.addEventListener('mousedown', (e) => e.stopPropagation());
+    eyeBtn2.addEventListener('pointerdown', (e) => e.stopPropagation());
+    eyeBtn2.addEventListener('click', (e) => {
+      e.stopPropagation(); closePanel(false); activateEyedropper(colorEl, swatch, hexInput);
+    });
+
+    panel.addEventListener('mousedown', (e) => e.stopPropagation());
+    panel.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+    function closePanel(save) {
+      panel.remove();
+      window.removeEventListener('mousemove', onGradMove);
+      window.removeEventListener('mouseup', onGradUp);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('mousedown', onOutsideClick, true);
+      if (save && currentHex !== prevColor) {
+        pushAction({ type: 'editColor', elId: colorEl.dataset.id, before: { data: prevColor }, after: { data: currentHex } });
+        pushHistory();
+      }
+      if (typeof Collab !== 'undefined' && Collab.isActive()) Collab.releaseLock(colorEl.dataset.id);
+    }
+
+    const onKeyDown = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closePanel(true); } };
+    const onOutsideClick = (e) => { if (!panel.contains(e.target)) closePanel(true); };
+    document.addEventListener('keydown', onKeyDown, true);
+    setTimeout(() => document.addEventListener('mousedown', onOutsideClick, true), 120);
   }
 
   // ── LIEN ──────────────────────────────────────────────────────────────────

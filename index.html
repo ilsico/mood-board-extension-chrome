@@ -74,10 +74,6 @@
       body.light-mode #lib-toggle-btn svg * {
         stroke: currentColor;
       }
-      body.light-mode .fit-screen-btn svg *,
-      body.light-mode .preview-btn svg * {
-        stroke: #222222;
-      }
 
       body {
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -446,7 +442,6 @@
         align-items: center;
         justify-content: center;
         line-height: 0;
-        transition: background 0.15s;
       }
       .fit-screen-btn:hover,
       .preview-btn:hover {
@@ -675,7 +670,6 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.15s;
       }
       .collab-btn:hover {
         background: var(--bg-input);
@@ -3027,12 +3021,12 @@
       <div class="fit-btn-group">
         <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">
           <svg width="20" height="20" viewBox="13 25 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
         <button id="preview-btn" class="preview-btn" title="Aperçu plein écran (Échap pour quitter)">
           <svg width="20" height="20" viewBox="13 25 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556M19.5556 31.5556H28.4445C29.0581 31.5556 29.5556 32.053 29.5556 32.6667V39.3333C29.5556 39.947 29.0581 40.4444 28.4445 40.4444H19.5556C18.9419 40.4444 18.4445 39.947 18.4445 39.3333V32.6667C18.4445 32.053 18.9419 31.5556 19.5556 31.5556Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556M19.5556 31.5556H28.4445C29.0581 31.5556 29.5556 32.053 29.5556 32.6667V39.3333C29.5556 39.947 29.0581 40.4444 28.4445 40.4444H19.5556C18.9419 40.4444 18.4445 39.947 18.4445 39.3333V32.6667C18.4445 32.053 18.9419 31.5556 19.5556 31.5556Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       </div>

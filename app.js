@@ -8133,6 +8133,7 @@ const App = (function () {
     function onUp() {
       cancelAnimationFrame(dragRaf);
       dragRaf = null;
+      document.body.classList.remove('pfp-dragging');
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     }
@@ -8143,6 +8144,7 @@ const App = (function () {
       startY = e.clientY;
       startFX = _paperFrame.x;
       startFY = _paperFrame.y;
+      document.body.classList.add('pfp-dragging');
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     });

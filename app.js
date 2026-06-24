@@ -1325,6 +1325,7 @@ const App = (function () {
   function goHome() {
     const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
     setConnectorMode(false);
+    deactivatePaperFormat();
 
     // Sauvegarder l'état courant pour les boards collaboratifs
     if (isCollab) {
@@ -8155,35 +8156,40 @@ const App = (function () {
   function captureBoard(exportScale = 2) {
     return new Promise((resolve, reject) => {
       const canvasEl = document.getElementById('canvas');
-      const els = canvasEl.querySelectorAll('.board-element');
-      if (!els.length) {
-        reject('Aucun élément sur le board');
-        return;
+
+      let cropX, cropY, cropW, cropH;
+
+      if (_paperFrame.active) {
+        cropX = _paperFrame.x;
+        cropY = _paperFrame.y;
+        cropW = _paperFrame.w;
+        cropH = _paperFrame.h;
+      } else {
+        const els = canvasEl.querySelectorAll('.board-element');
+        if (!els.length) {
+          reject('Aucun élément sur le board');
+          return;
+        }
+        let minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+        els.forEach((el) => {
+          const l = parseFloat(el.style.left) || 0;
+          const t = parseFloat(el.style.top) || 0;
+          const r = l + (el.offsetWidth || parseFloat(el.style.width) || 0);
+          const b = t + (el.offsetHeight || parseFloat(el.style.height) || 0);
+          if (l < minL) minL = l;
+          if (t < minT) minT = t;
+          if (r > maxR) maxR = r;
+          if (b > maxB) maxB = b;
+        });
+        const contentW = maxR - minL;
+        const contentH = maxB - minT;
+        // Marge générale (5%) + marge fixe pour les ombres portées (20px)
+        const margin = Math.round(Math.max(contentW, contentH) * 0.05) + 20;
+        cropX = minL - margin;
+        cropY = minT - margin;
+        cropW = contentW + margin * 2;
+        cropH = contentH + margin * 2;
       }
-
-      let minL = Infinity,
-        minT = Infinity,
-        maxR = -Infinity,
-        maxB = -Infinity;
-      els.forEach((el) => {
-        const l = parseFloat(el.style.left) || 0;
-        const t = parseFloat(el.style.top) || 0;
-        const r = l + (el.offsetWidth || parseFloat(el.style.width) || 0);
-        const b = t + (el.offsetHeight || parseFloat(el.style.height) || 0);
-        if (l < minL) minL = l;
-        if (t < minT) minT = t;
-        if (r > maxR) maxR = r;
-        if (b > maxB) maxB = b;
-      });
-
-      const contentW = maxR - minL;
-      const contentH = maxB - minT;
-      // Marge générale (5%) + marge fixe pour les ombres portées (20px)
-      const margin = Math.round(Math.max(contentW, contentH) * 0.05) + 20;
-      const cropX = minL - margin;
-      const cropY = minT - margin;
-      const cropW = contentW + margin * 2;
-      const cropH = contentH + margin * 2;
 
       const wrapperBg =
         getComputedStyle(document.getElementById('canvas-wrapper')).backgroundColor || '#f4f4f6';
@@ -8212,6 +8218,7 @@ const App = (function () {
       ghostCanvas
         .querySelectorAll('.element-toolbar, .resize-handle, .color-eyedropper, .video-play-hint')
         .forEach((el) => el.remove());
+      ghostCanvas.querySelector('#paper-frame')?.remove();
 
       ghostCanvas.querySelectorAll('video').forEach((vid) => {
         vid.style.backgroundColor = '#111';
@@ -8365,12 +8372,24 @@ const App = (function () {
       .then(({ canvas, w, h }) => {
         const dataUrl = canvas.toDataURL('image/jpeg', jpegQ);
         const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({
-          orientation: w > h ? 'landscape' : 'portrait',
-          unit: 'px',
-          format: [w, h],
-        });
-        pdf.addImage(dataUrl, 'JPEG', 0, 0, w, h);
+        let pdf;
+        if (_paperFrame.active && _paperFrame.realW_mm != null) {
+          const rw = _paperFrame.realW_mm;
+          const rh = _paperFrame.realH_mm;
+          pdf = new jsPDF({
+            orientation: rw > rh ? 'landscape' : 'portrait',
+            unit: 'mm',
+            format: [rw, rh],
+          });
+          pdf.addImage(dataUrl, 'JPEG', 0, 0, rw, rh);
+        } else {
+          pdf = new jsPDF({
+            orientation: w > h ? 'landscape' : 'portrait',
+            unit: 'px',
+            format: [w, h],
+          });
+          pdf.addImage(dataUrl, 'JPEG', 0, 0, w, h);
+        }
         const board = boards.find((b) => b.id === currentBoardId);
         pdf.save((board ? board.name : 'moodboard') + '.pdf');
       })

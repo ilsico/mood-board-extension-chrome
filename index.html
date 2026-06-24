@@ -74,6 +74,50 @@
       body.light-mode #lib-toggle-btn svg * {
         stroke: currentColor;
       }
+      body.light-mode #key-object-toggle {
+        border-color: rgba(0, 0, 0, 0.2);
+      }
+      body.light-mode .export-select-wrap::after {
+        border-top-color: rgba(0, 0, 0, 0.5);
+      }
+      body.light-mode #export-quality-select {
+        background: var(--bg-input);
+        color: #222222;
+      }
+      body.light-mode #export-quality-select option {
+        background: var(--bg-input);
+      }
+      body.light-mode .export-fmt-btn {
+        background: var(--bg-input);
+        color: #222222;
+      }
+      body.light-mode .export-fmt-btn:hover {
+        background: #a0a0a0;
+      }
+      body.light-mode .export-fmt-btn.active {
+        border-color: rgba(0, 0, 0, 0.45);
+      }
+      body.light-mode .text-font-btn {
+        background: var(--bg-input);
+        border-color: rgba(0, 0, 0, 0.15);
+      }
+      body.light-mode .text-font-btn.active,
+      body.light-mode .text-align-btn.active {
+        background: var(--bg-input);
+        border-color: #222222;
+        color: #222222;
+      }
+      body.light-mode .text-size-row {
+        background: var(--bg-input);
+      }
+      body.light-mode .text-size-val {
+        color: #222222;
+      }
+      body.light-mode .text-font-btn:hover,
+      body.light-mode .text-size-btn:hover,
+      body.light-mode .text-align-btn:hover {
+        background: rgba(0, 0, 0, 0.1);
+      }
 
       body {
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -678,6 +722,10 @@
         background: var(--fg) !important;
         color: var(--fg-inv) !important;
       }
+      #paper-format-btn.active {
+        background: var(--fg) !important;
+        color: var(--fg-inv) !important;
+      }
       #tool-export {
         line-height: 0;
       }
@@ -797,7 +845,7 @@
       }
       .align-panel-title {
         font-size: 12px;
-        color: #ffffff;
+        color: var(--fg);
         font-weight: 600;
         font-family: 'Inter', sans-serif;
         text-align: center;
@@ -822,6 +870,7 @@
         justify-content: center;
         padding: 0;
         border-radius: 3px;
+        color: var(--fg);
         transition: background 0.12s;
       }
       .align-btn:hover {
@@ -833,7 +882,7 @@
       .align-divider {
         width: 100%;
         height: 1px;
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(128, 128, 128, 0.2);
         margin: 2px 0;
       }
       #key-object-toggle {
@@ -960,13 +1009,170 @@
       #export-do-btn:hover {
         opacity: 0.85;
       }
+      /* ===== GUIDE FORMAT PAPIER ===== */
+      #paper-format-panel {
+        position: fixed;
+        bottom: 76px;
+        left: 16px;
+        background: var(--bg-app);
+        border-radius: 8px;
+        display: none;
+        flex-direction: column;
+        z-index: 400;
+        padding: 12px;
+        gap: 8px;
+        width: 268px;
+      }
+      #paper-format-panel.active {
+        display: flex;
+      }
+      .pfp-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .pfp-spacer { flex: 1; }
+      .pfp-preset-btn {
+        background: var(--bg-input);
+        border: 1.5px solid transparent;
+        border-radius: 4px;
+        color: var(--fg);
+        font-size: 12px;
+        font-weight: 600;
+        font-family: 'Inter', sans-serif;
+        padding: 0 10px;
+        height: 28px;
+        cursor: pointer;
+        transition: border-color 0.12s;
+      }
+      .pfp-preset-btn:hover { border-color: rgba(255,255,255,0.2); }
+      .pfp-preset-btn.active { border-color: var(--fg); }
+      .pfp-orient-btn {
+        background: var(--bg-input);
+        border: 1.5px solid transparent;
+        border-radius: 4px;
+        color: var(--fg);
+        font-size: 14px;
+        width: 28px;
+        height: 28px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: border-color 0.12s;
+      }
+      .pfp-orient-btn.active { border-color: var(--fg); }
+      .pfp-sep {
+        border: none;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        margin: 0;
+      }
+      #pfp-w-input, #pfp-h-input {
+        flex: 1;
+        background: var(--bg-input);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 4px;
+        color: var(--fg);
+        font-size: 12px;
+        font-family: 'Inter', sans-serif;
+        padding: 4px 6px;
+        height: 28px;
+        min-width: 0;
+        outline: none;
+      }
+      #pfp-unit-select {
+        background: var(--bg-input);
+        border: none;
+        border-radius: 4px;
+        color: var(--fg);
+        font-size: 12px;
+        font-family: 'Inter', sans-serif;
+        padding: 4px 6px;
+        height: 28px;
+        cursor: pointer;
+        outline: none;
+      }
+      .pfp-x {
+        color: var(--fg);
+        font-size: 12px;
+        opacity: 0.5;
+        flex-shrink: 0;
+      }
+      .pfp-action-btn {
+        flex: 1;
+        background: var(--bg-input);
+        border: 1.5px solid transparent;
+        border-radius: 4px;
+        color: var(--fg);
+        font-size: 12px;
+        font-weight: 600;
+        font-family: 'Inter', sans-serif;
+        height: 28px;
+        cursor: pointer;
+        transition: border-color 0.12s, background 0.12s;
+      }
+      .pfp-apply { border-color: var(--fg); }
+      .pfp-apply:hover { background: var(--fg); color: var(--fg-inv); }
+      .pfp-deactivate:hover { border-color: rgba(255,60,0,0.5); }
+      /* Cadre format papier sur le canvas */
+      #paper-frame {
+        position: absolute;
+        pointer-events: none;
+        z-index: 9999;
+        border: 2px dashed #ff3c00;
+        box-sizing: border-box;
+        background: transparent;
+      }
+      #paper-frame-handle {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 24px;
+        height: 24px;
+        pointer-events: auto;
+        cursor: move;
+        background: #ff3c00;
+        border-radius: 0 0 4px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.75;
+      }
+      #paper-frame-handle:hover { opacity: 1; }
+      /* Light mode */
+      body.light-mode .pfp-preset-btn,
+      body.light-mode .pfp-orient-btn,
+      body.light-mode .pfp-action-btn,
+      body.light-mode #pfp-unit-select {
+        background: var(--bg-input);
+        color: #222222;
+      }
+      body.light-mode .pfp-preset-btn:hover { border-color: rgba(0,0,0,0.2); }
+      body.light-mode .pfp-preset-btn.active,
+      body.light-mode .pfp-orient-btn.active { border-color: #222222; }
+      body.light-mode .pfp-apply { border-color: #222222; }
+      body.light-mode .pfp-apply:hover { background: #222222; color: #F2F2F2; }
+      body.light-mode .pfp-sep { border-top-color: rgba(0,0,0,0.1); }
+      body.light-mode #pfp-w-input,
+      body.light-mode #pfp-h-input {
+        background: var(--bg-input);
+        border-color: rgba(0,0,0,0.15);
+        color: #222222;
+      }
+      body.light-mode #paper-format-btn.active svg {
+        color: var(--fg-inv) !important;
+      }
+      /* Preview mode + readonly */
+      body.preview-mode #paper-format-panel,
+      body.preview-mode #paper-format-btn { display: none !important; }
+      body.readonly-mode #paper-format-btn { display: none; }
       .text-font-btn,
       .text-size-btn,
       .text-align-btn {
         border: none;
         background: none;
         cursor: pointer;
-        color: white;
+        color: var(--fg);
       }
       .text-font-btn {
         flex: 1;
@@ -3009,6 +3215,39 @@
             <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>
           </svg>
         </button>
+        <button id="paper-format-btn" class="collab-btn" title="Guide de format papier">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+            <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="paper-format-panel">
+        <div class="pfp-row">
+          <button class="pfp-preset-btn" data-fmt="A5">A5</button>
+          <button class="pfp-preset-btn" data-fmt="A4">A4</button>
+          <button class="pfp-preset-btn" data-fmt="A3">A3</button>
+          <div class="pfp-spacer"></div>
+          <button class="pfp-orient-btn active" data-orient="portrait" title="Portrait">↕</button>
+          <button class="pfp-orient-btn" data-orient="landscape" title="Paysage">↔</button>
+        </div>
+        <hr class="pfp-sep" />
+        <div class="pfp-row">
+          <input type="number" id="pfp-w-input" min="1" step="0.1" placeholder="L" />
+          <span class="pfp-x">×</span>
+          <input type="number" id="pfp-h-input" min="1" step="0.1" placeholder="H" />
+          <select id="pfp-unit-select">
+            <option value="mm">mm</option>
+            <option value="cm">cm</option>
+            <option value="px">px</option>
+          </select>
+        </div>
+        <hr class="pfp-sep" />
+        <div class="pfp-row">
+          <button id="pfp-apply-btn" class="pfp-action-btn pfp-apply">Appliquer</button>
+          <button id="pfp-deactivate-btn" class="pfp-action-btn pfp-deactivate">Désactiver</button>
+        </div>
       </div>
 
       <div id="broken-images-banner" class="hidden">
@@ -3165,30 +3404,30 @@
           <div class="text-align-btns">
             <button class="text-align-btn" id="ta-left" title="Gauche">
               <svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 3H18M2 8H13M2 13H15" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 3H18M2 8H13M2 13H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="text-align-btn" id="ta-center" title="Centre">
               <svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 3H18M5 8H15M4 13H16" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 3H18M5 8H15M4 13H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="text-align-btn" id="ta-right" title="Droite">
               <svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 3H18M7 8H18M5 13H18" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 3H18M7 8H18M5 13H18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
           </div>
           <div class="text-size-row">
             <button class="text-size-btn" id="text-size-minus">
               <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M6 1L2 5L6 9" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6 1L2 5L6 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <span class="text-size-val" id="text-size-val">14</span>
             <button class="text-size-btn" id="text-size-plus">
               <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 1L6 5L2 9" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 1L6 5L2 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
           </div>
@@ -3203,42 +3442,42 @@
           <div class="align-grid">
             <button class="align-btn" id="align-left" title="Aligner les bords gauches">
               <svg width="20" height="20" viewBox="7 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 1V21M14 13H19C20.1046 13 21 13.8954 21 15V17C21 18.1046 20.1046 19 19 19H14C12.8954 19 12 18.1046 12 17V15C12 13.8954 12.8954 13 14 13ZM14 3H26C27.1046 3 28 3.89543 28 5V7C28 8.10457 27.1046 9 26 9H14C12.8954 9 12 8.10457 12 7V5C12 3.89543 12.8954 3 14 3Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8 1V21M14 13H19C20.1046 13 21 13.8954 21 15V17C21 18.1046 20.1046 19 19 19H14C12.8954 19 12 18.1046 12 17V15C12 13.8954 12.8954 13 14 13ZM14 3H26C27.1046 3 28 3.89543 28 5V7C28 8.10457 27.1046 9 26 9H14C12.8954 9 12 8.10457 12 7V5C12 3.89543 12.8954 3 14 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="align-center-h" title="Centrer horizontalement">
               <svg width="20" height="20" viewBox="43 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M54 1V21M50 9H46C45.4696 9 44.9609 8.78929 44.5858 8.41421C44.2107 8.03914 44 7.53043 44 7V5C44 3.9 44.9 3 46 3H50M58 9H62C62.5304 9 63.0391 8.78929 63.4142 8.41421C63.7893 8.03914 64 7.53043 64 7V5C64 4.46957 63.7893 3.96086 63.4142 3.58579C63.0391 3.21071 62.5304 3 62 3H58M50 19H49C48.4696 19 47.9609 18.7893 47.5858 18.4142C47.2107 18.0391 47 17.5304 47 17V15C47 13.9 47.9 13 49 13H50M58 13H59C59.5304 13 60.0391 13.2107 60.4142 13.5858C60.7893 13.9609 61 14.4696 61 15V17C61 17.5304 60.7893 18.0391 60.4142 18.4142C60.0391 18.7893 59.5304 19 59 19H58" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M54 1V21M50 9H46C45.4696 9 44.9609 8.78929 44.5858 8.41421C44.2107 8.03914 44 7.53043 44 7V5C44 3.9 44.9 3 46 3H50M58 9H62C62.5304 9 63.0391 8.78929 63.4142 8.41421C63.7893 8.03914 64 7.53043 64 7V5C64 4.46957 63.7893 3.96086 63.4142 3.58579C63.0391 3.21071 62.5304 3 62 3H58M50 19H49C48.4696 19 47.9609 18.7893 47.5858 18.4142C47.2107 18.0391 47 17.5304 47 17V15C47 13.9 47.9 13 49 13H50M58 13H59C59.5304 13 60.0391 13.2107 60.4142 13.5858C60.7893 13.9609 61 14.4696 61 15V17C61 17.5304 60.7893 18.0391 60.4142 18.4142C60.0391 18.7893 59.5304 19 59 19H58" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="align-right" title="Aligner les bords droits">
               <svg width="20" height="20" viewBox="79 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M100 21V1M82 3H94C95.1046 3 96 3.89543 96 5V7C96 8.10457 95.1046 9 94 9H82C80.8954 9 80 8.10457 80 7V5C80 3.89543 80.8954 3 82 3ZM89 13H94C95.1046 13 96 13.8954 96 15V17C96 18.1046 95.1046 19 94 19H89C87.8954 19 87 18.1046 87 17V15C87 13.8954 87.8954 13 89 13Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M100 21V1M82 3H94C95.1046 3 96 3.89543 96 5V7C96 8.10457 95.1046 9 94 9H82C80.8954 9 80 8.10457 80 7V5C80 3.89543 80.8954 3 82 3ZM89 13H94C95.1046 13 96 13.8954 96 15V17C96 18.1046 95.1046 19 94 19H89C87.8954 19 87 18.1046 87 17V15C87 13.8954 87.8954 13 89 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="distrib-h" title="Répartir l'espacement horizontal">
               <svg width="20" height="20" viewBox="115 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M132.25 21V16M132.25 6V1M119.75 21V18M119.75 4V1M118.5 4H121C122.381 4 123.5 4.89543 123.5 6V16C123.5 17.1046 122.381 18 121 18H118.5C117.119 18 116 17.1046 116 16V6C116 4.89543 117.119 4 118.5 4ZM131 6H133.5C134.881 6 136 6.89543 136 8V14C136 15.1046 134.881 16 133.5 16H131C129.619 16 128.5 15.1046 128.5 14V8C128.5 6.89543 129.619 6 131 6Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M132.25 21V16M132.25 6V1M119.75 21V18M119.75 4V1M118.5 4H121C122.381 4 123.5 4.89543 123.5 6V16C123.5 17.1046 122.381 18 121 18H118.5C117.119 18 116 17.1046 116 16V6C116 4.89543 117.119 4 118.5 4ZM131 6H133.5C134.881 6 136 6.89543 136 8V14C136 15.1046 134.881 16 133.5 16H131C129.619 16 128.5 15.1046 128.5 14V8C128.5 6.89543 129.619 6 131 6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="align-top" title="Aligner les bords supérieurs">
               <svg width="20" height="20" viewBox="7 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M28 33H8M12 37H14C15.1046 37 16 37.8954 16 39V51C16 52.1046 15.1046 53 14 53H12C10.8954 53 10 52.1046 10 51V39C10 37.8954 10.8954 37 12 37ZM22 37H24C25.1046 37 26 37.8954 26 39V44C26 45.1046 25.1046 46 24 46H22C20.8954 46 20 45.1046 20 44V39C20 37.8954 20.8954 37 22 37Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M28 33H8M12 37H14C15.1046 37 16 37.8954 16 39V51C16 52.1046 15.1046 53 14 53H12C10.8954 53 10 52.1046 10 51V39C10 37.8954 10.8954 37 12 37ZM22 37H24C25.1046 37 26 37.8954 26 39V44C26 45.1046 25.1046 46 24 46H22C20.8954 46 20 45.1046 20 44V39C20 37.8954 20.8954 37 22 37Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="align-center-v" title="Centrer verticalement">
               <svg width="20" height="20" viewBox="43 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M44 43H64M52 47V51C52 51.5304 51.7893 52.0391 51.4142 52.4142C51.0391 52.7893 50.5304 53 50 53H48C47.4696 53 46.9609 52.7893 46.5858 52.4142C46.2107 52.0391 46 51.5304 46 51V47M52 39V35C52 34.4696 51.7893 33.9609 51.4142 33.5858C51.0391 33.2107 50.5304 33 50 33H48C47.4696 33 46.9609 33.2107 46.5858 33.5858C46.2107 33.9609 46 34.4696 46 35V39M62 47V48C62 48.5304 61.7893 49.0391 61.4142 49.4142C61.0391 49.7893 60.5304 50 60 50H58C57.4696 50 56.9609 49.7893 56.5858 49.4142C56.2107 49.0391 56 48.5304 56 48V47M56 39V38C56 36.9 56.9 36 58 36H60C60.5304 36 61.0391 36.2107 61.4142 36.5858C61.7893 36.9609 62 37.4696 62 38V39" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M44 43H64M52 47V51C52 51.5304 51.7893 52.0391 51.4142 52.4142C51.0391 52.7893 50.5304 53 50 53H48C47.4696 53 46.9609 52.7893 46.5858 52.4142C46.2107 52.0391 46 51.5304 46 51V47M52 39V35C52 34.4696 51.7893 33.9609 51.4142 33.5858C51.0391 33.2107 50.5304 33 50 33H48C47.4696 33 46.9609 33.2107 46.5858 33.5858C46.2107 33.9609 46 34.4696 46 35V39M62 47V48C62 48.5304 61.7893 49.0391 61.4142 49.4142C61.0391 49.7893 60.5304 50 60 50H58C57.4696 50 56.9609 49.7893 56.5858 49.4142C56.2107 49.0391 56 48.5304 56 48V47M56 39V38C56 36.9 56.9 36 58 36H60C60.5304 36 61.0391 36.2107 61.4142 36.5858C61.7893 36.9609 62 37.4696 62 38V39" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="align-bottom" title="Aligner les bords inférieurs">
               <svg width="20" height="20" viewBox="79 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M100 53H80M84 33H86C87.1046 33 88 33.8954 88 35V47C88 48.1046 87.1046 49 86 49H84C82.8954 49 82 48.1046 82 47V35C82 33.8954 82.8954 33 84 33ZM94 40H96C97.1046 40 98 40.8954 98 42V47C98 48.1046 97.1046 49 96 49H94C92.8954 49 92 48.1046 92 47V42C92 40.8954 92.8954 40 94 40Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M100 53H80M84 33H86C87.1046 33 88 33.8954 88 35V47C88 48.1046 87.1046 49 86 49H84C82.8954 49 82 48.1046 82 47V35C82 33.8954 82.8954 33 84 33ZM94 40H96C97.1046 40 98 40.8954 98 42V47C98 48.1046 97.1046 49 96 49H94C92.8954 49 92 48.1046 92 47V42C92 40.8954 92.8954 40 94 40Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <button class="align-btn" id="distrib-v" title="Répartir l'espacement vertical">
               <svg width="20" height="20" viewBox="115 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M136 49.25H133M136 36.75H131M119 49.25H116M121 36.75H116M121 45.5H131C132.105 45.5 133 46.6193 133 48V50.5C133 51.8807 132.105 53 131 53H121C119.895 53 119 51.8807 119 50.5V48C119 46.6193 119.895 45.5 121 45.5ZM123 33H129C130.105 33 131 34.1193 131 35.5V38C131 39.3807 130.105 40.5 129 40.5H123C121.895 40.5 121 39.3807 121 38V35.5C121 34.1193 121.895 33 123 33Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M136 49.25H133M136 36.75H131M119 49.25H116M121 36.75H116M121 45.5H131C132.105 45.5 133 46.6193 133 48V50.5C133 51.8807 132.105 53 131 53H121C119.895 53 119 51.8807 119 50.5V48C119 46.6193 119.895 45.5 121 45.5ZM123 33H129C130.105 33 131 34.1193 131 35.5V38C131 39.3807 130.105 40.5 129 40.5H123C121.895 40.5 121 39.3807 121 38V35.5C121 34.1193 121.895 33 123 33Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
           </div>

@@ -514,6 +514,7 @@ const App = (function () {
         const hMm = orient === 'landscape' ? fmt.w : fmt.h;
         document.getElementById('pfp-w-input').value = _mmToUnit(wMm, unit);
         document.getElementById('pfp-h-input').value = _mmToUnit(hMm, unit);
+        if (_paperFrame.active) applyPaperFormat(true);
       });
     });
 
@@ -538,6 +539,7 @@ const App = (function () {
           wIn.value = hIn.value;
           hIn.value = tmp;
         }
+        if (_paperFrame.active) applyPaperFormat(true);
       });
     });
 
@@ -8042,7 +8044,7 @@ const App = (function () {
     if (panel) panel.classList.remove('active');
   }
 
-  function applyPaperFormat() {
+  function applyPaperFormat(keepOpen = false) {
     const wIn = document.getElementById('pfp-w-input');
     const hIn = document.getElementById('pfp-h-input');
     const unit = document.getElementById('pfp-unit-select').value;
@@ -8099,7 +8101,7 @@ const App = (function () {
 
     const btn = document.getElementById('paper-format-btn');
     if (btn) btn.classList.add('active');
-    closePaperFormatPanel();
+    if (!keepOpen) closePaperFormatPanel();
   }
 
   function deactivatePaperFormat() {

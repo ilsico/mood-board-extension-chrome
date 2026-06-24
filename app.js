@@ -8115,8 +8115,8 @@ const App = (function () {
     let startX, startY, startFX, startFY, dragRaf, pendingX, pendingY;
 
     function onMove(e) {
-      pendingX = startFX + (e.clientX - startX);
-      pendingY = startFY + (e.clientY - startY);
+      pendingX = startFX + (e.clientX - startX) / zoomLevel;
+      pendingY = startFY + (e.clientY - startY) / zoomLevel;
       if (dragRaf) return;
       dragRaf = requestAnimationFrame(() => {
         dragRaf = null;
@@ -8157,13 +8157,14 @@ const App = (function () {
     return new Promise((resolve, reject) => {
       const canvasEl = document.getElementById('canvas');
 
-      let cropX, cropY, cropW, cropH;
+      let cropX, cropY, cropW, cropH, margin;
 
       if (_paperFrame.active) {
         cropX = _paperFrame.x;
         cropY = _paperFrame.y;
         cropW = _paperFrame.w;
         cropH = _paperFrame.h;
+        margin = 0;
       } else {
         const els = canvasEl.querySelectorAll('.board-element');
         if (!els.length) {
@@ -8184,7 +8185,7 @@ const App = (function () {
         const contentW = maxR - minL;
         const contentH = maxB - minT;
         // Marge générale (5%) + marge fixe pour les ombres portées (20px)
-        const margin = Math.round(Math.max(contentW, contentH) * 0.05) + 20;
+        margin = Math.round(Math.max(contentW, contentH) * 0.05) + 20;
         cropX = minL - margin;
         cropY = minT - margin;
         cropW = contentW + margin * 2;

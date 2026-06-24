@@ -497,6 +497,82 @@ const App = (function () {
     addEvt('back-btn', 'click', () => goHome());
     addEvt('theme-toggle-btn', 'click', toggleTheme);
 
+    // --- Guide format papier ---
+    addEvt('paper-format-btn', 'click', openPaperFormatPanel);
+    addEvt('pfp-apply-btn', 'click', applyPaperFormat);
+    addEvt('pfp-deactivate-btn', 'click', deactivatePaperFormat);
+
+    document.querySelectorAll('.pfp-preset-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.pfp-preset-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const fmt = _PAPER_FORMATS[btn.dataset.fmt];
+        if (!fmt) return;
+        const unit = document.getElementById('pfp-unit-select').value;
+        const orient = document.querySelector('.pfp-orient-btn.active')?.dataset.orient || 'portrait';
+        const wMm = orient === 'landscape' ? fmt.h : fmt.w;
+        const hMm = orient === 'landscape' ? fmt.w : fmt.h;
+        document.getElementById('pfp-w-input').value = _mmToUnit(wMm, unit);
+        document.getElementById('pfp-h-input').value = _mmToUnit(hMm, unit);
+      });
+    });
+
+    document.querySelectorAll('.pfp-orient-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.pfp-orient-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const activePreset = document.querySelector('.pfp-preset-btn.active');
+        if (activePreset) {
+          const fmt = _PAPER_FORMATS[activePreset.dataset.fmt];
+          if (!fmt) return;
+          const unit = document.getElementById('pfp-unit-select').value;
+          const orient = btn.dataset.orient;
+          const wMm = orient === 'landscape' ? fmt.h : fmt.w;
+          const hMm = orient === 'landscape' ? fmt.w : fmt.h;
+          document.getElementById('pfp-w-input').value = _mmToUnit(wMm, unit);
+          document.getElementById('pfp-h-input').value = _mmToUnit(hMm, unit);
+        } else {
+          const wIn = document.getElementById('pfp-w-input');
+          const hIn = document.getElementById('pfp-h-input');
+          const tmp = wIn.value;
+          wIn.value = hIn.value;
+          hIn.value = tmp;
+        }
+      });
+    });
+
+    const pfpUnitSel = document.getElementById('pfp-unit-select');
+    if (pfpUnitSel) {
+      pfpUnitSel.addEventListener('change', () => {
+        const newUnit = pfpUnitSel.value;
+        const wIn = document.getElementById('pfp-w-input');
+        const hIn = document.getElementById('pfp-h-input');
+        const wPx = _unitToPx(parseFloat(wIn.value) || 0, _pfpPrevUnit);
+        const hPx = _unitToPx(parseFloat(hIn.value) || 0, _pfpPrevUnit);
+        wIn.value = _pxToUnit(wPx, newUnit);
+        hIn.value = _pxToUnit(hPx, newUnit);
+        _pfpPrevUnit = newUnit;
+      });
+    }
+
+    ['pfp-w-input', 'pfp-h-input'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', () => {
+          document.querySelectorAll('.pfp-preset-btn').forEach((b) => b.classList.remove('active'));
+        });
+      }
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      const panel = document.getElementById('paper-format-panel');
+      if (!panel || !panel.classList.contains('active')) return;
+      const pfpBtn = document.getElementById('paper-format-btn');
+      if (!panel.contains(e.target) && (!pfpBtn || !pfpBtn.contains(e.target))) {
+        closePaperFormatPanel();
+      }
+    });
+
     // Double-clic sur le titre → édition inline
     const titleEl = document.getElementById('board-title-display');
     if (titleEl) {

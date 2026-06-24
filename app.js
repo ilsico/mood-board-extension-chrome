@@ -62,6 +62,8 @@ const App = (function () {
   let _syncIntervalId = null;
   // Stockage hors-DOM des données base64 des images (évite des attributs HTML massifs)
   const _imgStore = new Map(); // id -> base64 src
+  let _paperFrame = { active: false, x: 0, y: 0, w: 0, h: 0, realW_mm: null, realH_mm: null };
+  let _pfpPrevUnit = 'mm';
   // Rectangle de sélection
   let isSelecting = false;
   let selRectStart = { x: 0, y: 0 };
@@ -7925,6 +7927,150 @@ const App = (function () {
     el.style.setProperty('--color-card-contrast', _contrastColor(hex));
   }
 
+  // ── FORMAT PAPIER ─────────────────────────────────────────────────────────
+  const _PAPER_FORMATS = {
+    A5: { w: 148, h: 210 },
+    A4: { w: 210, h: 297 },
+    A3: { w: 297, h: 420 },
+  };
+
+  function _unitToPx(val, unit) {
+    if (unit === 'mm') return val * 3.7795;
+    if (unit === 'cm') return val * 37.795;
+    return val;
+  }
+  function _pxToUnit(px, unit) {
+    if (unit === 'mm') return Math.round(px / 3.7795 * 10) / 10;
+    if (unit === 'cm') return Math.round(px / 37.795 * 100) / 100;
+    return Math.round(px);
+  }
+  function _mmToUnit(mm, unit) {
+    if (unit === 'cm') return Math.round(mm / 10 * 100) / 100;
+    if (unit === 'px') return Math.round(mm * 3.7795);
+    return mm;
+  }
+
+  function openPaperFormatPanel() {
+    const panel = document.getElementById('paper-format-panel');
+    if (!panel) return;
+    if (panel.classList.contains('active')) {
+      panel.classList.remove('active');
+      return;
+    }
+    panel.classList.add('active');
+  }
+
+  function closePaperFormatPanel() {
+    const panel = document.getElementById('paper-format-panel');
+    if (panel) panel.classList.remove('active');
+  }
+
+  function applyPaperFormat() {
+    const wIn = document.getElementById('pfp-w-input');
+    const hIn = document.getElementById('pfp-h-input');
+    const unit = document.getElementById('pfp-unit-select').value;
+    const wVal = parseFloat(wIn.value);
+    const hVal = parseFloat(hIn.value);
+    if (!wVal || !hVal || wVal <= 0 || hVal <= 0) {
+      toast('Dimensions invalides');
+      return;
+    }
+    const wPx = _unitToPx(wVal, unit);
+    const hPx = _unitToPx(hVal, unit);
+
+    let realW_mm, realH_mm;
+    if (unit === 'mm') { realW_mm = wVal; realH_mm = hVal; }
+    else if (unit === 'cm') { realW_mm = wVal * 10; realH_mm = hVal * 10; }
+    else { realW_mm = wVal / 3.7795; realH_mm = hVal / 3.7795; }
+
+    const canvasEl = document.getElementById('canvas');
+    const els = canvasEl.querySelectorAll('.board-element');
+    let cx = 0, cy = 0;
+    if (els.length) {
+      let minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+      els.forEach((el) => {
+        const l = parseFloat(el.style.left) || 0;
+        const t = parseFloat(el.style.top) || 0;
+        const r = l + (el.offsetWidth || 0);
+        const b = t + (el.offsetHeight || 0);
+        if (l < minL) minL = l;
+        if (t < minT) minT = t;
+        if (r > maxR) maxR = r;
+        if (b > maxB) maxB = b;
+      });
+      cx = (minL + maxR) / 2;
+      cy = (minT + maxB) / 2;
+    }
+
+    _paperFrame = { active: true, x: cx - wPx / 2, y: cy - hPx / 2, w: wPx, h: hPx, realW_mm, realH_mm };
+
+    let frame = document.getElementById('paper-frame');
+    if (!frame) {
+      frame = document.createElement('div');
+      frame.id = 'paper-frame';
+      const handle = document.createElement('div');
+      handle.id = 'paper-frame-handle';
+      handle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>';
+      frame.appendChild(handle);
+      canvasEl.appendChild(frame);
+      _initPaperFrameDrag(handle);
+    }
+    frame.style.left = _paperFrame.x + 'px';
+    frame.style.top = _paperFrame.y + 'px';
+    frame.style.width = _paperFrame.w + 'px';
+    frame.style.height = _paperFrame.h + 'px';
+
+    const btn = document.getElementById('paper-format-btn');
+    if (btn) btn.classList.add('active');
+    closePaperFormatPanel();
+  }
+
+  function deactivatePaperFormat() {
+    _paperFrame = { active: false, x: 0, y: 0, w: 0, h: 0, realW_mm: null, realH_mm: null };
+    const frame = document.getElementById('paper-frame');
+    if (frame) frame.remove();
+    const btn = document.getElementById('paper-format-btn');
+    if (btn) btn.classList.remove('active');
+    closePaperFormatPanel();
+  }
+
+  function _initPaperFrameDrag(handle) {
+    let startX, startY, startFX, startFY, dragRaf, pendingX, pendingY;
+
+    function onMove(e) {
+      pendingX = startFX + (e.clientX - startX);
+      pendingY = startFY + (e.clientY - startY);
+      if (dragRaf) return;
+      dragRaf = requestAnimationFrame(() => {
+        dragRaf = null;
+        _paperFrame.x = pendingX;
+        _paperFrame.y = pendingY;
+        const frame = document.getElementById('paper-frame');
+        if (frame) {
+          frame.style.left = _paperFrame.x + 'px';
+          frame.style.top = _paperFrame.y + 'px';
+        }
+      });
+    }
+
+    function onUp() {
+      cancelAnimationFrame(dragRaf);
+      dragRaf = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    handle.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      startX = e.clientX;
+      startY = e.clientY;
+      startFX = _paperFrame.x;
+      startFY = _paperFrame.y;
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+  }
+
   const _EXPORT_SCALES = { 1: 1, 2: 2, 3: 3 };
   const _EXPORT_JPEG_Q = { 1: 0.6, 2: 0.82, 3: 0.95 };
 
@@ -8738,6 +8884,7 @@ const App = (function () {
     exportPDF,
     openExportModal,
     closeExportModal,
+    deactivatePaperFormat,
     openEditBoardModal,
     closeEditBoardModal,
     confirmEditBoard,

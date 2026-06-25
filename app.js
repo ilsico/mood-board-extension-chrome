@@ -132,6 +132,11 @@ const App = (function () {
     maxWidth = maxWidth || 1600;
     quality = quality || 0.8;
     return new Promise(function (resolve) {
+      // GIFs must never go through canvas — it only captures one frame and kills animation
+      if (src && src.startsWith('data:image/gif')) {
+        resolve(src);
+        return;
+      }
       var img = new Image();
       img.onload = function () {
         var w = img.naturalWidth,
@@ -228,19 +233,10 @@ const App = (function () {
     if (window._fbDb) {
       const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
       if (board.thumbnail) payload.thumbnail = board.thumbnail;
-      const payloadSize = new Blob([JSON.stringify(payload)]).size;
-      if (payloadSize > 8 * 1024 * 1024) {
-        toast(
-          'Erreur : Le board est trop lourd (' +
-            Math.round(payloadSize / 1024 / 1024) +
-            ' Mo). Réduisez la taille des images.'
-        );
-      } else {
-        window._fbDb
-          .ref('boards/' + currentBoardId)
-          .set(payload)
-          .catch((e) => console.warn('Firebase sync error:', e));
-      }
+      window._fbDb
+        .ref('boards/' + currentBoardId)
+        .set(payload)
+        .catch((e) => console.warn('Firebase sync error:', e));
     }
   }
 
@@ -1681,7 +1677,7 @@ const App = (function () {
     updateZoomDisplay();
   }
   function zoomOut() {
-    zoomLevel = Math.max(zoomLevel - 0.1, 0.15);
+    zoomLevel = Math.max(zoomLevel - 0.1, 0.08);
     applyTransform();
     updateZoomDisplay();
   }
@@ -1935,7 +1931,7 @@ const App = (function () {
             if (e.altKey || e.ctrlKey) {
               const rawMul = Math.exp(-e.deltaY * 0.01);
               const cappedMul = Math.min(Math.max(rawMul, 0.5), 2.0);
-              const newZ = Math.min(Math.max(zoomLevel * cappedMul, 0.15), 4);
+              const newZ = Math.min(Math.max(zoomLevel * cappedMul, 0.08), 4);
               if (Math.abs(newZ - zoomLevel) > 0.001) {
                 const rect = wrapperEl.getBoundingClientRect();
                 const mx = e.clientX - rect.left;
@@ -1984,7 +1980,7 @@ const App = (function () {
           // un cran de molette de souris classique.
           const rawMul = Math.exp(-e.deltaY * 0.01);
           const cappedMul = Math.min(Math.max(rawMul, 0.5), 2.0);
-          const newZ = Math.min(Math.max(zoomLevel * cappedMul, 0.15), 4);
+          const newZ = Math.min(Math.max(zoomLevel * cappedMul, 0.08), 4);
 
           if (Math.abs(newZ - zoomLevel) > 0.001) {
             const rect = wrapper.getBoundingClientRect();
@@ -2080,7 +2076,7 @@ const App = (function () {
             const newDist = Math.sqrt(dx * dx + dy * dy);
             const deltaPx = newDist - initialPinchDist;
             initialPinchDist = newDist;
-            const newZ = Math.min(Math.max(zoomLevel * Math.exp(deltaPx * 0.08), 0.15), 4);
+            const newZ = Math.min(Math.max(zoomLevel * Math.exp(deltaPx * 0.08), 0.08), 4);
 
             if (Math.abs(newZ - zoomLevel) > 0.001) {
               const rect = wrapper.getBoundingClientRect();
@@ -8852,15 +8848,10 @@ const App = (function () {
       if (window._fbDb) {
         const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
         if (board.thumbnail) payload.thumbnail = board.thumbnail;
-        const payloadSize = new Blob([JSON.stringify(payload)]).size;
-        if (payloadSize > 8 * 1024 * 1024) {
-          toast('Erreur : Le board est trop lourd. Réduisez la taille des images.');
-        } else {
-          window._fbDb
-            .ref('boards/' + boardId)
-            .set(payload)
-            .catch((e) => console.warn('Firebase sync error:', e));
-        }
+        window._fbDb
+          .ref('boards/' + boardId)
+          .set(payload)
+          .catch((e) => console.warn('Firebase sync error:', e));
       }
     }
   }

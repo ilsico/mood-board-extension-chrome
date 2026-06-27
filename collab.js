@@ -568,6 +568,8 @@ window.Collab = (function () {
   function syncElementCreate(elId, type, x, y, w, h, data, z, style) {
     if (!_active || !_sessionRef) return;
     var _isImg = type === 'image';
+
+    // Écrire d'abord avec 'pending' pour que le collab voie l'élément immédiatement
     _sessionRef.child('elements/' + elId).set({
       x: x,
       y: y,
@@ -582,13 +584,21 @@ window.Collab = (function () {
       lastEditAt: firebase.database.ServerValue.TIMESTAMP,
       deleted: false,
     });
-    // Upload image data separately to avoid "Write too large" Firebase errors
-    if (_isImg && data && data !== 'pending' && data.length <= 786432) {
-      _sessionRef.child('elements/' + elId).update({
-        data: data,
-        lastEditBy: _userId,
-        lastEditAt: firebase.database.ServerValue.TIMESTAMP,
-      });
+
+    // Upload vers Storage puis mettre à jour RTDB avec l'URL (toutes tailles)
+    if (_isImg && data && data !== 'pending') {
+      _uploadImageToStorage(elId, data)
+        .then(function (url) {
+          if (!_active || !_sessionRef) return;
+          _sessionRef.child('elements/' + elId).update({
+            data: url,
+            lastEditBy: _userId,
+            lastEditAt: firebase.database.ServerValue.TIMESTAMP,
+          });
+        })
+        .catch(function () {
+          // Tolérer l'échec — l'image reste 'pending' dans RTDB
+        });
     }
   }
 

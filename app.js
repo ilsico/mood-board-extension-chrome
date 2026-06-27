@@ -355,9 +355,9 @@ const App = (function () {
       'mousedown',
       (e) => {
         if (e.detail >= 2) return; // ignorer les doubles-clics (ils déclenchent activateNoteEdit)
-        const panel = document.getElementById('text-edit-panel');
-        if (!panel || !panel.classList.contains('active')) return;
-        if (panel.contains(e.target)) return; // clic dans le panneau → garder ouvert
+        const sbText = document.querySelector('.sb-text');
+        if (!sbText || sbText.classList.contains('sb-disabled')) return;
+        if (sbText.contains(e.target)) return;
         if (
           e.target.closest('.board-element[data-editing="1"]') ||
           e.target.closest('.el-caption:focus')
@@ -464,6 +464,13 @@ const App = (function () {
       const el = document.getElementById(id);
       if (el) el.addEventListener(event, handler);
     };
+
+    // Guard mousedown pour garder sb-text actif quand on clique ses boutons
+    const _sbText = document.querySelector('.sb-text');
+    if (_sbText) {
+      _sbText.addEventListener('mousedown', () => { window._textPanelKeepOpen = true; });
+      _sbText.addEventListener('mouseup',   () => { window._textPanelKeepOpen = false; });
+    }
 
     // Écran d'accueil
     addEvt('new-board-btn', 'click', () => createBoard());
@@ -759,8 +766,6 @@ const App = (function () {
 
     addEvt('tool-connector', 'click', () => toggleConnectorMode());
 
-    addEvt('tool-export', 'click', () => openExportModal());
-
     // Panneau texte
     addEvt('tp-roman', 'click', () => applyTextFont('helvetica-roman'));
     addEvt('tp-bold', 'click', () => applyTextFont('helvetica-bold'));
@@ -842,17 +847,8 @@ const App = (function () {
     addEvt('export-do-btn', 'click', () => {
       const quality = parseInt(document.getElementById('export-quality-select').value);
       const isPdf = document.getElementById('export-fmt-pdf').classList.contains('active');
-      closeExportPanel();
       if (isPdf) exportPDF(quality);
       else exportPNG(quality);
-    });
-    document.addEventListener('mousedown', (e) => {
-      const ep = document.getElementById('export-panel');
-      if (!ep || !ep.classList.contains('active')) return;
-      const exportBtn = document.getElementById('tool-export');
-      if (!ep.contains(e.target) && (!exportBtn || !exportBtn.contains(e.target))) {
-        closeExportPanel();
-      }
     });
 
     // Menu contextuel
@@ -3205,8 +3201,8 @@ const App = (function () {
       }
     });
     ta.addEventListener('blur', (e) => {
-      const panel = document.getElementById('text-edit-panel');
-      const goingToPanel = panel && e.relatedTarget && panel.contains(e.relatedTarget);
+      const sbText = document.querySelector('.sb-text');
+      const goingToPanel = sbText && e.relatedTarget && sbText.contains(e.relatedTarget);
       if (goingToPanel || window._textPanelKeepOpen) return;
       ta.contentEditable = 'false';
       delete el.dataset.editing;
@@ -5608,8 +5604,8 @@ const App = (function () {
     });
 
     ta.addEventListener('blur', (e) => {
-      const panel = document.getElementById('text-edit-panel');
-      const goingToPanel = panel && e.relatedTarget && panel.contains(e.relatedTarget);
+      const sbText = document.querySelector('.sb-text');
+      const goingToPanel = sbText && e.relatedTarget && sbText.contains(e.relatedTarget);
       if (goingToPanel || window._textPanelKeepOpen) return;
       ta.contentEditable = 'false';
       delete el.dataset.editing;
@@ -6996,20 +6992,19 @@ const App = (function () {
   }
 
   function updateAlignPanel() {
-    const panel = document.getElementById('align-panel');
-    if (!panel) return;
+    const sbAlign = document.querySelector('.sb-align');
+    const sbText = document.querySelector('.sb-text');
     const toolbar = document.getElementById('toolbar');
-    const textPanel = document.getElementById('text-edit-panel');
     if (multiSelected.size >= 2) {
       if (toolbar) toolbar.style.display = 'none';
-      panel.classList.add('active');
+      if (sbAlign) sbAlign.classList.remove('sb-disabled');
       if (_keyObject && !multiSelected.has(_keyObject)) {
         _keyObject.classList.remove('key-object');
         _keyObject = null;
       }
     } else {
-      panel.classList.remove('active');
-      if (toolbar && textPanel && !textPanel.classList.contains('active')) {
+      if (sbAlign) sbAlign.classList.add('sb-disabled');
+      if (toolbar && sbText && sbText.classList.contains('sb-disabled')) {
         toolbar.style.display = '';
       }
       _keyObjectMode = false;
@@ -7020,7 +7015,6 @@ const App = (function () {
       const toggle = document.getElementById('key-object-toggle');
       if (toggle) toggle.classList.remove('active');
     }
-    updateExportPanelPosition();
   }
 
   function alignElements(type) {
@@ -7166,11 +7160,7 @@ const App = (function () {
   function showTextEditPanel(el) {
     textEditTarget = el;
     document.getElementById('toolbar').style.display = 'none';
-    const alignPanel = document.getElementById('align-panel');
-    if (alignPanel) alignPanel.classList.remove('active');
-    const panel = document.getElementById('text-edit-panel');
-    panel.classList.add('active');
-    updateExportPanelPosition();
+    document.querySelector('.sb-text')?.classList.remove('sb-disabled');
 
     // Déterminer la cible du style (le div note-content dans une note, ou l'élément lui-même si c'est une caption)
     const target = el.querySelector('.el-note-content') || el;
@@ -7186,28 +7176,18 @@ const App = (function () {
       const activeBtn = document.getElementById(activeId);
       if (activeBtn) activeBtn.classList.add('active');
     }
-
-    if (!panel._mousedownGuard) {
-      panel._mousedownGuard = true;
-      panel.addEventListener('mousedown', () => {
-        window._textPanelKeepOpen = true;
-      });
-      panel.addEventListener('mouseup', () => {
-        window._textPanelKeepOpen = false;
-      });
-    }
   }
   function hideTextEditPanel() {
-    document.getElementById('text-edit-panel').classList.remove('active');
+    document.querySelector('.sb-text')?.classList.add('sb-disabled');
     textEditTarget = null;
     updateAlignPanel();
   }
 
   function handleCaptionBlur(e, cap) {
-    const panel = document.getElementById('text-edit-panel');
-    const goingToPanel = panel && e.relatedTarget && panel.contains(e.relatedTarget);
+    const sbText = document.querySelector('.sb-text');
+    const goingToPanel = sbText && e.relatedTarget && sbText.contains(e.relatedTarget);
 
-    // Si on clique vers le panneau de texte, on ne ferme pas
+    // Si on clique vers le subheader texte, on ne ferme pas
     if (goingToPanel || window._textPanelKeepOpen) return;
 
     hideTextEditPanel();
@@ -8412,39 +8392,6 @@ const App = (function () {
       'join-board-modal',
     ].forEach(closeModal);
   }
-  function openExportModal() {
-    const panel = document.getElementById('export-panel');
-    if (!panel) return;
-    if (panel.classList.contains('active')) {
-      panel.classList.remove('active');
-      updateExportPanelPosition();
-      return;
-    }
-    panel.classList.add('active');
-    updateExportPanelPosition();
-  }
-  function closeExportPanel() {
-    const panel = document.getElementById('export-panel');
-    if (panel) panel.classList.remove('active');
-    updateExportPanelPosition();
-  }
-  function closeExportModal() {
-    closeExportPanel();
-  }
-  function updateExportPanelPosition() {
-    const ep = document.getElementById('export-panel');
-    const ap = document.getElementById('align-panel');
-    const tp = document.getElementById('text-edit-panel');
-    if (ep && ep.classList.contains('active')) {
-      const offset = (90 + ep.offsetHeight + 8) + 'px';
-      if (ap) ap.style.bottom = offset;
-      if (tp) tp.style.bottom = offset;
-    } else {
-      if (ap) ap.style.bottom = '';
-      if (tp) tp.style.bottom = '';
-    }
-  }
-
   // ── CUSTOM CURSOR ─────────────────────────────────────────────────────────
   function _applyCustomCursor() {
     const svg =
@@ -8973,8 +8920,6 @@ const App = (function () {
     ctxAddCaption,
     exportPNG,
     exportPDF,
-    openExportModal,
-    closeExportModal,
     deactivatePaperFormat,
     openEditBoardModal,
     closeEditBoardModal,

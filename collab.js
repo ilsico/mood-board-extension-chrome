@@ -304,9 +304,17 @@ window.Collab = (function () {
       _sessionRef.child('presence/' + _userId).remove();
     }
 
-    // Sauvegarder les données en local avant de quitter
+    // Télécharger les images Storage en local puis sauvegarder
     if (_sessionRef) {
-      _mergeSessionToLocal();
+      var endBtn = document.getElementById('collab-btn');
+      var _endBtnOriginal = endBtn ? endBtn.innerHTML : null;
+      var _setEndProgress = function (done, total) {
+        if (endBtn) endBtn.textContent = total > 0 ? 'Sauvegarde… ' + done + ' / ' + total : 'Sauvegarde…';
+      };
+      _downloadStorageImages(_setEndProgress).then(function () {
+        if (endBtn && _endBtnOriginal !== null) endBtn.innerHTML = _endBtnOriginal;
+        _mergeSessionToLocal();
+      });
     }
 
     // Détacher tous les listeners Firebase
@@ -1339,6 +1347,11 @@ window.Collab = (function () {
       elemSnap.forEach((child) => {
         const d = child.val();
         if (d.deleted) return;
+        var elData = d.data || '';
+        if (d.type === 'image' && App._imgStoreGet) {
+          var localBase64 = App._imgStoreGet(child.key);
+          if (localBase64) elData = localBase64;
+        }
         elements.push({
           id: child.key,
           type: d.type,
@@ -1347,7 +1360,7 @@ window.Collab = (function () {
           w: d.w,
           h: d.h,
           z: d.z,
-          data: d.data || '',
+          data: elData,
           style: d.style || null,
         });
       });

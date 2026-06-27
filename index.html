@@ -48,6 +48,7 @@
         --fg: #ffffff;
         --fg-inv: #222222;
         --accent: #dc4111;
+        --bg-panel: #2e2e2e;
       }
 
       /* ===== LIGHT MODE OVERRIDES ===== */
@@ -57,6 +58,7 @@
         --bg-input: #b0b0b0;
         --fg: #222222;
         --fg-inv: #F2F2F2;
+        --bg-panel: #b8b8b8;
       }
       body.light-mode .el-connection line {
         stroke: #2C2C2C;
@@ -123,6 +125,10 @@
       body.light-mode .text-size-btn:hover,
       body.light-mode .text-align-btn:hover {
         background: rgba(0, 0, 0, 0.1);
+      }
+      body.light-mode #lib-panel.open {
+        border-left-color: rgba(0, 0, 0, 0.12);
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
       }
 
       body {
@@ -1280,7 +1286,7 @@
         min-width: 300px;
         border-left: 1px solid rgba(255, 255, 255, 0.08);
         box-shadow: -4px 0 20px rgba(0, 0, 0, 0.4);
-        background: var(--bg-app);
+        background: var(--bg-panel);
       }
       /* Wrapper interne : remplace overflow:hidden du panneau pour permettre à l'onglet de déborder */
       #lib-panel-inner {

@@ -1342,24 +1342,37 @@
         transition: opacity 0.25s 0.1s;
       }
       .lib-panel-header {
-        padding: 0 14px 12px;
+        padding: 14px 14px 12px;
         flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .lib-panel-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--fg);
+        opacity: 0.45;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        white-space: nowrap;
       }
       .lib-add-btn {
         display: flex;
         align-items: center;
-        justify-content: center;
-        gap: 8px;
-        width: 100%;
-        padding: 11px 16px;
+        gap: 5px;
+        padding: 6px 12px;
         background: #ff3c00;
         color: #fff;
         border: none;
+        border-radius: 8px;
         cursor: pointer;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 700;
         transition: background 0.15s;
         white-space: nowrap;
+        flex-shrink: 0;
       }
       .lib-add-btn:hover {
         background: #e03500;
@@ -1374,8 +1387,9 @@
         gap: 5px;
       }
       .lib-folder-chip {
-        padding: 5px 10px;
+        padding: 4px 11px;
         border: 1px solid rgba(128,128,128,0.25);
+        border-radius: 20px;
         background: none;
         cursor: pointer;
         font-size: 11px;
@@ -1403,6 +1417,7 @@
         width: 100%;
         padding: 8px 12px 8px 34px;
         border: 1px solid rgba(128, 128, 128, 0.25);
+        border-radius: 8px;
         font-size: 13px;
         outline: none;
         background: var(--bg-input);
@@ -1433,7 +1448,7 @@
         align-items: start;
       }
       .lib-panel-item {
-        border-radius: 0;
+        border-radius: 8px;
         overflow: hidden;
         border: 2px solid transparent;
         cursor: grab;
@@ -3549,7 +3564,8 @@
           <div id="lib-panel-inner">
             <div id="lib-panel-content">
               <div class="lib-panel-header">
-                <button id="lib-add-btn" class="lib-add-btn">&#43; Ajouter plus d'images</button>
+                <span class="lib-panel-title">Bibliothèque</span>
+                <button id="lib-add-btn" class="lib-add-btn">&#43; Ajouter</button>
               </div>
 
               <div class="lib-folders" id="lib-folders">

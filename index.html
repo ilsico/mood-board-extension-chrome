@@ -1364,31 +1364,33 @@
       .lib-folders {
         padding: 10px 14px 6px;
         flex-shrink: 0;
-        border-top: 1px solid #f0f0f6;
-        border-bottom: 1px solid #f0f0f6;
+        border-top: 1px solid rgba(128, 128, 128, 0.2);
+        border-bottom: 1px solid rgba(128, 128, 128, 0.2);
         display: flex;
         flex-wrap: wrap;
         gap: 5px;
       }
       .lib-folder-chip {
         padding: 5px 10px;
-        border: 1px solid #eaeaf0;
+        border: 1px solid rgba(128,128,128,0.25);
         background: none;
         cursor: pointer;
         font-size: 11px;
-        color: #666;
+        color: var(--fg);
+        opacity: 0.65;
         font-weight: 600;
         transition: all 0.15s;
         white-space: nowrap;
       }
       .lib-folder-chip:hover {
-        background: #f5f5fb;
-        border-color: #d0d0e0;
+        background: rgba(128, 128, 128, 0.15);
+        border-color: rgba(128, 128, 128, 0.4);
       }
       .lib-folder-chip.active {
         background: rgba(255, 60, 0, 0.08);
         border-color: #ff3c00;
         color: #ff3c00;
+        opacity: 1;
       }
       .lib-search-wrap {
         padding: 10px 14px;

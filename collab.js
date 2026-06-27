@@ -79,6 +79,53 @@ window.Collab = (function () {
     return throttled;
   }
 
+  /**
+   * Upload une image base64 vers Firebase Storage.
+   * Retourne l'URL de téléchargement publique.
+   * Lève une erreur si l'upload échoue (à catch par l'appelant).
+   */
+  async function _uploadImageToStorage(elId, base64) {
+    const storageRef = firebase.storage().ref('collabImages/' + _boardId + '/' + elId);
+    await storageRef.putString(base64, 'data_url');
+    return await storageRef.getDownloadURL();
+  }
+
+  /**
+   * Télécharge toutes les images Firebase Storage du canvas courant en base64
+   * et les stocke dans _imgStore via App._imgStoreSet.
+   * Appelée avant endSession pour garantir une copie locale complète.
+   */
+  async function _downloadStorageImages(progressCb) {
+    const imgEls = Array.from(document.querySelectorAll('[data-type="image"]'));
+    const storagePrefix = 'https://firebasestorage.googleapis.com';
+    var done = 0;
+    if (progressCb) progressCb(0, imgEls.length);
+    for (var i = 0; i < imgEls.length; i++) {
+      var el = imgEls[i];
+      var elId = el.dataset.id;
+      var imgTag = el.querySelector('img');
+      if (!imgTag) { done++; continue; }
+      var src = imgTag.src || '';
+      // Télécharger uniquement les URLs Storage (pas les base64 déjà en mémoire)
+      if (src.indexOf(storagePrefix) === 0) {
+        try {
+          var resp = await fetch(src);
+          var blob = await resp.blob();
+          var base64 = await new Promise(function (resolve) {
+            var reader = new FileReader();
+            reader.onloadend = function () { resolve(reader.result); };
+            reader.readAsDataURL(blob);
+          });
+          if (App._imgStoreSet) App._imgStoreSet(elId, base64);
+        } catch (_) {
+          // Échec toléré : l'URL reste dans _imgStore si App._imgStoreGet la retourne
+        }
+      }
+      done++;
+      if (progressCb) progressCb(done, imgEls.length);
+    }
+  }
+
   /** Crée un debounce simple */
   function _makeDebounce(fn, ms) {
     let timer = null;
@@ -190,7 +237,7 @@ window.Collab = (function () {
                 lastEditAt: firebase.database.ServerValue.TIMESTAMP,
                 deleted: false,
               };
-              if (isImg && el.data && el.data !== 'pending') {
+              if (isImg && el.data && el.data !== 'pending' && el.data.length <= 786432) {
                 pendingImages.push({ id: el.id, data: el.data });
               }
             }
@@ -474,6 +521,8 @@ window.Collab = (function () {
 
   function syncElementData(elId, data, immediate) {
     if (!_active || !_sessionRef) return;
+    // Guard against Firebase "Write too large" — skip base64 payloads over ~768 KB
+    if (typeof data === 'string' && data.length > 786432) return;
     _recentDataEdits[elId] = Date.now();
     var _doSync = function (id, d) {
       _sessionRef.child('elements/' + id).update({
@@ -503,6 +552,7 @@ window.Collab = (function () {
 
   function syncElementCreate(elId, type, x, y, w, h, data, z, style) {
     if (!_active || !_sessionRef) return;
+    var _isImg = type === 'image';
     _sessionRef.child('elements/' + elId).set({
       x: x,
       y: y,
@@ -510,13 +560,21 @@ window.Collab = (function () {
       h: h || null,
       z: z || 100,
       type: type,
-      data: data || '',
+      data: _isImg ? 'pending' : (data || ''),
       style: style || null,
       version: 0,
       lastEditBy: _userId,
       lastEditAt: firebase.database.ServerValue.TIMESTAMP,
       deleted: false,
     });
+    // Upload image data separately to avoid "Write too large" Firebase errors
+    if (_isImg && data && data !== 'pending' && data.length <= 786432) {
+      _sessionRef.child('elements/' + elId).update({
+        data: data,
+        lastEditBy: _userId,
+        lastEditAt: firebase.database.ServerValue.TIMESTAMP,
+      });
+    }
   }
 
   function syncElementDelete(elId) {

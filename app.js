@@ -5143,6 +5143,7 @@ const App = (function () {
             if (e && e.id) _localById[e.id] = e;
           });
           let _recovered = 0;
+          const _toUpload = [];
           _pendingImageIds.forEach((id) => {
             const local = _localById[id];
             if (
@@ -5158,13 +5159,18 @@ const App = (function () {
                 const imgTag = elDom.querySelector('img');
                 if (imgTag) imgTag.src = local.data;
               }
-              if (typeof Collab !== 'undefined' && Collab.isActive()) {
-                Collab.syncElementData(id, local.data, true);
-              }
+              _toUpload.push({ id, data: local.data });
               _recovered++;
             }
           });
           if (_recovered) toast(_recovered + ' image(s) restaurée(s) depuis la sauvegarde locale');
+          // Upload sequentially (400 ms apart) to avoid Firebase "Write too large" errors
+          for (var _ri = 0; _ri < _toUpload.length; _ri++) {
+            if (_ri > 0) await new Promise((r) => setTimeout(r, 400));
+            if (typeof Collab !== 'undefined' && Collab.isActive()) {
+              Collab.syncElementData(_toUpload[_ri].id, _toUpload[_ri].data, true);
+            }
+          }
         }
 
         setTimeout(_updateBrokenBanner, 200);
@@ -8783,6 +8789,12 @@ const App = (function () {
   function _collabCreateConnection(from, to) {
     createConnection(from, to);
   }
+  function _imgStoreGet(elId) {
+    return _imgStore.get(elId);
+  }
+  function _imgStoreSet(elId, data) {
+    _imgStore.set(elId, data);
+  }
   function _collabDeleteImgStore(elId) {
     _imgStore.delete(elId);
   }
@@ -8948,6 +8960,8 @@ const App = (function () {
     _collabRemoveConnectionsForEl,
     _collabRemoveCaptionsForEl,
     _collabCreateConnection,
+    _imgStoreGet,
+    _imgStoreSet,
     _collabDeleteImgStore,
     _collabMergeElements,
     updateBoardThumbnail,

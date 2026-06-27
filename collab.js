@@ -204,8 +204,36 @@ window.Collab = (function () {
           maxZ: 100,
         });
         if (opts && opts.elements) {
+          // Séparer images et autres éléments
+          const imgEls = opts.elements.filter((el) => el.type === 'image' && el.data && el.data !== 'pending');
+          const otherEls = opts.elements.filter((el) => el.type !== 'image');
+
+          // Afficher progression sur le bouton collab
+          const collabBtn = document.getElementById('collab-btn');
+          const _btnOriginal = collabBtn ? collabBtn.innerHTML : null;
+          const _setProgress = function (done, total) {
+            if (collabBtn) collabBtn.textContent = total > 0 ? 'Préparation… ' + done + ' / ' + total : 'Préparation…';
+          };
+
+          // Collecter les URLs (upload séquentiel pour éviter de saturer la connexion)
+          const imgUrls = {};
+          _setProgress(0, imgEls.length);
+          for (var imgIdx = 0; imgIdx < imgEls.length; imgIdx++) {
+            var imgEl = imgEls[imgIdx];
+            var base64 = (App._imgStoreGet && App._imgStoreGet(imgEl.id)) || imgEl.data;
+            try {
+              imgUrls[imgEl.id] = await _uploadImageToStorage(imgEl.id, base64);
+            } catch (_) {
+              // Tolérer l'échec d'une image : elle restera 'pending' dans RTDB
+            }
+            _setProgress(imgIdx + 1, imgEls.length);
+          }
+
+          // Restaurer le bouton
+          if (collabBtn && _btnOriginal !== null) collabBtn.innerHTML = _btnOriginal;
+
+          // Construire le batch RTDB
           const updates = {};
-          const pendingImages = [];
           opts.elements.forEach((el) => {
             if (el.type === 'connection') {
               updates['connections/' + el.connId] = { from: el.from, to: el.to };
@@ -219,10 +247,12 @@ window.Collab = (function () {
                 text: el.text || '',
               };
             } else {
-              // Pour les images, on écrit 'pending' dans le batch et on uploadera
-              // la base64 individuellement après — un .update() unique avec plusieurs
-              // images lourdes peut dépasser la limite de payload Firebase RTDB.
-              const isImg = el.type === 'image';
+              var elData;
+              if (el.type === 'image') {
+                elData = imgUrls[el.id] || 'pending';
+              } else {
+                elData = el.data || '';
+              }
               updates['elements/' + el.id] = {
                 x: el.x,
                 y: el.y,
@@ -230,32 +260,17 @@ window.Collab = (function () {
                 h: el.h || null,
                 z: el.z || 100,
                 type: el.type,
-                data: isImg ? 'pending' : el.data || '',
+                data: elData,
                 style: el.style || null,
                 version: 0,
                 lastEditBy: _userId,
                 lastEditAt: firebase.database.ServerValue.TIMESTAMP,
                 deleted: false,
               };
-              if (isImg && el.data && el.data !== 'pending' && el.data.length <= 786432) {
-                pendingImages.push({ id: el.id, data: el.data });
-              }
             }
           });
           if (Object.keys(updates).length) {
             await _sessionRef.update(updates);
-          }
-          // Upload des images individuellement (séquentiel pour éviter de saturer la connexion)
-          for (var i = 0; i < pendingImages.length; i++) {
-            try {
-              await _sessionRef.child('elements/' + pendingImages[i].id).update({
-                data: pendingImages[i].data,
-                lastEditBy: _userId,
-                lastEditAt: firebase.database.ServerValue.TIMESTAMP,
-              });
-            } catch (_) {
-              // Tolérer une erreur isolée et continuer avec les images suivantes
-            }
           }
         }
       }

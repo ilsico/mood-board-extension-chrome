@@ -3218,14 +3218,120 @@
         <div class="board-title-display" id="board-title-display">Moodboard</div>
       </header>
 
+      <div id="subheader">
+
+        <!-- ── Section Texte ─────────────────────────── -->
+        <div class="sb-section sb-text sb-disabled">
+          <span class="sb-label">Text.</span>
+          <div class="sb-size-wrap">
+            <button class="text-size-btn" id="text-size-minus" title="Réduire la taille">
+              <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 1L2 5L6 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <span class="text-size-val" id="text-size-val">14</span>
+            <button class="text-size-btn" id="text-size-plus" title="Augmenter la taille">
+              <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 1L6 5L2 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="sb-sep"></div>
+          <div class="text-font-btns-row">
+            <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Roman</button>
+            <button class="text-font-btn" id="tp-bold" title="Helvetica Bold">Bold</button>
+          </div>
+          <div class="sb-sep"></div>
+          <div class="text-align-btns">
+            <button class="text-align-btn" id="ta-left" title="Aligner à gauche">
+              <svg width="16" height="14" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 3H18M2 8H13M2 13H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="text-align-btn" id="ta-center" title="Centrer">
+              <svg width="16" height="14" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 3H18M5 8H15M4 13H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="text-align-btn" id="ta-right" title="Aligner à droite">
+              <svg width="16" height="14" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 3H18M7 8H18M5 13H18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="sb-sep-major"></div>
+
+        <!-- ── Section Aligner ───────────────────────── -->
+        <div class="sb-section sb-align sb-disabled">
+          <span class="sb-label">Aligner.</span>
+          <div class="align-grid">
+            <button class="align-btn" id="align-left" title="Aligner les bords gauches">
+              <svg width="20" height="20" viewBox="7 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 1V21M14 13H19C20.1046 13 21 13.8954 21 15V17C21 18.1046 20.1046 19 19 19H14C12.8954 19 12 18.1046 12 17V15C12 13.8954 12.8954 13 14 13ZM14 3H26C27.1046 3 28 3.89543 28 5V7C28 8.10457 27.1046 9 26 9H14C12.8954 9 12 8.10457 12 7V5C12 3.89543 12.8954 3 14 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="align-center-h" title="Centrer horizontalement">
+              <svg width="20" height="20" viewBox="43 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M54 1V21M50 9H46C45.4696 9 44.9609 8.78929 44.5858 8.41421C44.2107 8.03914 44 7.53043 44 7V5C44 3.9 44.9 3 46 3H50M58 9H62C62.5304 9 63.0391 8.78929 63.4142 8.41421C63.7893 8.03914 64 7.53043 64 7V5C64 4.46957 63.7893 3.96086 63.4142 3.58579C63.0391 3.21071 62.5304 3 62 3H58M50 19H49C48.4696 19 47.9609 18.7893 47.5858 18.4142C47.2107 18.0391 47 17.5304 47 17V15C47 13.9 47.9 13 49 13H50M58 13H59C59.5304 13 60.0391 13.2107 60.4142 13.5858C60.7893 13.9609 61 14.4696 61 15V17C61 17.5304 60.7893 18.0391 60.4142 18.4142C60.0391 18.7893 59.5304 19 59 19H58" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="align-right" title="Aligner les bords droits">
+              <svg width="20" height="20" viewBox="79 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M100 21V1M82 3H94C95.1046 3 96 3.89543 96 5V7C96 8.10457 95.1046 9 94 9H82C80.8954 9 80 8.10457 80 7V5C80 3.89543 80.8954 3 82 3ZM89 13H94C95.1046 13 96 13.8954 96 15V17C96 18.1046 95.1046 19 94 19H89C87.8954 19 87 18.1046 87 17V15C87 13.8954 87.8954 13 89 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="distrib-h" title="Répartir l'espacement horizontal">
+              <svg width="20" height="20" viewBox="115 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M132.25 21V16M132.25 6V1M119.75 21V18M119.75 4V1M118.5 4H121C122.381 4 123.5 4.89543 123.5 6V16C123.5 17.1046 122.381 18 121 18H118.5C117.119 18 116 17.1046 116 16V6C116 4.89543 117.119 4 118.5 4ZM131 6H133.5C134.881 6 136 6.89543 136 8V14C136 15.1046 134.881 16 133.5 16H131C129.619 16 128.5 15.1046 128.5 14V8C128.5 6.89543 129.619 6 131 6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="align-top" title="Aligner les bords supérieurs">
+              <svg width="20" height="20" viewBox="7 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M28 33H8M12 37H14C15.1046 37 16 37.8954 16 39V51C16 52.1046 15.1046 53 14 53H12C10.8954 53 10 52.1046 10 51V39C10 37.8954 10.8954 37 12 37ZM22 37H24C25.1046 37 26 37.8954 26 39V44C26 45.1046 25.1046 46 24 46H22C20.8954 46 20 45.1046 20 44V39C20 37.8954 20.8954 37 22 37Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="align-center-v" title="Centrer verticalement">
+              <svg width="20" height="20" viewBox="43 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M44 43H64M52 47V51C52 51.5304 51.7893 52.0391 51.4142 52.4142C51.0391 52.7893 50.5304 53 50 53H48C47.4696 53 46.9609 52.7893 46.5858 52.4142C46.2107 52.0391 46 51.5304 46 51V47M52 39V35C52 34.4696 51.7893 33.9609 51.4142 33.5858C51.0391 33.2107 50.5304 33 50 33H48C47.4696 33 46.9609 33.2107 46.5858 33.5858C46.2107 33.9609 46 34.4696 46 35V39M62 47V48C62 48.5304 61.7893 49.0391 61.4142 49.4142C61.0391 49.7893 60.5304 50 60 50H58C57.4696 50 56.9609 49.7893 56.5858 49.4142C56.2107 49.0391 56 48.5304 56 48V47M56 39V38C56 36.9 56.9 36 58 36H60C60.5304 36 61.0391 36.2107 61.4142 36.5858C61.7893 36.9609 62 37.4696 62 38V39" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="align-bottom" title="Aligner les bords inférieurs">
+              <svg width="20" height="20" viewBox="79 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M100 53H80M84 33H86C87.1046 33 88 33.8954 88 35V47C88 48.1046 87.1046 49 86 49H84C82.8954 49 82 48.1046 82 47V35C82 33.8954 82.8954 33 84 33ZM94 40H96C97.1046 40 98 40.8954 98 42V47C98 48.1046 97.1046 49 96 49H94C92.8954 49 92 48.1046 92 47V42C92 40.8954 92.8954 40 94 40Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="align-btn" id="distrib-v" title="Répartir l'espacement vertical">
+              <svg width="20" height="20" viewBox="115 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M136 49.25H133M136 36.75H131M119 49.25H116M121 36.75H116M121 45.5H131C132.105 45.5 133 46.6193 133 48V50.5C133 51.8807 132.105 53 131 53H121C119.895 53 119 51.8807 119 50.5V48C119 46.6193 119.895 45.5 121 45.5ZM123 33H129C130.105 33 131 34.1193 131 35.5V38C131 39.3807 130.105 40.5 129 40.5H123C121.895 40.5 121 39.3807 121 38V35.5C121 34.1193 121.895 33 123 33Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <button id="key-object-toggle" title="Aligner sur objet clé">Objet clé</button>
+        </div>
+
+        <div class="sb-sep-major"></div>
+
+        <!-- ── Section Export ────────────────────────── -->
+        <div class="sb-section sb-export">
+          <div class="export-select-wrap">
+            <select id="export-quality-select">
+              <option value="1">Basse qualité</option>
+              <option value="2" selected>Bonne qualité</option>
+              <option value="3">Meilleure qualité</option>
+            </select>
+          </div>
+          <div class="export-panel-actions">
+            <button class="export-fmt-btn" id="export-fmt-pdf">PDF</button>
+            <button class="export-fmt-btn active" id="export-fmt-png">PNG</button>
+            <button id="export-do-btn">Exporter</button>
+          </div>
+        </div>
+
+      </div><!-- /#subheader -->
+
       <div id="share-collab-dock">
-        <button id="tool-export" class="collab-btn" title="Exporter">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
-            <path d="M12 10v6"/>
-            <path d="m15 13-3 3-3-3"/>
-          </svg>
-        </button>
         <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
@@ -3441,107 +3547,6 @@
           </button>
         </div>
           <div id="toolbar-handle"></div>
-        </div>
-
-<div id="text-edit-panel">
-          <span class="align-panel-title">Texte</span>
-          <div class="text-align-btns">
-            <button class="text-align-btn" id="ta-left" title="Gauche">
-              <svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 3H18M2 8H13M2 13H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="text-align-btn" id="ta-center" title="Centre">
-              <svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 3H18M5 8H15M4 13H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="text-align-btn" id="ta-right" title="Droite">
-              <svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 3H18M7 8H18M5 13H18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
-          <div class="text-size-row">
-            <button class="text-size-btn" id="text-size-minus">
-              <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M6 1L2 5L6 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <span class="text-size-val" id="text-size-val">14</span>
-            <button class="text-size-btn" id="text-size-plus">
-              <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 1L6 5L2 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
-          <div class="text-font-btns-row">
-            <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Roman</button>
-            <button class="text-font-btn" id="tp-bold" title="Helvetica Bold">Bold</button>
-          </div>
-        </div>
-
-        <div id="align-panel">
-          <span class="align-panel-title">Aligner</span>
-          <div class="align-grid">
-            <button class="align-btn" id="align-left" title="Aligner les bords gauches">
-              <svg width="20" height="20" viewBox="7 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 1V21M14 13H19C20.1046 13 21 13.8954 21 15V17C21 18.1046 20.1046 19 19 19H14C12.8954 19 12 18.1046 12 17V15C12 13.8954 12.8954 13 14 13ZM14 3H26C27.1046 3 28 3.89543 28 5V7C28 8.10457 27.1046 9 26 9H14C12.8954 9 12 8.10457 12 7V5C12 3.89543 12.8954 3 14 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-center-h" title="Centrer horizontalement">
-              <svg width="20" height="20" viewBox="43 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M54 1V21M50 9H46C45.4696 9 44.9609 8.78929 44.5858 8.41421C44.2107 8.03914 44 7.53043 44 7V5C44 3.9 44.9 3 46 3H50M58 9H62C62.5304 9 63.0391 8.78929 63.4142 8.41421C63.7893 8.03914 64 7.53043 64 7V5C64 4.46957 63.7893 3.96086 63.4142 3.58579C63.0391 3.21071 62.5304 3 62 3H58M50 19H49C48.4696 19 47.9609 18.7893 47.5858 18.4142C47.2107 18.0391 47 17.5304 47 17V15C47 13.9 47.9 13 49 13H50M58 13H59C59.5304 13 60.0391 13.2107 60.4142 13.5858C60.7893 13.9609 61 14.4696 61 15V17C61 17.5304 60.7893 18.0391 60.4142 18.4142C60.0391 18.7893 59.5304 19 59 19H58" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-right" title="Aligner les bords droits">
-              <svg width="20" height="20" viewBox="79 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M100 21V1M82 3H94C95.1046 3 96 3.89543 96 5V7C96 8.10457 95.1046 9 94 9H82C80.8954 9 80 8.10457 80 7V5C80 3.89543 80.8954 3 82 3ZM89 13H94C95.1046 13 96 13.8954 96 15V17C96 18.1046 95.1046 19 94 19H89C87.8954 19 87 18.1046 87 17V15C87 13.8954 87.8954 13 89 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="distrib-h" title="Répartir l'espacement horizontal">
-              <svg width="20" height="20" viewBox="115 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M132.25 21V16M132.25 6V1M119.75 21V18M119.75 4V1M118.5 4H121C122.381 4 123.5 4.89543 123.5 6V16C123.5 17.1046 122.381 18 121 18H118.5C117.119 18 116 17.1046 116 16V6C116 4.89543 117.119 4 118.5 4ZM131 6H133.5C134.881 6 136 6.89543 136 8V14C136 15.1046 134.881 16 133.5 16H131C129.619 16 128.5 15.1046 128.5 14V8C128.5 6.89543 129.619 6 131 6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-top" title="Aligner les bords supérieurs">
-              <svg width="20" height="20" viewBox="7 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M28 33H8M12 37H14C15.1046 37 16 37.8954 16 39V51C16 52.1046 15.1046 53 14 53H12C10.8954 53 10 52.1046 10 51V39C10 37.8954 10.8954 37 12 37ZM22 37H24C25.1046 37 26 37.8954 26 39V44C26 45.1046 25.1046 46 24 46H22C20.8954 46 20 45.1046 20 44V39C20 37.8954 20.8954 37 22 37Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-center-v" title="Centrer verticalement">
-              <svg width="20" height="20" viewBox="43 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M44 43H64M52 47V51C52 51.5304 51.7893 52.0391 51.4142 52.4142C51.0391 52.7893 50.5304 53 50 53H48C47.4696 53 46.9609 52.7893 46.5858 52.4142C46.2107 52.0391 46 51.5304 46 51V47M52 39V35C52 34.4696 51.7893 33.9609 51.4142 33.5858C51.0391 33.2107 50.5304 33 50 33H48C47.4696 33 46.9609 33.2107 46.5858 33.5858C46.2107 33.9609 46 34.4696 46 35V39M62 47V48C62 48.5304 61.7893 49.0391 61.4142 49.4142C61.0391 49.7893 60.5304 50 60 50H58C57.4696 50 56.9609 49.7893 56.5858 49.4142C56.2107 49.0391 56 48.5304 56 48V47M56 39V38C56 36.9 56.9 36 58 36H60C60.5304 36 61.0391 36.2107 61.4142 36.5858C61.7893 36.9609 62 37.4696 62 38V39" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-bottom" title="Aligner les bords inférieurs">
-              <svg width="20" height="20" viewBox="79 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M100 53H80M84 33H86C87.1046 33 88 33.8954 88 35V47C88 48.1046 87.1046 49 86 49H84C82.8954 49 82 48.1046 82 47V35C82 33.8954 82.8954 33 84 33ZM94 40H96C97.1046 40 98 40.8954 98 42V47C98 48.1046 97.1046 49 96 49H94C92.8954 49 92 48.1046 92 47V42C92 40.8954 92.8954 40 94 40Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="distrib-v" title="Répartir l'espacement vertical">
-              <svg width="20" height="20" viewBox="115 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M136 49.25H133M136 36.75H131M119 49.25H116M121 36.75H116M121 45.5H131C132.105 45.5 133 46.6193 133 48V50.5C133 51.8807 132.105 53 131 53H121C119.895 53 119 51.8807 119 50.5V48C119 46.6193 119.895 45.5 121 45.5ZM123 33H129C130.105 33 131 34.1193 131 35.5V38C131 39.3807 130.105 40.5 129 40.5H123C121.895 40.5 121 39.3807 121 38V35.5C121 34.1193 121.895 33 123 33Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
-          <button id="key-object-toggle" title="Aligner sur objet clé">Objet clé</button>
-        </div>
-
-        <div id="export-panel">
-          <span class="align-panel-title">Exporter</span>
-          <div class="export-select-wrap">
-            <select id="export-quality-select">
-              <option value="1">Basse qualité</option>
-              <option value="2" selected>Bonne qualité</option>
-              <option value="3">Meilleure qualité</option>
-            </select>
-          </div>
-          <div class="export-panel-actions">
-            <button class="export-fmt-btn" id="export-fmt-pdf">PDF</button>
-            <button class="export-fmt-btn active" id="export-fmt-png">PNG</button>
-            <button id="export-do-btn">Exporter</button>
-          </div>
         </div>
 
         <div class="canvas-wrapper" id="canvas-wrapper">

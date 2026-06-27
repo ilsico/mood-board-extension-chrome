@@ -223,8 +223,12 @@ window.Collab = (function () {
             var base64 = (App._imgStoreGet && App._imgStoreGet(imgEl.id)) || imgEl.data;
             try {
               imgUrls[imgEl.id] = await _uploadImageToStorage(imgEl.id, base64);
-            } catch (_) {
-              // Tolérer l'échec d'une image : elle restera 'pending' dans RTDB
+            } catch (storageErr) {
+              console.warn('[Collab Storage] upload failed for', imgEl.id, storageErr);
+              // Fallback : écrire base64 directement dans RTDB pour les petites images
+              if (base64 && base64.length <= 786432) {
+                imgUrls[imgEl.id] = base64;
+              }
             }
             _setProgress(imgIdx + 1, imgEls.length);
           }
@@ -604,8 +608,17 @@ window.Collab = (function () {
             lastEditAt: firebase.database.ServerValue.TIMESTAMP,
           });
         })
-        .catch(function () {
-          // Tolérer l'échec — l'image reste 'pending' dans RTDB
+        .catch(function (storageErr) {
+          console.warn('[Collab Storage] upload failed for', elId, storageErr);
+          // Fallback : écrire base64 directement dans RTDB pour les petites images
+          if (!_active || !_sessionRef) return;
+          if (data && data.length <= 786432) {
+            _sessionRef.child('elements/' + elId).update({
+              data: data,
+              lastEditBy: _userId,
+              lastEditAt: firebase.database.ServerValue.TIMESTAMP,
+            });
+          }
         });
     }
   }

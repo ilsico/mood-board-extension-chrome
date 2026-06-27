@@ -130,6 +130,9 @@
         border-left-color: rgba(0, 0, 0, 0.12);
         box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
       }
+      body.light-mode .lib-search-input {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23222222' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21 21-4.34-4.34'/%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3C/svg%3E");
+      }
 
       body {
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -1399,20 +1402,25 @@
       .lib-search-input {
         width: 100%;
         padding: 8px 12px 8px 34px;
-        border: 1px solid #eaeaf0;
+        border: 1px solid rgba(128, 128, 128, 0.25);
         font-size: 13px;
         outline: none;
-        background: #fafafa;
+        background: var(--bg-input);
+        color: var(--fg);
         transition: border-color 0.15s;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21 21-4.34-4.34'/%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21 21-4.34-4.34'/%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3C/svg%3E");
         background-size: 16px;
         background-repeat: no-repeat;
         background-position: 10px center;
         font-family: inherit;
       }
+      .lib-search-input::placeholder {
+        color: var(--fg);
+        opacity: 0.4;
+      }
       .lib-search-input:focus {
         border-color: #ff3c00;
-        background-color: #fff;
+        background-color: var(--bg-panel);
       }
       .lib-panel-grid {
         flex: 1;

@@ -3224,7 +3224,7 @@
         position: fixed;
         top: calc(50% - 235px);
         left: calc(50% + 160px);
-        width: 480px;
+        width: 350px;
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.12s ease;
@@ -3296,61 +3296,18 @@
         color: #222;
         stroke: #222;
       }
-      .wip-layout {
-        display: flex;
-        flex-direction: row;
-        gap: 20px;
-        align-items: flex-start;
-      }
-      .wip-content {
-        flex: 1;
-        min-width: 0;
-      }
-      .wip-cover-wrap {
-        position: relative;
-        width: 160px;
-        min-width: 160px;
-        height: 200px;
-        border-radius: 6px;
-        overflow: hidden;
-        cursor: pointer;
-        flex-shrink: 0;
-        background: #e8e8e8;
-      }
-      .wip-cover-img,
-      .wip-snapshot-img {
+      .wheel-card .wheel-snap-overlay {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
         object-fit: cover;
-        border-radius: 6px;
         display: block;
-      }
-      .wip-snapshot-img {
         opacity: 0;
         transition: opacity 0.25s ease;
       }
-      .wip-cover-wrap:hover .wip-snapshot-img {
+      .wheel-card.wip-detail-active:hover .wheel-snap-overlay {
         opacity: 1;
-      }
-      .wip-cover-empty {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        color: #888;
-        text-align: center;
-        padding: 12px;
-        cursor: pointer;
-        box-sizing: border-box;
-        position: absolute;
-        inset: 0;
-      }
-      .wip-cover-empty:hover {
-        background: rgba(0,0,0,0.05);
       }
 
       .home-search-bottom {
@@ -3452,42 +3409,34 @@
       <div id="wheel-card-title"></div>
 
       <div id="wheel-info-panel">
-        <div class="wip-layout">
-          <div class="wip-cover-wrap">
-            <img class="wip-cover-img" alt="">
-            <img class="wip-snapshot-img" alt="">
-          </div>
-          <div class="wip-content">
-            <h2 class="wip-title"></h2>
-            <div class="wip-meta">
-              <span data-field="created"></span>
-              <span data-field="saved"></span>
-              <span data-field="count"></span>
-              <span data-field="collab"></span>
-            </div>
-            <div class="wip-actions">
-              <button class="wip-btn wip-btn-edit-thumb">Changer l'image</button>
-              <button class="wip-btn wip-btn-delete" aria-label="Supprimer">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M10 11v6" />
-                  <path d="M14 11v6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                  <path d="M3 6h18" />
-                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-            </div>
-          </div>
+        <h2 class="wip-title"></h2>
+        <div class="wip-meta">
+          <span data-field="created"></span>
+          <span data-field="saved"></span>
+          <span data-field="count"></span>
+          <span data-field="collab"></span>
+        </div>
+        <div class="wip-actions">
+          <button class="wip-btn wip-btn-edit-thumb">Changer l'image</button>
+          <button class="wip-btn wip-btn-delete" aria-label="Supprimer">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+              <path d="M3 6h18" />
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+          </button>
         </div>
       </div>
 

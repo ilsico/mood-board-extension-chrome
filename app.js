@@ -1269,27 +1269,6 @@ const App = (function () {
     editThumbBtn.textContent = b.coverImage ? "Changer l'image" : 'Ajouter une image';
     editThumbBtn.onclick = () => openImagePickerForBoard(b.id);
 
-    const coverWrap = panel.querySelector('.wip-cover-wrap');
-    const coverImg = panel.querySelector('.wip-cover-img');
-    const snapImg = panel.querySelector('.wip-snapshot-img');
-
-    coverImg.src = b.coverImage || '';
-    coverImg.style.display = b.coverImage ? '' : 'none';
-    snapImg.src = b.snapshot || '';
-
-    const prevEmpty = coverWrap.querySelector('.wip-cover-empty');
-    if (prevEmpty) prevEmpty.remove();
-
-    if (!b.coverImage) {
-      const emptyEl = document.createElement('div');
-      emptyEl.className = 'wip-cover-empty';
-      emptyEl.textContent = 'Ajouter une image';
-      emptyEl.onclick = () => openImagePickerForBoard(b.id);
-      coverWrap.appendChild(emptyEl);
-    } else {
-      coverImg.onclick = () => openImagePickerForBoard(b.id);
-    }
-
     panel.querySelector('.wip-btn-delete').onclick = () => {
       if (!confirm('Supprimer ce board ? Cette action est définitive.')) return;
       deleteBoard(b.id);
@@ -1304,7 +1283,7 @@ const App = (function () {
     panel.classList.add('visible');
     updateWheel();
 
-    // Masquer les cartes non-actives directement (sans passer par updateWheel)
+    // Masquer les cartes non-actives, activer l'overlay snapshot sur la carte active
     const cards = document.querySelectorAll('.wheel-card');
     const nCards = cards.length;
     const activeIdx = ((Math.round(wheelPosition) % nCards) + nCards) % nCards;
@@ -1312,6 +1291,16 @@ const App = (function () {
       if (i !== activeIdx) {
         card.style.opacity = '0';
         card.style.pointerEvents = 'none';
+      } else if (b.snapshot) {
+        card.classList.add('wip-detail-active');
+        let overlay = card.querySelector('.wheel-snap-overlay');
+        if (!overlay) {
+          overlay = document.createElement('img');
+          overlay.className = 'wheel-snap-overlay';
+          overlay.alt = '';
+          card.appendChild(overlay);
+        }
+        overlay.src = b.snapshot;
       }
     });
   }
@@ -1326,11 +1315,14 @@ const App = (function () {
     const panel = document.getElementById('wheel-info-panel');
     if (panel) panel.classList.remove('visible');
 
-    // Restaurer la visibilité de toutes les cartes
+    // Restaurer la visibilité et nettoyer l'overlay snapshot
     const cards = document.querySelectorAll('.wheel-card');
     cards.forEach((card) => {
       card.style.opacity = '1';
       card.style.pointerEvents = '';
+      card.classList.remove('wip-detail-active');
+      const overlay = card.querySelector('.wheel-snap-overlay');
+      if (overlay) overlay.remove();
     });
 
     updateWheel();

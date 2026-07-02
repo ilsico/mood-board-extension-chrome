@@ -50,19 +50,23 @@
         --fg-inv: #222222;
         --accent: #dc4111;
         --bg-panel: #2e2e2e;
+        --subheader-border: rgba(255, 255, 255, 0.15);
+        --subheader-btn-bg: #3a3a3a;
       }
 
       /* ===== LIGHT MODE OVERRIDES ===== */
       body.light-mode {
-        --bg-app: #C7C7C7;
-        --bg-canvas: #F2F2F2;
+        --bg-app: #c7c7c7;
+        --bg-canvas: #f2f2f2;
         --bg-input: #b0b0b0;
         --fg: #222222;
-        --fg-inv: #F2F2F2;
+        --fg-inv: #f2f2f2;
         --bg-panel: #b8b8b8;
+        --subheader-border: #000;
+        --subheader-btn-bg: #f1f1f1;
       }
       body.light-mode .el-connection line {
-        stroke: #2C2C2C;
+        stroke: #2c2c2c;
       }
       body.light-mode .tool-btn svg {
         color: #222222 !important;
@@ -389,65 +393,52 @@
       /* ===== SUBHEADER ===== */
       #subheader {
         width: 100%;
-        height: 37px;
         background: var(--bg-app);
-        border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+        border-top: 1px solid var(--subheader-border);
         display: flex;
         align-items: center;
+        justify-content: space-between;
         flex-shrink: 0;
         z-index: 199;
-        overflow: hidden;
-        padding: 0 50px;
+        padding: 8px 50px;
         box-sizing: border-box;
       }
       .sb-section {
         display: flex;
         align-items: center;
-        gap: 4px;
-        height: 100%;
-        flex: 1;
+        gap: 12px;
       }
       .sb-section.sb-disabled {
         opacity: 0.35;
         pointer-events: none;
       }
       .sb-label {
-        font-size: 10px;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 12px;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         color: var(--fg);
-        opacity: 0.45;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        margin-right: 8px;
         white-space: nowrap;
         flex-shrink: 0;
       }
       .sb-sep {
-        width: 1px;
-        height: 16px;
-        background: var(--fg);
-        opacity: 0.15;
-        flex-shrink: 0;
-        margin: 0 4px;
+        display: none;
       }
       .sb-sep-major {
-        width: 1px;
-        height: 24px;
-        background: var(--fg);
-        opacity: 0.25;
-        flex-shrink: 0;
+        display: none;
       }
       .sb-size-wrap {
         display: flex;
         align-items: center;
-        background: var(--bg-input);
+        background: var(--subheader-btn-bg);
         border-radius: 4px;
-        padding: 0 2px;
-        height: 22px;
+        padding: 0 4px;
+        height: 28px;
+        gap: 10px;
+        cursor: ew-resize;
+        user-select: none;
       }
       #subheader .text-size-btn {
-        width: 18px;
-        height: 22px;
+        width: auto;
+        height: 100%;
         background: none;
         border: none;
         display: flex;
@@ -455,175 +446,153 @@
         justify-content: center;
         cursor: pointer;
         color: var(--fg);
-        padding: 0;
+        padding: 0 8px;
       }
       #subheader .text-size-val {
-        min-width: 22px;
+        width: 14px;
         text-align: center;
-        font-size: 12px;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 11px;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 500;
         color: var(--fg);
         user-select: none;
+        pointer-events: none;
       }
       #subheader .text-font-btns-row {
         display: flex;
-        gap: 2px;
+        gap: 8px;
       }
       #subheader .text-align-btns {
         display: flex;
-        gap: 2px;
+        gap: 16px;
+        align-items: center;
       }
       #subheader .text-font-btn {
         width: auto;
-        min-width: 36px;
-        height: 26px;
-        border: 1px solid var(--fg);
-        background: none;
+        height: 16px;
+        border: none;
+        background: var(--subheader-btn-bg);
         border-radius: 4px;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         color: var(--fg);
-        transition: background 0.12s;
         font-size: 11px;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 500;
         padding: 0 8px;
-        opacity: 0.5;
       }
       #subheader .text-align-btn {
-        width: 26px;
-        height: 26px;
         border: none;
         background: none;
-        border-radius: 4px;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         color: var(--fg);
-        transition: background 0.12s;
+        transition: opacity 0.12s;
         padding: 0;
       }
-      #subheader .text-font-btn:hover,
+      #subheader .text-font-btn:hover {
+        outline: 1px solid var(--fg);
+      }
       #subheader .text-align-btn:hover {
-        background: var(--bg-input);
-        opacity: 1;
+        opacity: 0.6;
       }
       #subheader .text-font-btn.active {
         background: var(--fg);
         color: var(--fg-inv);
-        border-color: var(--fg);
-        opacity: 1;
       }
       #subheader .text-align-btn.active {
-        background: var(--fg);
-        color: var(--fg-inv);
+        opacity: 0.5;
       }
       #subheader .align-grid {
         display: flex;
-        gap: 2px;
+        align-items: center;
+        gap: 24px;
+      }
+      #subheader .align-subgroup {
+        display: flex;
+        align-items: center;
+        gap: 16px;
       }
       #subheader .align-btn {
-        width: 26px;
-        height: 26px;
+        width: 20px;
+        height: 20px;
         border: none;
         background: none;
-        border-radius: 4px;
+        border-radius: 0;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         color: var(--fg);
-        transition: background 0.12s;
+        transition: opacity 0.12s;
         padding: 0;
         overflow: hidden;
       }
       #subheader .align-btn:hover {
-        background: var(--bg-input);
+        opacity: 0.6;
       }
       #subheader .align-btn.active {
-        background: var(--fg);
-        color: var(--fg-inv);
-      }
-      #subheader .align-grid .align-btn:nth-child(5) {
-        margin-left: 22px;
-      }
-      #subheader #key-object-toggle {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 10px;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        padding: 0 6px;
-        height: 22px;
-        width: auto;
-        border: 1px solid var(--fg);
-        border-radius: 4px;
-        background: none;
-        color: var(--fg);
-        cursor: pointer;
-        white-space: nowrap;
-        opacity: 0.6;
-        margin-left: 4px;
-        transition: background 0.12s, border-color 0.12s;
-      }
-      #subheader #key-object-toggle:hover {
-        opacity: 1;
-        background: var(--bg-input);
-      }
-      #subheader #key-object-toggle.active {
-        background: rgba(220, 65, 17, 0.15);
-        border-color: #ff3c00;
-        color: #ff3c00;
-        opacity: 1;
+        opacity: 0.5;
       }
       #subheader .export-select-wrap {
         display: flex;
         align-items: center;
       }
       #subheader #export-quality-select {
-        height: 22px;
+        height: 16px;
         font-size: 11px;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        border: 1px solid var(--fg);
-        border-radius: 4px;
-        background: var(--bg-app);
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 500;
+        background: var(--subheader-btn-bg);
         color: var(--fg);
-        padding: 0 4px;
+        border: none;
+        border-radius: 4px;
+        padding: 0 8px;
         cursor: pointer;
+        width: 130px;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+      #subheader .export-controls-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
       #subheader .export-panel-actions {
         display: flex;
-        gap: 4px;
+        gap: 8px;
         align-items: center;
-        margin-left: 4px;
       }
       #subheader .export-fmt-btn {
-        height: 22px;
+        height: 16px;
         padding: 0 8px;
         font-size: 11px;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        border: 1px solid var(--fg);
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 500;
+        border: none;
         border-radius: 4px;
-        background: none;
+        background: var(--subheader-btn-bg);
         color: var(--fg);
         cursor: pointer;
-        transition: background 0.12s, color 0.12s;
       }
       #subheader .export-fmt-btn.active {
         background: var(--fg);
         color: var(--fg-inv);
       }
       #subheader #export-do-btn {
-        height: 22px;
-        padding: 0 10px;
-        background: #ff3c00;
-        color: #fff;
+        height: 20px;
+        padding: 2px 16px;
+        background: #dc4111;
+        color: #f1f1f1;
         border: none;
         border-radius: 4px;
-        font-size: 11px;
-        font-family: 'HelveticaBold', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 12px;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 600;
         cursor: pointer;
         transition: opacity 0.12s;
       }
@@ -717,7 +686,7 @@
       }
       .fit-btn-group {
         position: fixed;
-        top: 44px;
+        top: 84px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
@@ -725,7 +694,6 @@
         z-index: 300;
         opacity: 0;
         transition: opacity 0.3s ease;
-        padding: 8px;
       }
       .fit-btn-group.fit-visible {
         opacity: 1;
@@ -1136,7 +1104,7 @@
         height: 0;
         border-left: 4px solid transparent;
         border-right: 4px solid transparent;
-        border-top: 5px solid rgba(255,255,255,0.7);
+        border-top: 5px solid rgba(255, 255, 255, 0.7);
         pointer-events: none;
       }
       #export-quality-select {
@@ -1173,14 +1141,16 @@
         padding: 0 12px;
         height: 28px;
         cursor: pointer;
-        transition: border-color 0.12s, background 0.12s;
+        transition:
+          border-color 0.12s,
+          background 0.12s;
         flex-shrink: 0;
       }
       .export-fmt-btn:hover {
         background: #4a4a4a;
       }
       .export-fmt-btn.active {
-        border-color: rgba(255,255,255,0.8);
+        border-color: rgba(255, 255, 255, 0.8);
       }
       #export-do-btn {
         flex: 1;
@@ -1221,7 +1191,9 @@
         align-items: center;
         gap: 6px;
       }
-      .pfp-spacer { flex: 1; }
+      .pfp-spacer {
+        flex: 1;
+      }
       .pfp-preset-btn {
         background: var(--bg-input);
         border: 1.5px solid transparent;
@@ -1235,8 +1207,12 @@
         cursor: pointer;
         transition: border-color 0.12s;
       }
-      .pfp-preset-btn:hover { border-color: rgba(255,255,255,0.2); }
-      .pfp-preset-btn.active { border-color: var(--fg); }
+      .pfp-preset-btn:hover {
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+      .pfp-preset-btn.active {
+        border-color: var(--fg);
+      }
       .pfp-orient-btn {
         background: var(--bg-input);
         border: 1.5px solid transparent;
@@ -1251,16 +1227,19 @@
         justify-content: center;
         transition: border-color 0.12s;
       }
-      .pfp-orient-btn.active { border-color: var(--fg); }
+      .pfp-orient-btn.active {
+        border-color: var(--fg);
+      }
       .pfp-sep {
         border: none;
-        border-top: 1px solid rgba(255,255,255,0.08);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
         margin: 0;
       }
-      #pfp-w-input, #pfp-h-input {
+      #pfp-w-input,
+      #pfp-h-input {
         flex: 1;
         background: var(--bg-input);
-        border: 1px solid rgba(255,255,255,0.1);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 4px;
         color: var(--fg);
         font-size: 12px;
@@ -1299,11 +1278,20 @@
         font-family: 'Inter', sans-serif;
         height: 28px;
         cursor: pointer;
-        transition: border-color 0.12s, background 0.12s;
+        transition:
+          border-color 0.12s,
+          background 0.12s;
       }
-      .pfp-apply { border-color: var(--fg); }
-      .pfp-apply:hover { background: var(--fg); color: var(--fg-inv); }
-      .pfp-deactivate:hover { border-color: rgba(255,60,0,0.5); }
+      .pfp-apply {
+        border-color: var(--fg);
+      }
+      .pfp-apply:hover {
+        background: var(--fg);
+        color: var(--fg-inv);
+      }
+      .pfp-deactivate:hover {
+        border-color: rgba(255, 60, 0, 0.5);
+      }
       /* Cadre format papier sur le canvas */
       #paper-frame {
         position: absolute;
@@ -1328,9 +1316,13 @@
         justify-content: center;
         opacity: 0.75;
       }
-      #paper-frame-handle:hover { opacity: 1; }
+      #paper-frame-handle:hover {
+        opacity: 1;
+      }
       body.pfp-dragging,
-      body.pfp-dragging * { cursor: move !important; }
+      body.pfp-dragging * {
+        cursor: move !important;
+      }
       /* Light mode */
       body.light-mode .pfp-preset-btn,
       body.light-mode .pfp-orient-btn,
@@ -1339,16 +1331,27 @@
         background: var(--bg-input);
         color: #222222;
       }
-      body.light-mode .pfp-preset-btn:hover { border-color: rgba(0,0,0,0.2); }
+      body.light-mode .pfp-preset-btn:hover {
+        border-color: rgba(0, 0, 0, 0.2);
+      }
       body.light-mode .pfp-preset-btn.active,
-      body.light-mode .pfp-orient-btn.active { border-color: #222222; }
-      body.light-mode .pfp-apply { border-color: #222222; }
-      body.light-mode .pfp-apply:hover { background: #222222; color: #F2F2F2; }
-      body.light-mode .pfp-sep { border-top-color: rgba(0,0,0,0.1); }
+      body.light-mode .pfp-orient-btn.active {
+        border-color: #222222;
+      }
+      body.light-mode .pfp-apply {
+        border-color: #222222;
+      }
+      body.light-mode .pfp-apply:hover {
+        background: #222222;
+        color: #f2f2f2;
+      }
+      body.light-mode .pfp-sep {
+        border-top-color: rgba(0, 0, 0, 0.1);
+      }
       body.light-mode #pfp-w-input,
       body.light-mode #pfp-h-input {
         background: var(--bg-input);
-        border-color: rgba(0,0,0,0.15);
+        border-color: rgba(0, 0, 0, 0.15);
         color: #222222;
       }
       body.light-mode #paper-format-btn.active svg {
@@ -1356,8 +1359,12 @@
       }
       /* Preview mode + readonly */
       body.preview-mode #paper-format-panel,
-      body.preview-mode #paper-format-btn { display: none !important; }
-      body.readonly-mode #paper-format-btn { display: none; }
+      body.preview-mode #paper-format-btn {
+        display: none !important;
+      }
+      body.readonly-mode #paper-format-btn {
+        display: none;
+      }
       .text-font-btn,
       .text-size-btn,
       .text-align-btn {
@@ -1450,7 +1457,7 @@
         position: relative;
         width: 0;
         min-width: 0;
-        background: #fff;
+        background: var(--bg-panel);
         display: flex;
         flex-direction: column;
         z-index: 100;
@@ -1475,7 +1482,7 @@
       /* Bouton bibliothèque — fixe haut-droite */
       #lib-toggle-btn {
         position: fixed;
-        top: 48px;
+        top: 92px;
         right: 16px;
         width: 48px;
         height: 48px;
@@ -1488,7 +1495,9 @@
         align-items: center;
         justify-content: center;
         z-index: 300;
-        transition: opacity 0.15s;
+        transition:
+          opacity 0.15s,
+          right 0.32s cubic-bezier(0.4, 0, 0.2, 1);
       }
       #lib-toggle-btn:hover {
         opacity: 0.85;
@@ -1563,7 +1572,7 @@
       }
       .lib-folder-chip {
         padding: 4px 11px;
-        border: 1px solid rgba(128,128,128,0.25);
+        border: 1px solid rgba(128, 128, 128, 0.25);
         border-radius: 20px;
         background: none;
         cursor: pointer;
@@ -1646,11 +1655,9 @@
         cursor: grabbing;
       }
       .lib-panel-item img {
-        max-width: 100%;
-        max-height: 100%;
-        width: auto;
-        height: auto;
-        object-fit: contain;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
         display: block;
       }
       .lib-panel-item .lib-item-delete {
@@ -2512,7 +2519,7 @@
         transform: translateZ(0);
       }
       .el-connection line {
-        stroke: #F2F2F2;
+        stroke: #f2f2f2;
         stroke-width: 1.5;
         stroke-linecap: round;
       }
@@ -2552,7 +2559,9 @@
         z-index: 99999;
         background: #fff;
         border-radius: 14px;
-        box-shadow: 0 8px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10);
+        box-shadow:
+          0 8px 40px rgba(0, 0, 0, 0.18),
+          0 2px 8px rgba(0, 0, 0, 0.1);
         padding: 14px;
         width: 280px;
         user-select: none;
@@ -2585,7 +2594,9 @@
         height: 18px;
         border-radius: 50%;
         border: 3px solid #fff;
-        box-shadow: 0 0 0 1.5px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.28);
+        box-shadow:
+          0 0 0 1.5px rgba(0, 0, 0, 0.22),
+          0 2px 6px rgba(0, 0, 0, 0.28);
         transform: translate(-50%, -50%);
         pointer-events: none;
         z-index: 2;
@@ -2597,8 +2608,15 @@
         border-radius: 7px;
         -webkit-appearance: none;
         appearance: none;
-        background: linear-gradient(to right,
-          #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%
+        background: linear-gradient(
+          to right,
+          #f00 0%,
+          #ff0 17%,
+          #0f0 33%,
+          #0ff 50%,
+          #00f 67%,
+          #f0f 83%,
+          #f00 100%
         );
         outline: none;
         cursor: pointer;
@@ -2611,8 +2629,8 @@
         height: 20px;
         border-radius: 50%;
         background: #fff;
-        border: 2.5px solid rgba(0,0,0,0.18);
-        box-shadow: 0 1px 5px rgba(0,0,0,0.25);
+        border: 2.5px solid rgba(0, 0, 0, 0.18);
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25);
         cursor: pointer;
       }
       .csp-hue-slider::-moz-range-thumb {
@@ -2620,8 +2638,8 @@
         height: 20px;
         border-radius: 50%;
         background: #fff;
-        border: 2.5px solid rgba(0,0,0,0.18);
-        box-shadow: 0 1px 5px rgba(0,0,0,0.25);
+        border: 2.5px solid rgba(0, 0, 0, 0.18);
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25);
         cursor: pointer;
       }
       .csp-bottom {
@@ -2633,9 +2651,9 @@
         width: 34px;
         height: 34px;
         border-radius: 50%;
-        border: 2px solid rgba(0,0,0,0.10);
+        border: 2px solid rgba(0, 0, 0, 0.1);
         flex-shrink: 0;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
       }
       .csp-hex-label {
         flex: 1;
@@ -3206,7 +3224,7 @@
         position: fixed;
         top: calc(50% - 235px);
         left: calc(50% + 160px);
-        width: 350px;
+        width: 480px;
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.12s ease;
@@ -3235,32 +3253,104 @@
       }
       .wip-actions {
         display: flex;
-        flex-direction: column;
-        gap: 8px;
-        align-items: flex-start;
+        flex-direction: row;
+        align-items: center;
+        width: 100%;
       }
       .wip-btn {
         border: none;
         padding: 9px 20px;
-        border-radius: 999px;
+        border-radius: 4px;
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
-        transition:
-          background 0.15s,
-          color 0.15s;
-        font-family: inherit;
+        transition: background 0.15s;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        background: #f1f1f1;
+        color: #222;
+      }
+      .wip-btn:hover {
+        background: #e0e0e0;
       }
       .wip-btn-edit-thumb {
-        background: #ff3c00;
-        color: #fff;
+        background: #d4d4d4;
+        color: #222;
       }
       .wip-btn-edit-thumb:hover {
-        background: #e63500;
+        background: #e0e0e0;
       }
       .wip-btn-delete {
-        background: rgba(200, 0, 0, 0.08);
-        color: #c00;
+        margin-left: auto;
+        background: #f1f1f1;
+        color: #222;
+        padding: 9px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .wip-btn-delete:hover {
+        background: #e0e0e0;
+      }
+      .wip-btn-delete svg {
+        display: block;
+        color: #222;
+        stroke: #222;
+      }
+      .wip-layout {
+        display: flex;
+        flex-direction: row;
+        gap: 20px;
+        align-items: flex-start;
+      }
+      .wip-content {
+        flex: 1;
+        min-width: 0;
+      }
+      .wip-cover-wrap {
+        position: relative;
+        width: 160px;
+        min-width: 160px;
+        height: 200px;
+        border-radius: 6px;
+        overflow: hidden;
+        cursor: pointer;
+        flex-shrink: 0;
+        background: #e8e8e8;
+      }
+      .wip-cover-img,
+      .wip-snapshot-img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 6px;
+        display: block;
+      }
+      .wip-snapshot-img {
+        opacity: 0;
+        transition: opacity 0.25s ease;
+      }
+      .wip-cover-wrap:hover .wip-snapshot-img {
+        opacity: 1;
+      }
+      .wip-cover-empty {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: #888;
+        text-align: center;
+        padding: 12px;
+        cursor: pointer;
+        box-sizing: border-box;
+        position: absolute;
+        inset: 0;
+      }
+      .wip-cover-empty:hover {
+        background: rgba(0,0,0,0.05);
       }
 
       .home-search-bottom {
@@ -3272,18 +3362,24 @@
       }
       .home-search-bottom #wheel-search {
         border: none;
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(10px);
+        background: #fff;
+        color: #222;
         padding: 10px 18px;
-        border-radius: 999px;
+        border-radius: 8px;
         font-size: 13px;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         width: 260px;
         outline: none;
-        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
         text-align: center;
       }
+      .home-search-bottom #wheel-search::placeholder {
+        color: #222;
+        opacity: 0.4;
+      }
       .home-search-bottom #wheel-search:focus {
-        background: rgba(255, 255, 255, 0.95);
+        background: #fff;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
       }
 
       .home-action-bar {
@@ -3292,27 +3388,28 @@
         left: 50%;
         transform: translateX(-50%);
         display: flex;
-        gap: 8px;
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(10px);
-        padding: 8px;
-        border-radius: 999px;
-        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+        gap: 6px;
+        background: #fff;
+        padding: 6px;
+        border-radius: 8px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
         z-index: 15;
       }
 
       .action-btn {
         border: none;
-        background: transparent;
+        background: #f1f1f1;
+        color: #222;
         padding: 8px 16px;
-        border-radius: 999px;
+        border-radius: 4px;
         font-size: 13px;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         font-weight: 500;
         cursor: pointer;
         transition: background 0.15s;
       }
       .action-btn:hover {
-        background: rgba(0, 0, 0, 0.05);
+        background: #e0e0e0;
       }
       .action-create {
         background: #ff3c00;
@@ -3322,11 +3419,11 @@
         background: #e63500;
       }
       .action-collab {
-        background: #0b36ed;
-        color: #fff;
+        background: #f1f1f1;
+        color: #222;
       }
       .action-collab:hover {
-        background: #0929c4;
+        background: #e0e0e0;
       }
 
       .home-empty {
@@ -3355,16 +3452,42 @@
       <div id="wheel-card-title"></div>
 
       <div id="wheel-info-panel">
-        <h2 class="wip-title"></h2>
-        <div class="wip-meta">
-          <span data-field="created"></span>
-          <span data-field="saved"></span>
-          <span data-field="count"></span>
-          <span data-field="collab"></span>
-        </div>
-        <div class="wip-actions">
-          <button class="wip-btn wip-btn-edit-thumb">Changer l'image</button>
-          <button class="wip-btn wip-btn-delete">Supprimer</button>
+        <div class="wip-layout">
+          <div class="wip-cover-wrap">
+            <img class="wip-cover-img" alt="">
+            <img class="wip-snapshot-img" alt="">
+          </div>
+          <div class="wip-content">
+            <h2 class="wip-title"></h2>
+            <div class="wip-meta">
+              <span data-field="created"></span>
+              <span data-field="saved"></span>
+              <span data-field="count"></span>
+              <span data-field="collab"></span>
+            </div>
+            <div class="wip-actions">
+              <button class="wip-btn wip-btn-edit-thumb">Changer l'image</button>
+              <button class="wip-btn wip-btn-delete" aria-label="Supprimer">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3375,7 +3498,6 @@
       <div class="home-action-bar" id="home-action-bar">
         <button class="action-btn action-create">+ Nouveau board</button>
         <button class="action-btn action-collab">Collaborer</button>
-        <button class="action-btn action-settings" aria-label="Paramètres">⚙</button>
       </div>
 
       <div class="home-empty" id="home-empty" hidden>
@@ -3393,135 +3515,308 @@
       </header>
 
       <div id="subheader">
-
         <!-- ── Section Texte ─────────────────────────── -->
         <div class="sb-section sb-text sb-disabled">
-          <span class="sb-label">Text.</span>
+          <span class="sb-label">Texte :</span>
           <div class="sb-size-wrap">
             <button class="text-size-btn" id="text-size-minus" title="Réduire la taille">
-              <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M6 1L2 5L6 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg
+                width="4"
+                height="8"
+                viewBox="0 0 4 8"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M3.5 0.5L0.5 4L3.5 7.5"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </button>
             <span class="text-size-val" id="text-size-val">14</span>
             <button class="text-size-btn" id="text-size-plus" title="Augmenter la taille">
-              <svg width="8" height="10" viewBox="0 0 8 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 1L6 5L2 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg
+                width="4"
+                height="8"
+                viewBox="0 0 4 8"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M0.5 7.5L3.5 4L0.500001 0.5"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </button>
           </div>
-          <div class="sb-sep"></div>
           <div class="text-font-btns-row">
-            <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Roman</button>
+            <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Regular</button>
             <button class="text-font-btn" id="tp-bold" title="Helvetica Bold">Bold</button>
           </div>
-          <div class="sb-sep"></div>
           <div class="text-align-btns">
             <button class="text-align-btn" id="ta-left" title="Aligner à gauche">
-              <svg width="16" height="14" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 3H18M2 8H13M2 13H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg
+                width="34"
+                height="16"
+                viewBox="0 0 34 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M25.3571 1H8M19.5714 7.75H8M21.5 14.5H8"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </button>
             <button class="text-align-btn" id="ta-center" title="Centrer">
-              <svg width="16" height="14" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 3H18M5 8H15M4 13H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg
+                width="34"
+                height="16"
+                viewBox="33 0 34 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M58.7143 1H41.3572M54.8572 7.75H45.2143M56.7857 14.5H43.2857"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </button>
             <button class="text-align-btn" id="ta-right" title="Aligner à droite">
-              <svg width="16" height="14" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 3H18M7 8H18M5 13H18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg
+                width="35"
+                height="16"
+                viewBox="66 0 35 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M92.0714 1H74.7142M92.0714 7.75H80.4999M92.0714 14.5H78.5714"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </button>
           </div>
         </div>
-
-        <div class="sb-sep-major"></div>
 
         <!-- ── Section Aligner ───────────────────────── -->
         <div class="sb-section sb-align sb-disabled">
-          <span class="sb-label">Aligner.</span>
+          <span class="sb-label">Aligner :</span>
           <div class="align-grid">
-            <button class="align-btn" id="align-left" title="Aligner les bords gauches">
-              <svg width="20" height="20" viewBox="7 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 1V21M14 13H19C20.1046 13 21 13.8954 21 15V17C21 18.1046 20.1046 19 19 19H14C12.8954 19 12 18.1046 12 17V15C12 13.8954 12.8954 13 14 13ZM14 3H26C27.1046 3 28 3.89543 28 5V7C28 8.10457 27.1046 9 26 9H14C12.8954 9 12 8.10457 12 7V5C12 3.89543 12.8954 3 14 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-center-h" title="Centrer horizontalement">
-              <svg width="20" height="20" viewBox="43 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M54 1V21M50 9H46C45.4696 9 44.9609 8.78929 44.5858 8.41421C44.2107 8.03914 44 7.53043 44 7V5C44 3.9 44.9 3 46 3H50M58 9H62C62.5304 9 63.0391 8.78929 63.4142 8.41421C63.7893 8.03914 64 7.53043 64 7V5C64 4.46957 63.7893 3.96086 63.4142 3.58579C63.0391 3.21071 62.5304 3 62 3H58M50 19H49C48.4696 19 47.9609 18.7893 47.5858 18.4142C47.2107 18.0391 47 17.5304 47 17V15C47 13.9 47.9 13 49 13H50M58 13H59C59.5304 13 60.0391 13.2107 60.4142 13.5858C60.7893 13.9609 61 14.4696 61 15V17C61 17.5304 60.7893 18.0391 60.4142 18.4142C60.0391 18.7893 59.5304 19 59 19H58" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-right" title="Aligner les bords droits">
-              <svg width="20" height="20" viewBox="79 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M100 21V1M82 3H94C95.1046 3 96 3.89543 96 5V7C96 8.10457 95.1046 9 94 9H82C80.8954 9 80 8.10457 80 7V5C80 3.89543 80.8954 3 82 3ZM89 13H94C95.1046 13 96 13.8954 96 15V17C96 18.1046 95.1046 19 94 19H89C87.8954 19 87 18.1046 87 17V15C87 13.8954 87.8954 13 89 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="distrib-h" title="Répartir l'espacement horizontal">
-              <svg width="20" height="20" viewBox="115 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M132.25 21V16M132.25 6V1M119.75 21V18M119.75 4V1M118.5 4H121C122.381 4 123.5 4.89543 123.5 6V16C123.5 17.1046 122.381 18 121 18H118.5C117.119 18 116 17.1046 116 16V6C116 4.89543 117.119 4 118.5 4ZM131 6H133.5C134.881 6 136 6.89543 136 8V14C136 15.1046 134.881 16 133.5 16H131C129.619 16 128.5 15.1046 128.5 14V8C128.5 6.89543 129.619 6 131 6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-top" title="Aligner les bords supérieurs">
-              <svg width="20" height="20" viewBox="7 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M28 33H8M12 37H14C15.1046 37 16 37.8954 16 39V51C16 52.1046 15.1046 53 14 53H12C10.8954 53 10 52.1046 10 51V39C10 37.8954 10.8954 37 12 37ZM22 37H24C25.1046 37 26 37.8954 26 39V44C26 45.1046 25.1046 46 24 46H22C20.8954 46 20 45.1046 20 44V39C20 37.8954 20.8954 37 22 37Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-center-v" title="Centrer verticalement">
-              <svg width="20" height="20" viewBox="43 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M44 43H64M52 47V51C52 51.5304 51.7893 52.0391 51.4142 52.4142C51.0391 52.7893 50.5304 53 50 53H48C47.4696 53 46.9609 52.7893 46.5858 52.4142C46.2107 52.0391 46 51.5304 46 51V47M52 39V35C52 34.4696 51.7893 33.9609 51.4142 33.5858C51.0391 33.2107 50.5304 33 50 33H48C47.4696 33 46.9609 33.2107 46.5858 33.5858C46.2107 33.9609 46 34.4696 46 35V39M62 47V48C62 48.5304 61.7893 49.0391 61.4142 49.4142C61.0391 49.7893 60.5304 50 60 50H58C57.4696 50 56.9609 49.7893 56.5858 49.4142C56.2107 49.0391 56 48.5304 56 48V47M56 39V38C56 36.9 56.9 36 58 36H60C60.5304 36 61.0391 36.2107 61.4142 36.5858C61.7893 36.9609 62 37.4696 62 38V39" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="align-bottom" title="Aligner les bords inférieurs">
-              <svg width="20" height="20" viewBox="79 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M100 53H80M84 33H86C87.1046 33 88 33.8954 88 35V47C88 48.1046 87.1046 49 86 49H84C82.8954 49 82 48.1046 82 47V35C82 33.8954 82.8954 33 84 33ZM94 40H96C97.1046 40 98 40.8954 98 42V47C98 48.1046 97.1046 49 96 49H94C92.8954 49 92 48.1046 92 47V42C92 40.8954 92.8954 40 94 40Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button class="align-btn" id="distrib-v" title="Répartir l'espacement vertical">
-              <svg width="20" height="20" viewBox="115 32 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M136 49.25H133M136 36.75H131M119 49.25H116M121 36.75H116M121 45.5H131C132.105 45.5 133 46.6193 133 48V50.5C133 51.8807 132.105 53 131 53H121C119.895 53 119 51.8807 119 50.5V48C119 46.6193 119.895 45.5 121 45.5ZM123 33H129C130.105 33 131 34.1193 131 35.5V38C131 39.3807 130.105 40.5 129 40.5H123C121.895 40.5 121 39.3807 121 38V35.5C121 34.1193 121.895 33 123 33Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
+            <div class="align-subgroup">
+              <button class="align-btn" id="align-left" title="Aligner les bords gauches">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M1 1V19M6.4 11.8H10.9C11.8941 11.8 12.7 12.6059 12.7 13.6V15.4C12.7 16.3941 11.8941 17.2 10.9 17.2H6.4C5.40589 17.2 4.6 16.3941 4.6 15.4V13.6C4.6 12.6059 5.40589 11.8 6.4 11.8ZM6.4 2.8H17.2C18.1941 2.8 19 3.60589 19 4.6V6.4C19 7.39411 18.1941 8.2 17.2 8.2H6.4C5.40589 8.2 4.6 7.39411 4.6 6.4V4.6C4.6 3.60589 5.40589 2.8 6.4 2.8Z"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <button class="align-btn" id="align-center-h" title="Centrer horizontalement">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M10 1V19M6.4 8.2H2.8C2.32261 8.2 1.86477 8.01036 1.52721 7.67279C1.18964 7.33523 1 6.87739 1 6.4V4.6C1 3.61 1.81 2.8 2.8 2.8H6.4M13.6 8.2H17.2C17.6774 8.2 18.1352 8.01036 18.4728 7.67279C18.8104 7.33523 19 6.87739 19 6.4V4.6C19 4.12261 18.8104 3.66477 18.4728 3.32721C18.1352 2.98964 17.6774 2.8 17.2 2.8H13.6M6.4 17.2H5.5C5.02261 17.2 4.56477 17.0104 4.22721 16.6728C3.88964 16.3352 3.7 15.8774 3.7 15.4V13.6C3.7 12.61 4.51 11.8 5.5 11.8H6.4M13.6 11.8H14.5C14.9774 11.8 15.4352 11.9896 15.7728 12.3272C16.1104 12.6648 16.3 13.1226 16.3 13.6V15.4C16.3 15.8774 16.1104 16.3352 15.7728 16.6728C15.4352 17.0104 14.9774 17.2 14.5 17.2H13.6"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <button class="align-btn" id="align-right" title="Aligner les bords droits">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M19 19V1M2.8 2.8H13.6C14.5941 2.8 15.4 3.60589 15.4 4.6V6.4C15.4 7.39411 14.5941 8.2 13.6 8.2H2.8C1.80589 8.2 1 7.39411 1 6.4V4.6C1 3.60589 1.80589 2.8 2.8 2.8ZM9.1 11.8H13.6C14.5941 11.8 15.4 12.6059 15.4 13.6V15.4C15.4 16.3941 14.5941 17.2 13.6 17.2H9.1C8.10589 17.2 7.3 16.3941 7.3 15.4V13.6C7.3 12.6059 8.10589 11.8 9.1 11.8Z"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <button class="align-btn" id="distrib-h" title="Répartir l'espacement horizontal">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M15.625 19V14.5M15.625 5.5V1M4.375 19V16.3M4.375 3.7V1M3.25 3.7H5.5C6.74264 3.7 7.75 4.50589 7.75 5.5V14.5C7.75 15.4941 6.74264 16.3 5.5 16.3H3.25C2.00736 16.3 1 15.4941 1 14.5V5.5C1 4.50589 2.00736 3.7 3.25 3.7ZM14.5 5.5H16.75C17.9926 5.5 19 6.30589 19 7.3V12.7C19 13.6941 17.9926 14.5 16.75 14.5H14.5C13.2574 14.5 12.25 13.6941 12.25 12.7V7.3C12.25 6.30589 13.2574 5.5 14.5 5.5Z"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div class="align-subgroup">
+              <button class="align-btn" id="align-top" title="Aligner les bords supérieurs">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M19 1H1M4.6 4.6H6.4C7.39411 4.6 8.2 5.40589 8.2 6.4V17.2C8.2 18.1941 7.39411 19 6.4 19H4.6C3.60589 19 2.8 18.1941 2.8 17.2V6.4C2.8 5.40589 3.60589 4.6 4.6 4.6ZM13.6 4.6H15.4C16.3941 4.6 17.2 5.40589 17.2 6.4V10.9C17.2 11.8941 16.3941 12.7 15.4 12.7H13.6C12.6059 12.7 11.8 11.8941 11.8 10.9V6.4C11.8 5.40589 12.6059 4.6 13.6 4.6Z"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <button class="align-btn" id="align-center-v" title="Centrer verticalement">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M1 10H19M8.2 13.6V17.2C8.2 17.6774 8.01036 18.1352 7.67279 18.4728C7.33523 18.8104 6.87739 19 6.4 19H4.6C4.12261 19 3.66477 18.8104 3.32721 18.4728C2.98964 18.1352 2.8 17.6774 2.8 17.2V13.6M8.2 6.4V2.8C8.2 2.32261 8.01036 1.86477 7.67279 1.52721C7.33523 1.18964 6.87739 1 6.4 1H4.6C4.12261 1 3.66477 1.18964 3.32721 1.52721C2.98964 1.86477 2.8 2.32261 2.8 2.8V6.4M17.2 13.6V14.5C17.2 14.9774 17.0104 15.4352 16.6728 15.7728C16.3352 16.1104 15.8774 16.3 15.4 16.3H13.6C13.1226 16.3 12.6648 16.1104 12.3272 15.7728C11.9896 15.4352 11.8 14.9774 11.8 14.5V13.6M11.8 6.4V5.5C11.8 4.51 12.61 3.7 13.6 3.7H15.4C15.8774 3.7 16.3352 3.88964 16.6728 4.22721C17.0104 4.56477 17.2 5.02261 17.2 5.5V6.4"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <button class="align-btn" id="align-bottom" title="Aligner les bords inférieurs">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M19 19H1M4.6 1H6.4C7.39411 1 8.2 1.80589 8.2 2.8V13.6C8.2 14.5941 7.39411 15.4 6.4 15.4H4.6C3.60589 15.4 2.8 14.5941 2.8 13.6V2.8C2.8 1.80589 3.60589 1 4.6 1ZM13.6 7.3H15.4C16.3941 7.3 17.2 8.10589 17.2 9.1V13.6C17.2 14.5941 16.3941 15.4 15.4 15.4H13.6C12.6059 15.4 11.8 14.5941 11.8 13.6V9.1C11.8 8.10589 12.6059 7.3 13.6 7.3Z"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <button class="align-btn" id="distrib-v" title="Répartir l'espacement vertical">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M19 15.625H16.3M19 4.375H14.5M3.7 15.625H1M5.5 4.375H1M5.5 12.25H14.5C15.4941 12.25 16.3 13.2574 16.3 14.5V16.75C16.3 17.9926 15.4941 19 14.5 19H5.5C4.50589 19 3.7 17.9926 3.7 16.75V14.5C3.7 13.2574 4.50589 12.25 5.5 12.25ZM7.3 1H12.7C13.6941 1 14.5 2.00736 14.5 3.25V5.5C14.5 6.74264 13.6941 7.75 12.7 7.75H7.3C6.30589 7.75 5.5 6.74264 5.5 5.5V3.25C5.5 2.00736 6.30589 1 7.3 1Z"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
-          <button id="key-object-toggle" title="Aligner sur objet clé">Objet clé</button>
         </div>
-
-        <div class="sb-sep-major"></div>
 
         <!-- ── Section Export ────────────────────────── -->
         <div class="sb-section sb-export">
-          <div class="export-select-wrap">
-            <select id="export-quality-select">
-              <option value="1">Basse qualité</option>
-              <option value="2" selected>Bonne qualité</option>
-              <option value="3">Meilleure qualité</option>
-            </select>
+          <span class="sb-label">Qualité / Format :</span>
+          <div class="export-controls-row">
+            <div class="export-select-wrap">
+              <select id="export-quality-select">
+                <option value="1">Basse qualité</option>
+                <option value="2" selected>Bonne qualité</option>
+                <option value="3">Meilleure qualité</option>
+              </select>
+            </div>
+            <div class="export-panel-actions">
+              <button class="export-fmt-btn" id="export-fmt-pdf">PDF</button>
+              <button class="export-fmt-btn active" id="export-fmt-png">PNG</button>
+            </div>
           </div>
-          <div class="export-panel-actions">
-            <button class="export-fmt-btn" id="export-fmt-pdf">PDF</button>
-            <button class="export-fmt-btn active" id="export-fmt-png">PNG</button>
-            <button id="export-do-btn">Exporter</button>
-          </div>
+          <button id="export-do-btn">Exporter</button>
         </div>
-
-      </div><!-- /#subheader -->
+      </div>
+      <!-- /#subheader -->
 
       <div id="share-collab-dock">
         <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-            <path d="M16 3.128a4 4 0 0 1 0 7.744"/>
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
-            <circle cx="9" cy="7" r="4"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <path d="M16 3.128a4 4 0 0 1 0 7.744" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <circle cx="9" cy="7" r="4" />
           </svg>
         </button>
         <div id="share-wrap" style="position: relative; display: none">
           <button id="share-btn" class="share-btn" title="Partager ce board">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#222222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="18" cy="5" r="3"/>
-              <circle cx="6" cy="12" r="3"/>
-              <circle cx="18" cy="19" r="3"/>
-              <line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/>
-              <line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#222222"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="18" cy="5" r="3" />
+              <circle cx="6" cy="12" r="3" />
+              <circle cx="18" cy="19" r="3" />
+              <line x1="8.59" x2="15.42" y1="13.51" y2="17.49" />
+              <line x1="15.41" x2="8.59" y1="6.51" y2="10.49" />
             </svg>
           </button>
           <div id="share-menu" class="share-menu hidden">
@@ -3535,14 +3830,36 @@
 
       <div id="theme-dock">
         <button id="theme-toggle-btn" class="collab-btn" title="Basculer mode clair / sombre">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"
+            />
           </svg>
         </button>
         <button id="paper-format-btn" class="collab-btn" title="Guide de format papier">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-            <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+            <path d="M14 2v4a2 2 0 0 0 2 2h4" />
           </svg>
         </button>
       </div>
@@ -3583,143 +3900,171 @@
 
       <div class="fit-btn-group">
         <button id="fit-screen-btn" class="fit-screen-btn" title="Ajuster la vue">
-          <svg width="20" height="20" viewBox="13 25 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <svg
+            width="20"
+            height="20"
+            viewBox="13 25 22 22"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
           </svg>
         </button>
-        <button id="preview-btn" class="preview-btn" title="Aperçu plein écran (Échap pour quitter)">
-          <svg width="20" height="20" viewBox="13 25 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556M19.5556 31.5556H28.4445C29.0581 31.5556 29.5556 32.053 29.5556 32.6667V39.3333C29.5556 39.947 29.0581 40.4444 28.4445 40.4444H19.5556C18.9419 40.4444 18.4445 39.947 18.4445 39.3333V32.6667C18.4445 32.053 18.9419 31.5556 19.5556 31.5556Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <button
+          id="preview-btn"
+          class="preview-btn"
+          title="Aperçu plein écran (Échap pour quitter)"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="13 25 22 22"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M14 30.4444V28.2222C14 27.6329 14.2341 27.0676 14.6509 26.6509C15.0676 26.2341 15.6329 26 16.2222 26H18.4444M29.5555 26H31.7778C32.3671 26 32.9324 26.2341 33.3491 26.6509C33.7659 27.0676 34 27.6329 34 28.2222V30.4444M34 41.5556V43.7778C34 44.3671 33.7659 44.9324 33.3491 45.3491C32.9324 45.7659 32.3671 46 31.7778 46H29.5555M18.4444 46H16.2222C15.6329 46 15.0676 45.7659 14.6509 45.3491C14.2341 44.9324 14 44.3671 14 43.7778V41.5556M19.5556 31.5556H28.4445C29.0581 31.5556 29.5556 32.053 29.5556 32.6667V39.3333C29.5556 39.947 29.0581 40.4444 28.4445 40.4444H19.5556C18.9419 40.4444 18.4445 39.947 18.4445 39.3333V32.6667C18.4445 32.053 18.9419 31.5556 19.5556 31.5556Z"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
           </svg>
         </button>
       </div>
 
       <div class="board-body">
         <div id="toolbar-dock">
-        <div class="toolbar" id="toolbar">
-          <button
-            id="tool-note"
-            class="tool-btn"
-            draggable="true"
-            title="Note — glisser pour poser"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="1 1 22 22"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              style="pointer-events: none"
+          <div class="toolbar" id="toolbar">
+            <button
+              id="tool-note"
+              class="tool-btn"
+              draggable="true"
+              title="Note — glisser pour poser"
             >
-              <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path
-                d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"
-              />
-            </svg>
-            <span class="tool-label">Note</span>
-          </button>
-          <button
-            id="tool-color"
-            class="tool-btn"
-            draggable="true"
-            title="Couleur — glisser pour poser"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="1 1 22 22"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              style="pointer-events: none; color: #000"
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="1 1 22 22"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="pointer-events: none"
+              >
+                <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path
+                  d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"
+                />
+              </svg>
+              <span class="tool-label">Note</span>
+            </button>
+            <button
+              id="tool-color"
+              class="tool-btn"
+              draggable="true"
+              title="Couleur — glisser pour poser"
             >
-              <path
-                d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"
-              />
-              <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
-              <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
-              <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
-              <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
-            </svg>
-            <span class="tool-label">Couleur</span>
-          </button>
-          <button
-            id="tool-link"
-            class="tool-btn"
-            draggable="true"
-            title="Lien — glisser pour poser"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="1 1 22 22"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              style="pointer-events: none"
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="1 1 22 22"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="pointer-events: none; color: #000"
+              >
+                <path
+                  d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"
+                />
+                <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+                <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+                <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+                <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+              </svg>
+              <span class="tool-label">Couleur</span>
+            </button>
+            <button
+              id="tool-link"
+              class="tool-btn"
+              draggable="true"
+              title="Lien — glisser pour poser"
             >
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
-            <span class="tool-label">Lien</span>
-          </button>
-          <button
-            id="tool-file"
-            class="tool-btn"
-            draggable="true"
-            title="Fichier — glisser pour poser"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="1 1 22 22"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              style="pointer-events: none; color: #000"
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="1 1 22 22"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="pointer-events: none"
+              >
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+              <span class="tool-label">Lien</span>
+            </button>
+            <button
+              id="tool-file"
+              class="tool-btn"
+              draggable="true"
+              title="Fichier — glisser pour poser"
             >
-              <path
-                d="M11.35 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v5.35"
-              />
-              <path d="M14 2v5a1 1 0 0 0 1 1h5" />
-              <path d="M14 19h6" />
-              <path d="M17 16v6" />
-            </svg>
-            <span class="tool-label">Fichier</span>
-          </button>
-          <button id="tool-connector" class="tool-btn" title="Connecteur — relier deux éléments">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="1 1 22 22"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              style="pointer-events: none"
-            >
-              <rect width="8" height="8" x="3" y="3" rx="2" />
-              <path d="M7 11v4a2 2 0 0 0 2 2h4" />
-              <rect width="8" height="8" x="13" y="13" rx="2" />
-            </svg>
-            <span class="tool-label">Connecteur</span>
-          </button>
-        </div>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="1 1 22 22"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="pointer-events: none; color: #000"
+              >
+                <path
+                  d="M11.35 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v5.35"
+                />
+                <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+                <path d="M14 19h6" />
+                <path d="M17 16v6" />
+              </svg>
+              <span class="tool-label">Fichier</span>
+            </button>
+            <button id="tool-connector" class="tool-btn" title="Connecteur — relier deux éléments">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="1 1 22 22"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="pointer-events: none"
+              >
+                <rect width="8" height="8" x="3" y="3" rx="2" />
+                <path d="M7 11v4a2 2 0 0 0 2 2h4" />
+                <rect width="8" height="8" x="13" y="13" rx="2" />
+              </svg>
+              <span class="tool-label">Connecteur</span>
+            </button>
+          </div>
           <div id="toolbar-handle"></div>
         </div>
 
@@ -3734,8 +4079,19 @@
         </div>
 
         <button id="lib-toggle-btn" title="Bibliothèque d'images">
-          <svg width="24" height="24" viewBox="11 11 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M20.2506 24H24.0006M24.0006 24H27.7506M24.0006 24V20.25M24.0006 24V27.75M30.5 28.5H34C35.1046 28.5 36 27.6046 36 26.5V21.5C36 20.3954 35.1046 19.5 34 19.5H30.5C29.3954 19.5 28.5 18.6046 28.5 17.5V14C28.5 12.8954 27.6046 12 26.5 12H21.5C20.3954 12 19.5 12.8954 19.5 14V17.5C19.5 18.6046 18.6046 19.5 17.5 19.5H14C12.8954 19.5 12 20.3954 12 21.5V26.5C12 27.6046 12.8954 28.5 14 28.5H17.5C18.6046 28.5 19.5 29.3954 19.5 30.5V34C19.5 35.1046 20.3954 36 21.5 36H26.5C27.6046 36 28.5 35.1046 28.5 34V30.5C28.5 29.3954 29.3954 28.5 30.5 28.5Z" stroke="#222222" stroke-width="2" stroke-linecap="round"/>
+          <svg
+            width="24"
+            height="24"
+            viewBox="11 11 26 26"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M20.2506 24H24.0006M24.0006 24H27.7506M24.0006 24V20.25M24.0006 24V27.75M30.5 28.5H34C35.1046 28.5 36 27.6046 36 26.5V21.5C36 20.3954 35.1046 19.5 34 19.5H30.5C29.3954 19.5 28.5 18.6046 28.5 17.5V14C28.5 12.8954 27.6046 12 26.5 12H21.5C20.3954 12 19.5 12.8954 19.5 14V17.5C19.5 18.6046 18.6046 19.5 17.5 19.5H14C12.8954 19.5 12 20.3954 12 21.5V26.5C12 27.6046 12.8954 28.5 14 28.5H17.5C18.6046 28.5 19.5 29.3954 19.5 30.5V34C19.5 35.1046 20.3954 36 21.5 36H26.5C27.6046 36 28.5 35.1046 28.5 34V30.5C28.5 29.3954 29.3954 28.5 30.5 28.5Z"
+              stroke="#222222"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
           </svg>
         </button>
 

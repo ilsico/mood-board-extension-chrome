@@ -1266,8 +1266,30 @@ const App = (function () {
     }
 
     const editThumbBtn = panel.querySelector('.wip-btn-edit-thumb');
-    editThumbBtn.textContent = b.thumbnail ? "Changer l'image" : 'Ajouter une image';
+    editThumbBtn.textContent = b.coverImage ? "Changer l'image" : 'Ajouter une image';
     editThumbBtn.onclick = () => openImagePickerForBoard(b.id);
+
+    const coverWrap = panel.querySelector('.wip-cover-wrap');
+    const coverImg = panel.querySelector('.wip-cover-img');
+    const snapImg = panel.querySelector('.wip-snapshot-img');
+
+    coverImg.src = b.coverImage || '';
+    coverImg.style.display = b.coverImage ? '' : 'none';
+    snapImg.src = b.snapshot || '';
+
+    const prevEmpty = coverWrap.querySelector('.wip-cover-empty');
+    if (prevEmpty) prevEmpty.remove();
+
+    if (!b.coverImage) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'wip-cover-empty';
+      emptyEl.textContent = 'Ajouter une image';
+      emptyEl.onclick = () => openImagePickerForBoard(b.id);
+      coverWrap.appendChild(emptyEl);
+    } else {
+      coverImg.onclick = () => openImagePickerForBoard(b.id);
+    }
+
     panel.querySelector('.wip-btn-delete').onclick = () => {
       if (!confirm('Supprimer ce board ? Cette action est définitive.')) return;
       deleteBoard(b.id);

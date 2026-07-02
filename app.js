@@ -250,25 +250,19 @@ const App = (function () {
       return;
     }
     captureBoardThumbnail()
-      .then(({ dataUrl }) => {
+      .then(({ dataUrl, cropW, cropH }) => {
+        const maxSide = 1200;
+        const ratio = Math.min(1, maxSide / Math.max(cropW, cropH));
+        const tw = Math.round(cropW * ratio);
+        const th = Math.round(cropH * ratio);
         const tc = document.createElement('canvas');
-        tc.width = 720;
-        tc.height = 1000;
+        tc.width = tw;
+        tc.height = th;
         const ctx2 = tc.getContext('2d');
-        ctx2.fillStyle = '#ffffff';
-        ctx2.fillRect(0, 0, 720, 1000);
         const img2 = new Image();
         img2.onload = () => {
-          const margin = 0.1;
-          const maxW = 720 * (1 - 2 * margin);
-          const maxH = 1000 * (1 - 2 * margin);
-          const scale = Math.min(maxW / img2.width, maxH / img2.height);
-          const dw = img2.width * scale,
-            dh = img2.height * scale;
-          const dx = (720 - dw) / 2,
-            dy = (1000 - dh) / 2;
-          ctx2.drawImage(img2, dx, dy, dw, dh);
-          const thumb = tc.toDataURL('image/jpeg', 0.82);
+          ctx2.drawImage(img2, 0, 0, tw, th);
+          const thumb = tc.toDataURL('image/jpeg', 0.85);
           const board = boards.find((b) => b.id === currentBoardId);
           if (board) {
             board.snapshot = thumb;
@@ -1564,7 +1558,7 @@ const App = (function () {
       ghost.getBoundingClientRect();
 
       html2canvas(ghost, {
-        scale: 1,
+        scale: 1.5,
         useCORS: true,
         allowTaint: true,
         x: cropX,

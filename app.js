@@ -271,11 +271,11 @@ const App = (function () {
           const thumb = tc.toDataURL('image/jpeg', 0.82);
           const board = boards.find((b) => b.id === currentBoardId);
           if (board) {
-            board.thumbnail = thumb;
+            board.snapshot = thumb;
             saveBoards();
             if (window._fbDb && currentBoardId) {
               window._fbDb
-                .ref('boards/' + currentBoardId + '/thumbnail')
+                .ref('boards/' + currentBoardId + '/snapshot')
                 .set(thumb)
                 .catch(() => {});
             }
@@ -8954,11 +8954,11 @@ const App = (function () {
     if (name) b.name = name;
 
     if (_editImg.src) {
-      b.thumbnail = _exportEditBoardCrop();
+      b.coverImage = _exportEditBoardCrop();
       if (window._fbDb && _editBoardId) {
         window._fbDb
-          .ref('boards/' + _editBoardId + '/thumbnail')
-          .set(b.thumbnail)
+          .ref('boards/' + _editBoardId + '/coverImage')
+          .set(b.coverImage)
           .catch(() => {});
       }
     }
@@ -9304,11 +9304,12 @@ const App = (function () {
   function updateBoardThumbnail(boardId, thumb) {
     if (!thumb || !boardId) return;
     const board = boards.find((b) => b.id === boardId);
-    if (!board || board.thumbnail === thumb) return;
-    board.thumbnail = thumb;
+    if (!board || board.snapshot === thumb) return;
+    board.snapshot = thumb;
     saveBoards();
     const card = document.querySelector('.wheel-card[data-id="' + boardId + '"]');
     if (card) {
+      const displaySrc = board.coverImage || thumb;
       let img = card.querySelector('.wheel-thumb');
       if (!img) {
         img = document.createElement('img');
@@ -9317,7 +9318,7 @@ const App = (function () {
         card.innerHTML = '';
         card.appendChild(img);
       }
-      img.src = thumb;
+      img.src = displaySrc;
     }
   }
 

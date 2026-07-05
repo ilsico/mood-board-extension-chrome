@@ -3105,6 +3105,23 @@ const App = (function () {
         renderPanelLib();
         break;
       }
+      case 'editImage': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        const s = action.before;
+        _imgStore.set(action.elId, s.data);
+        const img = el.querySelector('img');
+        if (img) img.src = s.data;
+        if (s.w) el.style.width = s.w + 'px';
+        if (s.h) el.style.height = s.h + 'px';
+        if (s.w && s.h) el.dataset.ratio = (s.w / s.h).toFixed(6);
+        updateConnectionsForEl(el);
+        if (isCollab) {
+          Collab.syncElementData(action.elId, s.data);
+          Collab.syncElementSize(action.elId, s.w, s.h, true);
+        }
+        break;
+      }
     }
   }
 
@@ -3218,6 +3235,23 @@ const App = (function () {
         });
         saveLibrary();
         renderPanelLib();
+        break;
+      }
+      case 'editImage': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        const s = action.after;
+        _imgStore.set(action.elId, s.data);
+        const img = el.querySelector('img');
+        if (img) img.src = s.data;
+        if (s.w) el.style.width = s.w + 'px';
+        if (s.h) el.style.height = s.h + 'px';
+        if (s.w && s.h) el.dataset.ratio = (s.w / s.h).toFixed(6);
+        updateConnectionsForEl(el);
+        if (isCollab) {
+          Collab.syncElementData(action.elId, s.data);
+          Collab.syncElementSize(action.elId, s.w, s.h, true);
+        }
         break;
       }
     }
@@ -5638,6 +5672,9 @@ const App = (function () {
   }
   function _applyRestoredImageSrc(el, base64) {
     const id = el.dataset.id;
+    const oldSrc = _imgStore.get(id) || '';
+    const oldW = parseFloat(el.style.width) || null;
+    const oldH = parseFloat(el.style.height) || null;
     _imgStore.set(id, base64);
     const placeholder = el.querySelector('.image-broken-content');
     if (placeholder) placeholder.remove();
@@ -5654,6 +5691,12 @@ const App = (function () {
     try {
       saveCurrentBoard();
     } catch (_) {}
+    pushAction({
+      type: 'editImage',
+      elId: id,
+      before: { data: oldSrc, w: oldW, h: oldH },
+      after: { data: base64, w: parseFloat(el.style.width) || null, h: parseFloat(el.style.height) || null },
+    });
     pushHistory();
     _updateBrokenBanner();
     toast('Image restaurée');
@@ -7076,6 +7119,8 @@ const App = (function () {
         const img = replaceTargetEl.querySelector('img');
         if (img) {
           var oldSrc = _imgStore.get(replaceTargetEl.dataset.id) || '';
+          var oldW = parseFloat(replaceTargetEl.style.width) || null;
+          var oldH = parseFloat(replaceTargetEl.style.height) || null;
           img.src = src;
           _imgStore.set(replaceTargetEl.dataset.id, src);
           replaceTargetEl.dataset.savedata = '';
@@ -7092,10 +7137,10 @@ const App = (function () {
             replaceTargetEl.style.height = newH + 'px';
             replaceTargetEl.dataset.ratio = ratio.toFixed(6);
             pushAction({
-              type: 'editText',
+              type: 'editImage',
               elId: replaceTargetEl.dataset.id,
-              before: { data: oldSrc },
-              after: { data: src },
+              before: { data: oldSrc, w: oldW, h: oldH },
+              after: { data: src, w: currentW, h: newH },
             });
             pushHistory();
             // Collab: sync la nouvelle image et les nouvelles dimensions

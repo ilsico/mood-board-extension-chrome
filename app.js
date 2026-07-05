@@ -3396,55 +3396,55 @@ const App = (function () {
         Collab.syncElementData(el.dataset.id, ta.innerHTML);
       }
     });
-    ta.addEventListener('blur', (e) => {
-      const sbText = document.querySelector('.sb-text');
-      const goingToPanel = sbText && e.relatedTarget && sbText.contains(e.relatedTarget);
-      if (goingToPanel || window._textPanelKeepOpen) return;
-      ta.contentEditable = 'false';
-      delete el.dataset.editing;
-      hideTextEditPanel();
+    ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus));
+  }
+
+  function _handleNoteBlur(e, el, ta, noteValueOnFocus) {
+    const sbText = document.querySelector('.sb-text');
+    const goingToPanel = sbText && e.relatedTarget && sbText.contains(e.relatedTarget);
+    if (goingToPanel || window._textPanelKeepOpen) return;
+    ta.contentEditable = 'false';
+    delete el.dataset.editing;
+    hideTextEditPanel();
+    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+      Collab.syncElementData(el.dataset.id, ta.innerHTML, true);
+      Collab.releaseLock(el.dataset.id);
+    }
+    if (!ta.innerText.trim()) {
+      pushAction({
+        type: 'delete',
+        elId: el.dataset.id,
+        before: {
+          type: el.dataset.type,
+          x: parseFloat(el.style.left) || 0,
+          y: parseFloat(el.style.top) || 0,
+          w: parseFloat(el.style.width) || null,
+          h: parseFloat(el.style.height) || null,
+          z: parseInt(el.style.zIndex) || 100,
+          data: noteValueOnFocus,
+        },
+      });
+      if (hoveredEl === el) {
+        hoveredEl = null;
+        updateCornerHandles();
+      }
+      removeConnectionsForEl(el);
+      el.remove();
+      if (selectedEl === el) selectedEl = null;
+      multiSelected.delete(el);
+      pushHistory();
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.syncElementData(el.dataset.id, ta.innerHTML, true);
+        Collab.syncElementDelete(el.dataset.id);
       }
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.releaseLock(el.dataset.id);
-      }
-      if (!ta.innerText.trim()) {
-        pushAction({
-          type: 'delete',
-          elId: el.dataset.id,
-          before: {
-            type: el.dataset.type,
-            x: parseFloat(el.style.left) || 0,
-            y: parseFloat(el.style.top) || 0,
-            w: parseFloat(el.style.width) || null,
-            h: parseFloat(el.style.height) || null,
-            z: parseInt(el.style.zIndex) || 100,
-            data: _noteValueOnFocus,
-          },
-        });
-        if (hoveredEl === el) {
-          hoveredEl = null;
-          updateCornerHandles();
-        }
-        removeConnectionsForEl(el);
-        el.remove();
-        if (selectedEl === el) selectedEl = null;
-        multiSelected.delete(el);
-        pushHistory();
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          Collab.syncElementDelete(el.dataset.id);
-        }
-      } else if (ta.innerHTML !== _noteValueOnFocus) {
-        pushAction({
-          type: 'editText',
-          elId: el.dataset.id,
-          before: { data: _noteValueOnFocus },
-          after: { data: ta.innerHTML },
-        });
-        pushHistory();
-      }
-    });
+    } else if (ta.innerHTML !== noteValueOnFocus) {
+      pushAction({
+        type: 'editText',
+        elId: el.dataset.id,
+        before: { data: noteValueOnFocus },
+        after: { data: ta.innerHTML },
+      });
+      pushHistory();
+    }
   }
 
   // Ré-attache le double-clic sur une carte fichier clonée (après undo ou Alt+drag)
@@ -5844,36 +5844,7 @@ const App = (function () {
       if (ta.contentEditable === 'true') e.stopPropagation();
     });
 
-    ta.addEventListener('blur', (e) => {
-      const sbText = document.querySelector('.sb-text');
-      const goingToPanel = sbText && e.relatedTarget && sbText.contains(e.relatedTarget);
-      if (goingToPanel || window._textPanelKeepOpen) return;
-      ta.contentEditable = 'false';
-      delete el.dataset.editing;
-      hideTextEditPanel();
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.syncElementData(el.dataset.id, ta.innerHTML, true);
-      }
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        Collab.releaseLock(el.dataset.id);
-      }
-      if (!ta.innerText.trim()) {
-        if (hoveredEl === el) {
-          hoveredEl = null;
-          updateCornerHandles();
-        }
-        removeConnectionsForEl(el);
-        el.remove();
-        if (typeof Collab !== 'undefined' && Collab.isActive()) {
-          Collab.syncElementDelete(el.dataset.id);
-        }
-        if (selectedEl === el) selectedEl = null;
-        multiSelected.delete(el);
-        pushHistory();
-      } else if (ta.innerHTML !== _noteValueOnFocus) {
-        pushHistory();
-      }
-    });
+    ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus));
 
     wrap.appendChild(ta);
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));

@@ -3198,6 +3198,13 @@ const App = (function () {
         if (isCollab) Collab.syncCaption(action.capId, cap.dataset.parentId, parseFloat(cap.style.left) || 0, parseFloat(cap.style.top) || 0, cap.style.width || '', action.before.text);
         break;
       }
+      case 'zIndex': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        el.style.zIndex = action.before.z;
+        if (isCollab) Collab.syncElementZ(action.elId, action.before.z);
+        break;
+      }
     }
   }
 
@@ -3405,6 +3412,13 @@ const App = (function () {
         if (!cap) break;
         cap.textContent = action.after.text;
         if (isCollab) Collab.syncCaption(action.capId, cap.dataset.parentId, parseFloat(cap.style.left) || 0, parseFloat(cap.style.top) || 0, cap.style.width || '', action.after.text);
+        break;
+      }
+      case 'zIndex': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        el.style.zIndex = action.after.z;
+        if (isCollab) Collab.syncElementZ(action.elId, action.after.z);
         break;
       }
     }
@@ -8013,7 +8027,15 @@ const App = (function () {
 
   function ctxBringFront() {
     if (ctxTargetEl) {
+      const oldZ = parseInt(ctxTargetEl.style.zIndex) || 100;
       ctxTargetEl.style.zIndex = ++nextZ;
+      pushAction({
+        type: 'zIndex',
+        elId: ctxTargetEl.dataset.id,
+        before: { z: oldZ },
+        after: { z: nextZ },
+      });
+      pushHistory();
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementZ(ctxTargetEl.dataset.id, nextZ);
       }
@@ -8022,7 +8044,15 @@ const App = (function () {
   }
   function ctxSendBack() {
     if (ctxTargetEl) {
+      const oldZ = parseInt(ctxTargetEl.style.zIndex) || 100;
       ctxTargetEl.style.zIndex = 1;
+      pushAction({
+        type: 'zIndex',
+        elId: ctxTargetEl.dataset.id,
+        before: { z: oldZ },
+        after: { z: 1 },
+      });
+      pushHistory();
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementZ(ctxTargetEl.dataset.id, 1);
       }

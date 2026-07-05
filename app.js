@@ -4330,7 +4330,6 @@ const App = (function () {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         if (moved || duplicated) {
-          pushHistory();
           // Action-based undo: enregistrer le mouvement
           if (moved && !duplicated) {
             const finalX = parseFloat(dragEl.style.left) || 0;
@@ -4360,6 +4359,7 @@ const App = (function () {
               },
             });
           }
+          pushHistory();
           // Collab: sync la création si duplication (avec la position finale)
           if (duplicated && typeof Collab !== 'undefined' && Collab.isActive()) {
             delete dragEl._collabPendingCreate;
@@ -7110,13 +7110,13 @@ const App = (function () {
             replaceTargetEl.style.width = currentW + 'px';
             replaceTargetEl.style.height = newH + 'px';
             replaceTargetEl.dataset.ratio = ratio.toFixed(6);
-            pushHistory();
             pushAction({
               type: 'editText',
               elId: replaceTargetEl.dataset.id,
               before: { data: oldSrc },
               after: { data: src },
             });
+            pushHistory();
             // Collab: sync la nouvelle image et les nouvelles dimensions
             if (typeof Collab !== 'undefined' && Collab.isActive()) {
               Collab.syncElementData(replaceTargetEl.dataset.id, src);

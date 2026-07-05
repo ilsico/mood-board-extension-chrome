@@ -3269,6 +3269,7 @@ const App = (function () {
     historyIndex--;
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
+    _resyncImgStore();
     selectedEl = null;
     multiSelected.clear();
     if (_undoSelIds.length > 1) {
@@ -3311,6 +3312,7 @@ const App = (function () {
     const _redoSelIds = historySelections[historyIndex] || [];
     document.getElementById('canvas').innerHTML = history[historyIndex];
     reattachAllEvents();
+    _resyncImgStore();
     selectedEl = null;
     multiSelected.clear();
     if (_redoSelIds.length > 1) {
@@ -3335,6 +3337,14 @@ const App = (function () {
       if (el.dataset.type === 'color') reattachColorEvents(el);
       if (el.dataset.type === 'note') reattachNoteEvents(el);
       if (el.dataset.type === 'file') reattachFileEvents(el);
+    });
+  }
+  function _resyncImgStore() {
+    document.querySelectorAll('#canvas .board-element[data-type="image"] img').forEach((img) => {
+      if (img.src && img.src.startsWith('data:')) {
+        const el = img.closest('.board-element');
+        if (el && el.dataset.id) _imgStore.set(el.dataset.id, img.src);
+      }
     });
   }
 

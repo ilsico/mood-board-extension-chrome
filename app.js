@@ -6786,7 +6786,10 @@ const App = (function () {
       }
       if (VIDEO_EXTS.has(ext)) {
         readFileAsBase64(file).then((b64) => {
-          createVideoFileElement(file.name, size, b64, baseX, baseY);
+          const el = createVideoFileElement(file.name, size, b64, baseX, baseY);
+          if (el) {
+            pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
+          }
           pushHistory();
         });
       } else {
@@ -6818,12 +6821,13 @@ const App = (function () {
             if (typeof Collab !== 'undefined' && Collab.isActive()) {
               _collabSyncCreatedEl(targetEl);
             }
+            pushAction({ type: 'create', elId: targetEl.dataset.id, after: _captureElState(targetEl) });
+            pushHistory();
           });
         })(fileEl, file.name, size, icon);
       }
     });
     pendingToolDropPos = null;
-    pushHistory();
 
     e.target.value = '';
   }
@@ -7079,7 +7083,8 @@ const App = (function () {
     const el = btn.closest('.board-element');
     if (!el) return;
     if (multiSelected.has(el) && multiSelected.size > 1) {
-      // Dupliquer toute la sélection
+      const dupIds = [];
+      const dupAfters = [];
       multiSelected.forEach((e) => {
         const s = {
           type: e.dataset.type,
@@ -7093,10 +7098,16 @@ const App = (function () {
               : e.dataset.savedata || '',
         };
         var dup = restoreElement(s);
-        if (dup && typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(dup);
+        if (dup) {
+          dupIds.push(dup.dataset.id);
+          dupAfters.push(_captureElState(dup));
+          if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(dup);
+        }
       });
-      pushHistory();
-
+      if (dupIds.length) {
+        pushAction({ type: 'groupCreate', elId: dupIds, after: dupAfters });
+        pushHistory();
+      }
       return;
     }
     const s = {
@@ -7114,6 +7125,7 @@ const App = (function () {
     if (newEl) {
       if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(newEl);
       selectEl(newEl);
+      pushAction({ type: 'create', elId: newEl.dataset.id, after: _captureElState(newEl) });
       pushHistory();
     }
   }
@@ -7922,7 +7934,6 @@ const App = (function () {
       return;
     }
     if (multiSelected.has(ctxTargetEl) && multiSelected.size > 1) {
-      // Dupliquer toute la sélection multiple
       const copies = [];
       multiSelected.forEach((el) => {
         const s = {
@@ -7943,6 +7954,11 @@ const App = (function () {
         }
       });
       if (copies.length) {
+        pushAction({
+          type: 'groupCreate',
+          elId: copies.map((e) => e.dataset.id),
+          after: copies.map((e) => _captureElState(e)),
+        });
         pushHistory();
       }
     } else {
@@ -7961,6 +7977,7 @@ const App = (function () {
       if (el) {
         if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(el);
         selectEl(el);
+        pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
         pushHistory();
       }
     }

@@ -1442,6 +1442,8 @@ const App = (function () {
         history = [];
         historySelections = [];
         historyIndex = -1;
+        _actionHistory = [];
+        _actionIndex = -1;
         selectedEl = null;
         multiSelected.clear();
         applyTransform();
@@ -5282,6 +5284,8 @@ const App = (function () {
         history = [];
         historySelections = [];
         historyIndex = -1;
+        _actionHistory = [];
+        _actionIndex = -1;
         selectedEl = null;
         multiSelected.clear();
         applyTransform();
@@ -5407,6 +5411,8 @@ const App = (function () {
         history = [];
         historySelections = [];
         historyIndex = -1;
+        _actionHistory = [];
+        _actionIndex = -1;
         selectedEl = null;
         multiSelected.clear();
         applyTransform();
@@ -5458,6 +5464,8 @@ const App = (function () {
     history = [];
     historySelections = [];
     historyIndex = -1;
+    _actionHistory = [];
+    _actionIndex = -1;
     selectedEl = null;
     multiSelected.clear();
     applyTransform();

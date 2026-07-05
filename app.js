@@ -3161,6 +3161,24 @@ const App = (function () {
         });
         break;
       }
+      case 'connection': {
+        if (!Array.isArray(action.connections)) break;
+        action.connections.forEach(({ connId }) => {
+          const svg = document.querySelector('.el-connection[data-conn-id="' + connId + '"]');
+          if (svg) svg.remove();
+          if (isCollab) Collab.syncConnectionDelete(connId);
+        });
+        break;
+      }
+      case 'disconnection': {
+        if (!Array.isArray(action.connections)) break;
+        action.connections.forEach(({ fromId, toId, connId }) => {
+          const exists = document.querySelector('.el-connection[data-conn-id="' + connId + '"]');
+          if (!exists) createConnection(fromId, toId, connId);
+          if (isCollab) Collab.syncConnection(connId, fromId, toId);
+        });
+        break;
+      }
     }
   }
 
@@ -3329,6 +3347,24 @@ const App = (function () {
             Collab.syncElementPosition(s.elId, s.x, s.y, true);
             Collab.syncElementSize(s.elId, s.w, s.h, true);
           }
+        });
+        break;
+      }
+      case 'connection': {
+        if (!Array.isArray(action.connections)) break;
+        action.connections.forEach(({ fromId, toId, connId }) => {
+          const exists = document.querySelector('.el-connection[data-conn-id="' + connId + '"]');
+          if (!exists) createConnection(fromId, toId, connId);
+          if (isCollab) Collab.syncConnection(connId, fromId, toId);
+        });
+        break;
+      }
+      case 'disconnection': {
+        if (!Array.isArray(action.connections)) break;
+        action.connections.forEach(({ connId }) => {
+          const svg = document.querySelector('.el-connection[data-conn-id="' + connId + '"]');
+          if (svg) svg.remove();
+          if (isCollab) Collab.syncConnectionDelete(connId);
         });
         break;
       }
@@ -7309,69 +7345,72 @@ const App = (function () {
 
   function ctxConnect() {
     hideContextMenu();
-    // Rassembler tous les éléments sélectionnés (multi + selectedEl)
     const allSel = new Set(multiSelected);
     if (selectedEl) allSel.add(selectedEl);
     const ids = [...allSel].map((el) => el.dataset.id).filter(Boolean);
     if (ids.length < 2) return;
-    // Connecter chaque paire consecutive
+    const connections = [];
     for (let i = 0; i < ids.length - 1; i++) {
-      createConnection(ids[i], ids[i + 1]);
-      // Collab: sync la connexion
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        var connSvg = document.querySelector(
-          '.el-connection[data-from="' + ids[i] + '"][data-to="' + ids[i + 1] + '"]'
-        );
-        if (connSvg && connSvg.dataset.connId) {
-          Collab.syncConnection(connSvg.dataset.connId, ids[i], ids[i + 1]);
+      const svg = createConnection(ids[i], ids[i + 1]);
+      if (svg) {
+        connections.push({ fromId: ids[i], toId: ids[i + 1], connId: svg.dataset.connId });
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.syncConnection(svg.dataset.connId, ids[i], ids[i + 1]);
         }
       }
     }
-    pushHistory();
+    if (connections.length) {
+      pushAction({ type: 'connection', connections });
+      pushHistory();
+    }
   }
 
   function ctxDisconnect() {
     hideContextMenu();
     var allSelIds = new Set();
     if (ctxTargetEl) allSelIds.add(ctxTargetEl.dataset.id);
-    multiSelected.forEach(function (el) {
-      allSelIds.add(el.dataset.id);
-    });
+    multiSelected.forEach(function (el) { allSelIds.add(el.dataset.id); });
     if (selectedEl) allSelIds.add(selectedEl.dataset.id);
     var multi = allSelIds.size >= 2;
     var toRemove = [];
     document.querySelectorAll('.el-connection').forEach(function (svg) {
       var fromIn = allSelIds.has(svg.dataset.from);
       var toIn = allSelIds.has(svg.dataset.to);
-      // ≥ 2 sélectionnés : ne déconnecter que les liens dont LES DEUX bouts sont dans la sélection
-      // 1 seul sélectionné : déconnecter tout ce qui le touche
       if (multi ? fromIn && toIn : fromIn || toIn) {
         toRemove.push(svg);
       }
     });
+    if (!toRemove.length) return;
+    const connections = toRemove.map((svg) => ({
+      fromId: svg.dataset.from,
+      toId: svg.dataset.to,
+      connId: svg.dataset.connId,
+    }));
     toRemove.forEach(function (svg) {
       if (typeof Collab !== 'undefined' && Collab.isActive() && svg.dataset.connId) {
         Collab.syncConnectionDelete(svg.dataset.connId);
       }
       svg.remove();
     });
+    pushAction({ type: 'disconnection', connections });
     pushHistory();
   }
 
-  function createConnection(fromId, toId) {
+  function createConnection(fromId, toId, connId) {
     const canvas = document.getElementById('canvas');
     const fromEl = canvas.querySelector(`[data-id="${fromId}"]`);
     const toEl = canvas.querySelector(`[data-id="${toId}"]`);
-    if (!fromEl || !toEl) return;
+    if (!fromEl || !toEl) return null;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.classList.add('el-connection');
     svg.dataset.from = fromId;
     svg.dataset.to = toId;
-    svg.dataset.connId = 'conn_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    svg.dataset.connId = connId || 'conn_' + Date.now() + '_' + Math.random().toString(36).slice(2);
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     svg.appendChild(line);
     canvas.insertBefore(svg, canvas.firstChild);
     updateConnection(svg, fromEl, toEl);
+    return svg;
   }
 
   function updateConnection(svg, fromEl, toEl) {
@@ -7498,16 +7537,15 @@ const App = (function () {
           '"]'
       );
       if (exists) return;
-      createConnection(fromId, toId);
-      if (typeof Collab !== 'undefined' && Collab.isActive()) {
-        const svgConn = document.querySelector(
-          '.el-connection[data-from="' + fromId + '"][data-to="' + toId + '"]'
-        );
-        if (svgConn && svgConn.dataset.connId) {
-          Collab.syncConnection(svgConn.dataset.connId, fromId, toId);
+      const svg = createConnection(fromId, toId);
+      if (svg) {
+        const connId = svg.dataset.connId;
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.syncConnection(connId, fromId, toId);
         }
+        pushAction({ type: 'connection', connections: [{ fromId, toId, connId }] });
+        pushHistory();
       }
-      pushHistory();
     });
   }
 

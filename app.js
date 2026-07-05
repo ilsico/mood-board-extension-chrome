@@ -3122,6 +3122,28 @@ const App = (function () {
         }
         break;
       }
+      case 'editFile': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        const s = action.before;
+        const d = (() => { try { return JSON.parse(s.savedata || '{}'); } catch (_) { return {}; } })();
+        let newEl;
+        const x = parseFloat(el.style.left) || 0;
+        const y = parseFloat(el.style.top) || 0;
+        if (d.isVideo) {
+          newEl = createVideoFileElement(d.name, d.size, d.src || '', x, y);
+        } else {
+          newEl = createFileElement(d.name, d.size, d.icon, x, y);
+          if (d.fileData) newEl.dataset.savedata = s.savedata;
+        }
+        newEl.dataset.id = action.elId;
+        newEl.style.zIndex = el.style.zIndex;
+        if (s.w) newEl.style.width = s.w + 'px';
+        if (s.h) newEl.style.height = s.h + 'px';
+        el.replaceWith(newEl);
+        if (isCollab) Collab.syncElementData(action.elId, s.savedata);
+        break;
+      }
       case 'groupResize': {
         if (!Array.isArray(action.before)) break;
         action.before.forEach((s) => {
@@ -3269,6 +3291,28 @@ const App = (function () {
           Collab.syncElementData(action.elId, s.data);
           Collab.syncElementSize(action.elId, s.w, s.h, true);
         }
+        break;
+      }
+      case 'editFile': {
+        const el = document.querySelector('[data-id="' + action.elId + '"]');
+        if (!el) break;
+        const s = action.after;
+        const d = (() => { try { return JSON.parse(s.savedata || '{}'); } catch (_) { return {}; } })();
+        let newEl;
+        const x = parseFloat(el.style.left) || 0;
+        const y = parseFloat(el.style.top) || 0;
+        if (d.isVideo) {
+          newEl = createVideoFileElement(d.name, d.size, d.src || '', x, y);
+        } else {
+          newEl = createFileElement(d.name, d.size, d.icon, x, y);
+          if (d.fileData) newEl.dataset.savedata = s.savedata;
+        }
+        newEl.dataset.id = action.elId;
+        newEl.style.zIndex = el.style.zIndex;
+        if (s.w) newEl.style.width = s.w + 'px';
+        if (s.h) newEl.style.height = s.h + 'px';
+        el.replaceWith(newEl);
+        if (isCollab) Collab.syncElementData(action.elId, s.savedata);
         break;
       }
       case 'groupResize': {
@@ -6645,12 +6689,26 @@ const App = (function () {
       const w = parseFloat(target.style.width) || null;
       const h = parseFloat(target.style.height) || null;
       if (VIDEO_EXTS.has(ext)) {
+        const beforeSavedata = target.dataset.savedata || '';
+        const beforeW = parseFloat(target.style.width) || null;
+        const beforeH = parseFloat(target.style.height) || null;
+        const elId = target.dataset.id;
         readFileAsBase64(file).then((b64) => {
           const newEl = createVideoFileElement(file.name, size, b64, x, y, w, h);
           newEl.dataset.id = target.dataset.id;
           newEl.style.zIndex = target.style.zIndex;
           target.replaceWith(newEl);
           selectEl(newEl);
+          pushAction({
+            type: 'editFile',
+            elId: elId,
+            before: { savedata: beforeSavedata, w: beforeW, h: beforeH },
+            after: {
+              savedata: newEl.dataset.savedata,
+              w: parseFloat(newEl.style.width) || null,
+              h: parseFloat(newEl.style.height) || null,
+            },
+          });
           if (typeof Collab !== 'undefined' && Collab.isActive()) {
             Collab.syncElementData(newEl.dataset.id, newEl.dataset.savedata);
             Collab.syncElementSize(
@@ -6663,6 +6721,10 @@ const App = (function () {
           pushHistory();
         });
       } else {
+        const beforeSavedata = target.dataset.savedata || '';
+        const beforeW = parseFloat(target.style.width) || null;
+        const beforeH = parseFloat(target.style.height) || null;
+        const elId = target.dataset.id;
         const icns = {
           pdf: '📄',
           doc: '📝',
@@ -6684,6 +6746,16 @@ const App = (function () {
         if (h) newEl.style.height = h + 'px';
         target.replaceWith(newEl);
         selectEl(newEl);
+        pushAction({
+          type: 'editFile',
+          elId: elId,
+          before: { savedata: beforeSavedata, w: beforeW, h: beforeH },
+          after: {
+            savedata: newEl.dataset.savedata,
+            w: parseFloat(newEl.style.width) || null,
+            h: parseFloat(newEl.style.height) || null,
+          },
+        });
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
           Collab.syncElementData(newEl.dataset.id, newEl.dataset.savedata);
         }

@@ -7555,6 +7555,8 @@ const App = (function () {
   let textEditTarget = null;
   function showTextEditPanel(el) {
     textEditTarget = el;
+    const _styleTarget = el.querySelector('.el-note-content') || el;
+    _styleEditBeforeHtml = _styleTarget ? _styleTarget.innerHTML : null;
     document.getElementById('toolbar').style.display = 'none';
     document.querySelector('.sb-text')?.classList.remove('sb-disabled');
 
@@ -7574,6 +7576,7 @@ const App = (function () {
     }
   }
   function hideTextEditPanel() {
+    _styleEditBeforeHtml = null;
     document.querySelector('.sb-text')?.classList.add('sb-disabled');
     textEditTarget = null;
     updateAlignPanel();
@@ -7703,11 +7706,28 @@ const App = (function () {
     _saveStyleChange();
   }
 
+  let _styleEditBeforeHtml = null;
   let _saveStyleTimer = null;
   function _saveStyleChange() {
-    // En mode collab, la sync est déjà gérée par _collabSyncStyle()
-    // En mode solo, on sauvegarde localement avec un léger debounce
-    if (typeof Collab !== 'undefined' && Collab.isActive()) return;
+    const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
+    if (isCollab) {
+      if (!textEditTarget || _styleEditBeforeHtml === null) return;
+      const ta = textEditTarget.querySelector('.el-note-content') || textEditTarget;
+      if (!ta) return;
+      const afterHtml = ta.innerHTML;
+      if (afterHtml !== _styleEditBeforeHtml) {
+        pushAction({
+          type: 'editText',
+          elId: textEditTarget.dataset.id || textEditTarget.dataset.capId,
+          before: { data: _styleEditBeforeHtml },
+          after: { data: afterHtml },
+        });
+        _styleEditBeforeHtml = afterHtml;
+        pushHistory();
+      }
+      saveCurrentBoard();
+      return;
+    }
     clearTimeout(_saveStyleTimer);
     _saveStyleTimer = setTimeout(() => {
       saveCurrentBoard();

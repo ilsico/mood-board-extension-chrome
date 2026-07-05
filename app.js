@@ -3179,6 +3179,25 @@ const App = (function () {
         });
         break;
       }
+      case 'captionCreate': {
+        const cap = document.querySelector('[data-cap-id="' + action.capId + '"]');
+        if (cap) cap.remove();
+        if (isCollab && action.capId) Collab.syncCaptionDelete(action.capId);
+        break;
+      }
+      case 'captionDelete': {
+        const s = action.before;
+        _createCaptionEl(action.capId, s.parentId, s.x, s.y, s.width, s.text);
+        if (isCollab) Collab.syncCaption(action.capId, s.parentId, s.x, s.y, s.width, s.text);
+        break;
+      }
+      case 'captionEdit': {
+        const cap = document.querySelector('[data-cap-id="' + action.capId + '"]');
+        if (!cap) break;
+        cap.textContent = action.before.text;
+        if (isCollab) Collab.syncCaption(action.capId, cap.dataset.parentId, parseFloat(cap.style.left) || 0, parseFloat(cap.style.top) || 0, cap.style.width || '', action.before.text);
+        break;
+      }
     }
   }
 
@@ -3366,6 +3385,26 @@ const App = (function () {
           if (svg) svg.remove();
           if (isCollab) Collab.syncConnectionDelete(connId);
         });
+        break;
+      }
+      case 'captionCreate': {
+        const s = action.after;
+        const exists = document.querySelector('[data-cap-id="' + action.capId + '"]');
+        if (!exists) _createCaptionEl(action.capId, s.parentId, s.x, s.y, s.width, s.text);
+        if (isCollab) Collab.syncCaption(action.capId, s.parentId, s.x, s.y, s.width, s.text);
+        break;
+      }
+      case 'captionDelete': {
+        const cap = document.querySelector('[data-cap-id="' + action.capId + '"]');
+        if (cap) cap.remove();
+        if (isCollab && action.capId) Collab.syncCaptionDelete(action.capId);
+        break;
+      }
+      case 'captionEdit': {
+        const cap = document.querySelector('[data-cap-id="' + action.capId + '"]');
+        if (!cap) break;
+        cap.textContent = action.after.text;
+        if (isCollab) Collab.syncCaption(action.capId, cap.dataset.parentId, parseFloat(cap.style.left) || 0, parseFloat(cap.style.top) || 0, cap.style.width || '', action.after.text);
         break;
       }
     }
@@ -5209,6 +5248,7 @@ const App = (function () {
       cap.dataset.placeholder = 'Ajouter un commentaire…';
       cap.dataset.parentId = s.parentId || '';
       cap.dataset.type = 'caption';
+      if (s.capId) cap.dataset.capId = s.capId;
       cap.style.left = s.x + 'px';
       cap.style.top = s.y + 'px';
       if (s.width) cap.style.width = s.width;
@@ -5216,7 +5256,7 @@ const App = (function () {
       if (s.style) _applyStyleToEl(cap, s.style);
 
       // Liaison au panneau de texte
-      cap.addEventListener('focus', () => showTextEditPanel(cap));
+      cap.addEventListener('focus', () => { _capValueOnFocus = cap.textContent; showTextEditPanel(cap); });
       cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
 
       document.getElementById('canvas').appendChild(cap);
@@ -7550,6 +7590,26 @@ const App = (function () {
   }
 
   // ── CAPTIONS ─────────────────────────────────────────────────────────────
+  let _capValueOnFocus = '';
+
+  function _createCaptionEl(capId, parentId, x, y, width, text) {
+    const cap = document.createElement('div');
+    cap.classList.add('el-caption');
+    cap.contentEditable = 'true';
+    cap.dataset.placeholder = 'Ajouter un commentaire…';
+    cap.dataset.parentId = parentId || '';
+    cap.dataset.type = 'caption';
+    cap.dataset.capId = capId;
+    cap.style.left = x + 'px';
+    cap.style.top = y + 'px';
+    if (width) cap.style.width = width;
+    cap.textContent = text || '';
+    cap.addEventListener('focus', () => { _capValueOnFocus = cap.textContent; showTextEditPanel(cap); });
+    cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
+    document.getElementById('canvas').appendChild(cap);
+    return cap;
+  }
+
   function ctxAddCaption() {
     hideContextMenu();
     if (!ctxTargetEl) return;
@@ -7558,35 +7618,17 @@ const App = (function () {
     const t = parseFloat(el.style.top) || 0;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
-
-    const cap = document.createElement('div');
-    cap.classList.add('el-caption');
-    cap.contentEditable = 'true';
-    cap.dataset.placeholder = 'Ajouter un commentaire…';
-    cap.dataset.parentId = el.dataset.id || '';
-    cap.dataset.type = 'caption';
-    cap.style.left = l + 'px';
-    cap.style.top = t + h + 'px'; // collée directement sous l'image
-    cap.style.width = w + 'px';
-    // Ajout des listeners
-    cap.addEventListener('focus', () => showTextEditPanel(cap));
-    cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
-    document.getElementById('canvas').appendChild(cap);
+    const capId = 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const cap = _createCaptionEl(
+      capId,
+      el.dataset.id || '',
+      l,
+      t + h,
+      w + 'px',
+      ''
+    );
+    cap.dataset.isNew = '1';
     cap.focus();
-    // Collab: sync création de caption
-    if (typeof Collab !== 'undefined' && Collab.isActive()) {
-      var capId = 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-      cap.dataset.capId = capId;
-      Collab.syncCaption(
-        capId,
-        cap.dataset.parentId || '',
-        parseFloat(cap.style.left) || 0,
-        parseFloat(cap.style.top) || 0,
-        cap.style.width || '',
-        cap.textContent || ''
-      );
-    }
-    pushHistory();
   }
 
   function hideContextMenu() {
@@ -7798,36 +7840,57 @@ const App = (function () {
   function handleCaptionBlur(e, cap) {
     const sbText = document.querySelector('.sb-text');
     const goingToPanel = sbText && e.relatedTarget && sbText.contains(e.relatedTarget);
-
-    // Si on clique vers le subheader texte, on ne ferme pas
     if (goingToPanel || window._textPanelKeepOpen) return;
 
     hideTextEditPanel();
 
-    // Collab: sync contenu de la caption après édition
-    if (
-      typeof Collab !== 'undefined' &&
-      Collab.isActive() &&
-      cap.dataset.capId &&
-      cap.textContent.trim()
-    ) {
-      Collab.syncCaption(
-        cap.dataset.capId,
-        cap.dataset.parentId || '',
-        parseFloat(cap.style.left) || 0,
-        parseFloat(cap.style.top) || 0,
-        cap.style.width || '',
-        cap.textContent
-      );
-    }
+    const capId = cap.dataset.capId;
+    const parentId = cap.dataset.parentId || '';
+    const x = parseFloat(cap.style.left) || 0;
+    const y = parseFloat(cap.style.top) || 0;
+    const width = cap.style.width || '';
+    const currentText = cap.textContent.trim();
 
-    // Si le commentaire est vide après l'édition, on le supprime
-    if (!cap.textContent.trim()) {
-      // Collab: sync suppression de caption vide
-      if (typeof Collab !== 'undefined' && Collab.isActive() && cap.dataset.capId) {
-        Collab.syncCaptionDelete(cap.dataset.capId);
+    if (!currentText) {
+      if (cap.dataset.isNew) {
+        // Caption créée mais jamais remplie → supprimer silencieusement
+        cap.remove();
+        return;
+      }
+      // Caption existante vidée → captionDelete
+      pushAction({
+        type: 'captionDelete',
+        capId,
+        before: { parentId, x, y, width, text: _capValueOnFocus },
+      });
+      if (typeof Collab !== 'undefined' && Collab.isActive() && capId) {
+        Collab.syncCaptionDelete(capId);
       }
       cap.remove();
+      pushHistory();
+    } else if (cap.dataset.isNew) {
+      // Nouvelle caption avec texte → captionCreate
+      delete cap.dataset.isNew;
+      pushAction({
+        type: 'captionCreate',
+        capId,
+        after: { parentId, x, y, width, text: currentText },
+      });
+      if (typeof Collab !== 'undefined' && Collab.isActive() && capId) {
+        Collab.syncCaption(capId, parentId, x, y, width, currentText);
+      }
+      pushHistory();
+    } else if (currentText !== _capValueOnFocus) {
+      // Edition texte existant → captionEdit
+      pushAction({
+        type: 'captionEdit',
+        capId,
+        before: { text: _capValueOnFocus },
+        after: { text: currentText },
+      });
+      if (typeof Collab !== 'undefined' && Collab.isActive() && capId) {
+        Collab.syncCaption(capId, parentId, x, y, width, currentText);
+      }
       pushHistory();
     }
   }

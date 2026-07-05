@@ -3122,6 +3122,23 @@ const App = (function () {
         }
         break;
       }
+      case 'groupResize': {
+        if (!Array.isArray(action.before)) break;
+        action.before.forEach((s) => {
+          const el = document.querySelector('[data-id="' + s.elId + '"]');
+          if (!el) return;
+          el.style.left = s.x + 'px';
+          el.style.top = s.y + 'px';
+          el.style.width = s.w + 'px';
+          if (el.dataset.type !== 'note') el.style.height = s.h + 'px';
+          updateConnectionsForEl(el);
+          if (isCollab) {
+            Collab.syncElementPosition(s.elId, s.x, s.y, true);
+            Collab.syncElementSize(s.elId, s.w, s.h, true);
+          }
+        });
+        break;
+      }
     }
   }
 
@@ -3252,6 +3269,23 @@ const App = (function () {
           Collab.syncElementData(action.elId, s.data);
           Collab.syncElementSize(action.elId, s.w, s.h, true);
         }
+        break;
+      }
+      case 'groupResize': {
+        if (!Array.isArray(action.after)) break;
+        action.after.forEach((s) => {
+          const el = document.querySelector('[data-id="' + s.elId + '"]');
+          if (!el) return;
+          el.style.left = s.x + 'px';
+          el.style.top = s.y + 'px';
+          el.style.width = s.w + 'px';
+          if (el.dataset.type !== 'note') el.style.height = s.h + 'px';
+          updateConnectionsForEl(el);
+          if (isCollab) {
+            Collab.syncElementPosition(s.elId, s.x, s.y, true);
+            Collab.syncElementSize(s.elId, s.w, s.h, true);
+          }
+        });
         break;
       }
     }
@@ -3945,6 +3979,11 @@ const App = (function () {
         });
       });
 
+      const beforeStates = group.map((el) => {
+        const r = initRects.get(el);
+        return { elId: el.dataset.id, x: r.left, y: r.top, w: r.w, h: r.h };
+      });
+
       // Bounding box initiale du groupe entier
       let minL = Infinity,
         minT = Infinity,
@@ -4004,7 +4043,13 @@ const App = (function () {
       const onUp = () => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
-        // Collab : sync taille + position finale de chaque élément du groupe
+        const afterStates = group.map((el) => ({
+          elId: el.dataset.id,
+          x: parseFloat(el.style.left) || 0,
+          y: parseFloat(el.style.top) || 0,
+          w: parseFloat(el.style.width) || 0,
+          h: parseFloat(el.style.height) || 0,
+        }));
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
           group.forEach((el) => {
             const x = parseFloat(el.style.left) || 0;
@@ -4015,6 +4060,7 @@ const App = (function () {
             Collab.syncElementSize(el.dataset.id, w, h, true);
           });
         }
+        pushAction({ type: 'groupResize', elId: group.map((e) => e.dataset.id), before: beforeStates, after: afterStates });
         pushHistory();
       };
       window.addEventListener('mousemove', onMove);

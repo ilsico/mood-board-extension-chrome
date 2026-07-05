@@ -3429,16 +3429,17 @@ const App = (function () {
 
     // Mode collab: undo par action
     if (isCollab && _actionHistory.length > 0) {
+      const NO_CONFLICT_CHECK = new Set([
+        'create', 'delete', 'groupCreate', 'groupResize',
+        'connection', 'disconnection',
+        'captionCreate', 'captionDelete', 'captionEdit',
+        'editImage', 'editFile', 'zIndex',
+      ]);
       let skipped = 0;
       while (_actionIndex >= 0 && skipped < 5) {
         const action = _actionHistory[_actionIndex];
-        // Vérifier les conflits (sauf pour create/delete)
-        if (
-          action.type !== 'create' &&
-          action.type !== 'delete' &&
-          action.type !== 'groupCreate' &&
-          action.type !== 'generic'
-        ) {
+        // Vérifier les conflits (sauf pour les types exemptés)
+        if (!NO_CONFLICT_CHECK.has(action.type)) {
           const elId = Array.isArray(action.elId) ? action.elId[0] : action.elId;
           if (elId && Collab.isLockedByOther(elId)) {
             _actionIndex--;

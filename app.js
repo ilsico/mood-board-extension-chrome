@@ -64,6 +64,9 @@ const App = (function () {
   const _imgStore = new Map(); // id -> base64 src
   const _imgOrigStore = new Map(); // id -> base64 original (avant tout crop)
   let _lightboxElId = null; // id de l'élément image ouvert dans la lightbox
+  let _cropRect = { x: 0, y: 0, w: 0, h: 0 }; // en px dans l'image affichée (crop-container)
+  let _cropDragState = null; // null | { type: 'move'|'nw'|'n'|'ne'|'e'|'se'|'s'|'sw'|'w', startX, startY, startRect }
+  let _cropContainerRect = null; // getBoundingClientRect du #crop-container au début du drag
   let _paperFrame = { active: false, x: 0, y: 0, w: 0, h: 0, realW_mm: null, realH_mm: null };
   let _pfpPrevUnit = 'mm';
   // Rectangle de sélection
@@ -995,6 +998,31 @@ const App = (function () {
     addEvt('ctx-connect', 'click', () => ctxConnect());
     addEvt('ctx-disconnect', 'click', () => ctxDisconnect());
     addEvt('ctx-delete', 'click', () => ctxDelete());
+
+    // Crop
+    addEvt('lightbox-crop-btn', 'click', (e) => {
+      e.stopPropagation();
+      if (_lightboxElId) openCropMode(_lightboxElId);
+    });
+
+    document.getElementById('crop-frame').addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      _cropContainerRect = document.getElementById('crop-container').getBoundingClientRect();
+      const handle = e.target.closest('.crop-handle');
+      const type = handle
+        ? (handle.classList[1] || '').replace('crop-', '')
+        : 'move';
+      _cropDragState = {
+        type,
+        startX: e.clientX,
+        startY: e.clientY,
+        startRect: { ..._cropRect },
+      };
+      document.addEventListener('mousemove', _onCropMouseMove);
+      document.addEventListener('mouseup', _onCropMouseUp);
+    });
 
     // Lightbox vidéo
     addEvt('vlb-close-btn', 'click', () => closeVideoLightbox());
@@ -2793,6 +2821,102 @@ const App = (function () {
     document.getElementById('lightbox-content').style.display = 'flex';
     _lightboxElId = null;
     if (typeof _cropStopDrag === 'function') _cropStopDrag();
+  }
+
+  function openCropMode(elId) {
+    const origSrc = _imgOrigStore.get(elId) || _imgStore.get(elId) || '';
+    if (!origSrc) return;
+
+    document.getElementById('lightbox-content').style.display = 'none';
+    document.getElementById('crop-ui').classList.add('active');
+
+    const cropImg = document.getElementById('crop-orig-img');
+    cropImg.src = origSrc;
+
+    cropImg.onload = function () {
+      const imgRect = cropImg.getBoundingClientRect();
+      const dispW = imgRect.width;
+      const dispH = imgRect.height;
+
+      // Récupérer le cropData existant et le mapper sur la taille d'affichage
+      const el = document.querySelector('[data-id="' + elId + '"]');
+      let savedCrop = null;
+      if (el) {
+        try { savedCrop = JSON.parse(el.dataset.cropdata || 'null'); } catch (_) {}
+      }
+
+      const origImg = new Image();
+      origImg.onload = function () {
+        const natW = origImg.naturalWidth;
+        const natH = origImg.naturalHeight;
+        const scaleX = dispW / natW;
+        const scaleY = dispH / natH;
+
+        if (savedCrop && savedCrop.w > 0 && savedCrop.h > 0) {
+          _cropRect = {
+            x: Math.round(savedCrop.x * scaleX),
+            y: Math.round(savedCrop.y * scaleY),
+            w: Math.round(savedCrop.w * scaleX),
+            h: Math.round(savedCrop.h * scaleY),
+          };
+        } else {
+          _cropRect = { x: 0, y: 0, w: Math.round(dispW), h: Math.round(dispH) };
+        }
+        _applyCropFrame();
+      };
+      origImg.src = origSrc;
+    };
+  }
+
+  function _applyCropFrame() {
+    const frame = document.getElementById('crop-frame');
+    frame.style.left = _cropRect.x + 'px';
+    frame.style.top = _cropRect.y + 'px';
+    frame.style.width = _cropRect.w + 'px';
+    frame.style.height = _cropRect.h + 'px';
+  }
+
+  function _cropStopDrag() {
+    _cropDragState = null;
+    _cropContainerRect = null;
+    document.removeEventListener('mousemove', _onCropMouseMove);
+    document.removeEventListener('mouseup', _onCropMouseUp);
+  }
+
+  function _onCropMouseMove(e) {
+    if (!_cropDragState) return;
+    const dx = e.clientX - _cropDragState.startX;
+    const dy = e.clientY - _cropDragState.startY;
+    const s = _cropDragState.startRect;
+    const cont = _cropContainerRect;
+    const MIN = 20;
+    let { x, y, w, h } = s;
+
+    if (_cropDragState.type === 'move') {
+      x = Math.max(0, Math.min(s.x + dx, cont.width - w));
+      y = Math.max(0, Math.min(s.y + dy, cont.height - h));
+    } else {
+      const t = _cropDragState.type;
+      if (t === 'se' || t === 'e' || t === 'ne') w = Math.max(MIN, Math.min(s.w + dx, cont.width - x));
+      if (t === 'sw' || t === 'w' || t === 'nw') {
+        const nx = Math.min(s.x + dx, s.x + s.w - MIN);
+        w = s.x + s.w - Math.max(0, nx);
+        x = Math.max(0, nx);
+      }
+      if (t === 'se' || t === 's' || t === 'sw') h = Math.max(MIN, Math.min(s.h + dy, cont.height - y));
+      if (t === 'ne' || t === 'n' || t === 'nw') {
+        const ny = Math.min(s.y + dy, s.y + s.h - MIN);
+        h = s.y + s.h - Math.max(0, ny);
+        y = Math.max(0, ny);
+      }
+    }
+
+    _cropRect = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+    _applyCropFrame();
+  }
+
+  function _onCropMouseUp() {
+    _cropStopDrag();
   }
 
   function setupKeyboard() {

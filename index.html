@@ -56,14 +56,14 @@
 
       /* ===== LIGHT MODE OVERRIDES ===== */
       body.light-mode {
-        --bg-app: #c7c7c7;
-        --bg-canvas: #f2f2f2;
-        --bg-input: #b0b0b0;
+        --bg-app: #dddddd;
+        --bg-canvas: #ffffff;
+        --bg-input: #d7d7d7;
         --fg: #222222;
-        --fg-inv: #f2f2f2;
-        --bg-panel: #b8b8b8;
-        --subheader-border: #000;
-        --subheader-btn-bg: #f1f1f1;
+        --fg-inv: #fff;
+        --bg-panel: #dddddd;
+        --subheader-border: #222222;
+        --subheader-btn-bg: #fff;
       }
       body.light-mode .el-connection line {
         stroke: #2c2c2c;
@@ -458,30 +458,10 @@
         user-select: none;
         pointer-events: none;
       }
-      #subheader .text-font-btns-row {
-        display: flex;
-        gap: 8px;
-      }
       #subheader .text-align-btns {
         display: flex;
         gap: 16px;
         align-items: center;
-      }
-      #subheader .text-font-btn {
-        width: auto;
-        height: 16px;
-        border: none;
-        background: var(--subheader-btn-bg);
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        color: var(--fg);
-        font-size: 11px;
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        font-weight: 500;
-        padding: 0 8px;
       }
       #subheader .text-align-btn {
         border: none;
@@ -494,15 +474,8 @@
         transition: opacity 0.12s;
         padding: 0;
       }
-      #subheader .text-font-btn:hover {
-        outline: 1px solid var(--fg);
-      }
       #subheader .text-align-btn:hover {
         opacity: 0.6;
-      }
-      #subheader .text-font-btn.active {
-        background: var(--fg);
-        color: var(--fg-inv);
       }
       #subheader .text-align-btn.active {
         opacity: 0.5;
@@ -542,9 +515,133 @@
         display: flex;
         align-items: center;
       }
-      #subheader #export-quality-select {
+      /* ===== FONT SELECTOR ===== */
+      .font-selector-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+      }
+      .font-selector-btn {
         height: 16px;
+        min-width: 90px;
+        max-width: 140px;
+        border: none;
+        background: var(--subheader-btn-bg);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        color: var(--fg);
         font-size: 11px;
+        font-weight: 500;
+        padding: 0 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: left;
+      }
+      .font-selector-btn:hover {
+        outline: 1px solid var(--fg);
+      }
+      .font-selector-btn.sb-disabled {
+        opacity: 0.4;
+        pointer-events: none;
+      }
+      .font-selector-dropdown {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        width: 220px;
+        background: var(--bg-panel);
+        border: 1px solid rgba(128,128,128,0.25);
+        border-radius: 8px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+        z-index: 9999;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .font-search-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 12px 8px 34px;
+        border: none;
+        border-bottom: 1px solid rgba(128,128,128,0.15);
+        background: var(--bg-panel);
+        color: var(--fg);
+        font-size: 12px;
+        font-family: inherit;
+        outline: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21 21-4.34-4.34'/%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3C/svg%3E");
+        background-size: 15px;
+        background-repeat: no-repeat;
+        background-position: 10px center;
+      }
+      .font-search-input::placeholder {
+        color: var(--fg);
+        opacity: 0.35;
+      }
+      body.light-mode .font-search-input {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23222222' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21 21-4.34-4.34'/%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3C/svg%3E");
+      }
+      .font-list {
+        overflow-y: auto;
+        overflow-x: hidden;
+        max-height: 220px;
+      }
+      .font-list-section {
+        padding: 6px 10px 2px;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.4;
+        color: var(--fg);
+        pointer-events: none;
+      }
+      .font-list-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 5px 10px;
+        cursor: pointer;
+        color: var(--fg);
+        font-size: 13px;
+        line-height: 1.3;
+      }
+      .font-list-item:hover,
+      .font-list-item.focused {
+        background: rgba(128,128,128,0.15);
+      }
+      .font-add-btn,
+      .font-remove-btn {
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+        border: none;
+        background: none;
+        color: var(--fg);
+        font-size: 14px;
+        line-height: 16px;
+        text-align: center;
+        cursor: pointer;
+        padding: 0;
+        opacity: 0;
+        transition: opacity 0.1s;
+        border-radius: 3px;
+      }
+      .font-list-item:hover .font-add-btn,
+      .font-list-item:hover .font-remove-btn {
+        opacity: 0.6;
+      }
+      .font-add-btn:hover,
+      .font-remove-btn:hover {
+        opacity: 1 !important;
+        background: rgba(128,128,128,0.2);
+      }
+      #subheader #export-quality-select {
+        height: 18px;
+        font-size: 12px;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         font-weight: 500;
         background: var(--subheader-btn-bg);
@@ -568,9 +665,9 @@
         align-items: center;
       }
       #subheader .export-fmt-btn {
-        height: 16px;
-        padding: 0 8px;
-        font-size: 11px;
+        height: 18px;
+        padding: 0 12px;
+        font-size: 12px;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         font-weight: 500;
         border: none;
@@ -617,8 +714,8 @@
         color: var(--fg);
       }
       .share-btn {
-        background: var(--fg);
-        color: var(--fg-inv);
+        background: var(--bg-app);
+        color: var(--fg);
         border: none;
         width: 48px;
         height: 48px;
@@ -910,9 +1007,89 @@
         right: 16px;
         z-index: 300;
         display: flex;
-        flex-direction: row;
+        flex-direction: column;
         align-items: center;
         gap: 12px;
+        transition: right 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      body:has(#lib-panel.open) #share-collab-dock {
+        right: calc(300px + 16px);
+      }
+
+      /* ===== PANNEAU HISTORIQUE ===== */
+      #history-panel {
+        position: fixed;
+        bottom: 16px;
+        right: 80px;
+        transition: right 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+        width: 224px;
+        max-height: 360px;
+        background: var(--bg-app);
+        border-radius: 12px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        z-index: 299;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      body.light-mode #history-panel {
+        border: 1px solid rgba(0, 0, 0, 0.12);
+      }
+      #history-panel.hidden {
+        display: none;
+      }
+      body:has(#lib-panel.open) #history-panel {
+        right: calc(300px + 80px);
+      }
+      .history-panel-header {
+        padding: 10px 14px;
+        font-size: 11px;
+        font-family: 'HelveticaBold', sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--fg);
+        opacity: 0.45;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        flex-shrink: 0;
+      }
+      body.light-mode .history-panel-header {
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+      }
+      .history-list {
+        overflow-y: auto;
+        flex: 1;
+        padding: 6px 0;
+      }
+      .history-entry {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 7px 14px;
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+      .history-entry:hover {
+        background: var(--bg-input);
+      }
+      .history-entry.history-current {
+        background: var(--bg-input);
+      }
+      .history-entry.history-current .history-label {
+        font-family: 'HelveticaBold', sans-serif;
+      }
+      .history-entry.history-future {
+        opacity: 0.35;
+      }
+      .history-label {
+        font-size: 13px;
+        color: var(--fg);
+      }
+.history-empty {
+        padding: 18px 14px;
+        font-size: 13px;
+        color: var(--fg);
+        opacity: 0.45;
+        text-align: center;
       }
 
       /* ===== DOCK THÈME (bas gauche) ===== */
@@ -1438,12 +1615,6 @@
         justify-content: space-around;
         padding: 0 2px;
       }
-      .text-font-btns-row {
-        display: flex;
-        gap: 6px;
-        width: 100%;
-        padding: 0 2px;
-      }
       .text-panel-label {
         font-size: 9px;
         color: #bbb;
@@ -1550,7 +1721,7 @@
         background: #ff3c00;
         color: #fff;
         border: none;
-        border-radius: 8px;
+        border-radius: 4px;
         cursor: pointer;
         font-size: 12px;
         font-weight: 700;
@@ -1573,7 +1744,7 @@
       .lib-folder-chip {
         padding: 4px 11px;
         border: 1px solid rgba(128, 128, 128, 0.25);
-        border-radius: 20px;
+        border-radius: 4px;
         background: none;
         cursor: pointer;
         font-size: 11px;
@@ -1601,7 +1772,7 @@
         width: 100%;
         padding: 8px 12px 8px 34px;
         border: 1px solid rgba(128, 128, 128, 0.25);
-        border-radius: 8px;
+        border-radius: 4px;
         font-size: 13px;
         outline: none;
         background: var(--bg-input);
@@ -1678,6 +1849,25 @@
       }
       .lib-panel-item .lib-item-delete:hover {
         background: #ff3c00;
+      }
+      .lib-panel-item .lib-item-restore {
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        background: rgba(0, 0, 0, 0.55);
+        border: none;
+        color: #fff;
+        font-size: 13px;
+        cursor: pointer;
+        padding: 1px 5px;
+        display: none;
+        transition: background 0.1s;
+      }
+      .lib-panel-item:hover .lib-item-restore {
+        display: block;
+      }
+      .lib-panel-item .lib-item-restore:hover {
+        background: #1a7a3a;
       }
       .lib-panel-item .lib-item-name {
         position: absolute;
@@ -2530,6 +2720,7 @@
         background: rgba(0, 0, 0, 0.72);
         z-index: 10000;
         display: none;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         cursor: zoom-out;
@@ -2537,12 +2728,93 @@
       #lightbox-overlay.show {
         display: flex;
       }
-      #lightbox-overlay img {
+      #lightbox-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        cursor: default;
+      }
+      #lightbox-img {
         max-width: 90vw;
-        max-height: 90vh;
+        max-height: 80vh;
         object-fit: contain;
         display: block;
         border-radius: 0;
+        cursor: zoom-out;
+      }
+      #lightbox-crop-bar {
+        display: flex;
+        justify-content: center;
+      }
+      #crop-ui {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        cursor: default;
+      }
+      #crop-ui.active {
+        display: flex;
+      }
+      #crop-container {
+        position: relative;
+        display: inline-block;
+        overflow: hidden;
+        cursor: crosshair;
+        user-select: none;
+      }
+      #crop-orig-img {
+        display: block;
+        max-width: 85vw;
+        max-height: 75vh;
+        object-fit: contain;
+        border-radius: 0;
+        pointer-events: none;
+      }
+      #crop-frame {
+        position: absolute;
+        border: 1.5px solid rgba(255,255,255,0.9);
+        box-sizing: border-box;
+        box-shadow: 0 0 0 9999px rgba(0,0,0,0.55);
+        cursor: move;
+      }
+      .crop-grid {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(255,255,255,0.25) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.25) 1px, transparent 1px);
+        background-size: 33.333% 33.333%;
+      }
+      .crop-handle {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: #fff;
+        border: 1px solid rgba(0,0,0,0.4);
+        box-sizing: border-box;
+      }
+      .crop-nw { top: -5px; left: -5px; cursor: nw-resize; }
+      .crop-n  { top: -5px; left: calc(50% - 5px); cursor: n-resize; }
+      .crop-ne { top: -5px; right: -5px; cursor: ne-resize; }
+      .crop-e  { top: calc(50% - 5px); right: -5px; cursor: e-resize; }
+      .crop-se { bottom: -5px; right: -5px; cursor: se-resize; }
+      .crop-s  { bottom: -5px; left: calc(50% - 5px); cursor: s-resize; }
+      .crop-sw { bottom: -5px; left: -5px; cursor: sw-resize; }
+      .crop-w  { top: calc(50% - 5px); left: -5px; cursor: w-resize; }
+      #crop-actions-bar {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+      }
+      #crop-confirm-btn {
+        background: #ff3c00 !important;
+        color: #fff !important;
+      }
+      #crop-confirm-btn:hover {
+        opacity: 0.85;
       }
 
       body.is-dragging-el,
@@ -2949,6 +3221,8 @@
       body.readonly-mode #share-btn,
       body.readonly-mode #share-wrap,
       body.readonly-mode #collab-btn,
+      body.readonly-mode #history-btn,
+      body.readonly-mode #history-panel,
       body.readonly-mode #theme-dock,
       body.readonly-mode #multi-resize-handle,
       body.readonly-mode #resize-corner-nw,
@@ -3273,11 +3547,11 @@
         background: #e0e0e0;
       }
       .wip-btn-edit-thumb {
-        background: #d4d4d4;
+        background: #dddddd;
         color: #222;
       }
       .wip-btn-edit-thumb:hover {
-        background: #e0e0e0;
+        background: #dddddd;
       }
       .wip-btn-delete {
         margin-left: auto;
@@ -3503,9 +3777,12 @@
               </svg>
             </button>
           </div>
-          <div class="text-font-btns-row">
-            <button class="text-font-btn" id="tp-roman" title="Helvetica Roman">Regular</button>
-            <button class="text-font-btn" id="tp-bold" title="Helvetica Bold">Bold</button>
+          <div class="font-selector-wrap" id="font-selector-wrap">
+            <button class="font-selector-btn sb-disabled" id="font-selector-btn" title="Choisir une police">&mdash;</button>
+            <div class="font-selector-dropdown" id="font-selector-dropdown" style="display:none">
+              <input class="font-search-input" id="font-search-input" type="text" placeholder=" Rechercher..." autocomplete="off" spellcheck="false">
+              <div class="font-list" id="font-list"></div>
+            </div>
           </div>
           <div class="text-align-btns">
             <button class="text-align-btn" id="ta-left" title="Aligner à gauche">
@@ -3730,6 +4007,11 @@
       </div>
       <!-- /#subheader -->
 
+      <div id="history-panel" class="hidden">
+        <div class="history-panel-header">Historique</div>
+        <div class="history-list"></div>
+      </div>
+
       <div id="share-collab-dock">
         <button id="collab-btn" class="collab-btn" title="Collaborer en temps réel">
           <svg
@@ -3749,6 +4031,23 @@
             <circle cx="9" cy="7" r="4" />
           </svg>
         </button>
+        <button id="history-btn" class="collab-btn" title="Historique des actions" style="display:none">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M12 7v5l4 2" />
+          </svg>
+        </button>
         <div id="share-wrap" style="position: relative; display: none">
           <button id="share-btn" class="share-btn" title="Partager ce board">
             <svg
@@ -3757,7 +4056,7 @@
               height="20"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#222222"
+              stroke="currentColor"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -4234,7 +4533,38 @@
     <div id="toast"></div>
 
     <div id="lightbox-overlay">
-      <img id="lightbox-img" src="" alt="" />
+      <!-- Vue normale : image + bouton recadrer -->
+      <div id="lightbox-content">
+        <img id="lightbox-img" src="" alt="" />
+        <div id="lightbox-crop-bar">
+          <button id="lightbox-crop-btn" class="collab-btn" title="Recadrer l'image">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 2 6 18 22 18"/><polyline points="2 6 18 6 18 22"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <!-- Vue crop : image originale + cadre interactif -->
+      <div id="crop-ui">
+        <div id="crop-container">
+          <img id="crop-orig-img" src="" alt="" draggable="false" />
+          <div id="crop-frame">
+            <div class="crop-grid"></div>
+            <div class="crop-handle crop-nw"></div>
+            <div class="crop-handle crop-n"></div>
+            <div class="crop-handle crop-ne"></div>
+            <div class="crop-handle crop-e"></div>
+            <div class="crop-handle crop-se"></div>
+            <div class="crop-handle crop-s"></div>
+            <div class="crop-handle crop-sw"></div>
+            <div class="crop-handle crop-w"></div>
+          </div>
+        </div>
+        <div id="crop-actions-bar">
+          <button id="crop-cancel-btn" class="collab-btn" title="Annuler le recadrage">✗ Annuler</button>
+          <button id="crop-confirm-btn" class="collab-btn" title="Valider le recadrage">✓ Valider</button>
+        </div>
+      </div>
     </div>
 
     <div id="video-lightbox-overlay">

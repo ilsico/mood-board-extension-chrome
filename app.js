@@ -1005,6 +1005,13 @@ const App = (function () {
       if (_lightboxElId) openCropMode(_lightboxElId);
     });
 
+    addEvt('crop-confirm-btn', 'click', (e) => { e.stopPropagation(); _confirmCrop(); });
+    addEvt('crop-cancel-btn', 'click', (e) => {
+      e.stopPropagation();
+      document.getElementById('crop-ui').classList.remove('active');
+      document.getElementById('lightbox-content').style.display = 'flex';
+    });
+
     document.getElementById('crop-frame').addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       e.stopPropagation();
@@ -2919,6 +2926,86 @@ const App = (function () {
     _cropStopDrag();
   }
 
+  function _confirmCrop() {
+    const elId = _lightboxElId;
+    if (!elId) return;
+    const el = document.querySelector('[data-id="' + elId + '"]');
+    if (!el) return;
+
+    const cropImg = document.getElementById('crop-orig-img');
+    const origSrc = _imgOrigStore.get(elId) || _imgStore.get(elId) || '';
+
+    const dispW = cropImg.naturalWidth > 0
+      ? cropImg.getBoundingClientRect().width
+      : cropImg.clientWidth;
+    const dispH = cropImg.naturalWidth > 0
+      ? cropImg.getBoundingClientRect().height
+      : cropImg.clientHeight;
+
+    const tmpImg = new Image();
+    tmpImg.onload = function () {
+      const natW = tmpImg.naturalWidth;
+      const natH = tmpImg.naturalHeight;
+      const scaleX = natW / dispW;
+      const scaleY = natH / dispH;
+
+      const cx = Math.round(_cropRect.x * scaleX);
+      const cy = Math.round(_cropRect.y * scaleY);
+      const cw = Math.max(1, Math.round(_cropRect.w * scaleX));
+      const ch = Math.max(1, Math.round(_cropRect.h * scaleY));
+
+      const cvs = document.createElement('canvas');
+      cvs.width = cw;
+      cvs.height = ch;
+      const ctx = cvs.getContext('2d');
+      ctx.drawImage(tmpImg, cx, cy, cw, ch, 0, 0, cw, ch);
+      const croppedSrc = cvs.toDataURL('image/png');
+
+      // Sauvegarder l'original si c'est le premier crop
+      if (!_imgOrigStore.has(elId)) {
+        _imgOrigStore.set(elId, origSrc);
+      }
+
+      const oldSrc = _imgStore.get(elId) || '';
+      const oldW = parseFloat(el.style.width) || null;
+      const oldH = parseFloat(el.style.height) || null;
+
+      // Capturer l'ancien cropdata AVANT mutation
+      const oldCropdata = el.dataset.cropdata || '';
+
+      // Conserver les dimensions actuelles du board-element, adapter le ratio
+      const currentW = oldW || cw;
+      const newRatio = cw / ch;
+      const newH = Math.round(currentW / newRatio);
+
+      _imgStore.set(elId, croppedSrc);
+      const domImg = el.querySelector('img');
+      if (domImg) domImg.src = croppedSrc;
+      el.style.height = newH + 'px';
+      el.dataset.ratio = newRatio.toFixed(6);
+
+      // Stocker le cropData (coords dans l'image originale)
+      el.dataset.cropdata = JSON.stringify({ x: cx, y: cy, w: cw, h: ch });
+
+      pushAction({
+        type: 'editImage',
+        elId,
+        detail: 'Image recadrée',
+        before: { data: oldSrc, w: oldW, h: oldH, cropdata: oldCropdata },
+        after:  { data: croppedSrc, w: currentW, h: newH, cropdata: el.dataset.cropdata },
+      });
+      pushHistory();
+
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(elId, croppedSrc);
+        Collab.syncElementSize(elId, currentW, newH, true);
+      }
+
+      closeLightbox();
+    };
+    tmpImg.src = origSrc;
+  }
+
   function setupKeyboard() {
     document.addEventListener('keydown', async (e) => {
       // Touches de mode (Alt, Ctrl) — traitées en premier, sans test isTyping
@@ -3295,6 +3382,7 @@ const App = (function () {
         if (s.h) el.style.height = s.h + 'px';
         if (s.w && s.h) el.dataset.ratio = (s.w / s.h).toFixed(6);
         updateConnectionsForEl(el);
+        if (s.cropdata !== undefined) el.dataset.cropdata = s.cropdata || '';
         if (isCollab) {
           Collab.syncElementData(action.elId, s.data);
           Collab.syncElementSize(action.elId, s.w, s.h, true);
@@ -3513,6 +3601,7 @@ const App = (function () {
         if (s.h) el.style.height = s.h + 'px';
         if (s.w && s.h) el.dataset.ratio = (s.w / s.h).toFixed(6);
         updateConnectionsForEl(el);
+        if (s.cropdata !== undefined) el.dataset.cropdata = s.cropdata || '';
         if (isCollab) {
           Collab.syncElementData(action.elId, s.data);
           Collab.syncElementSize(action.elId, s.w, s.h, true);

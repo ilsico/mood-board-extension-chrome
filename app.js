@@ -197,7 +197,11 @@ const App = (function () {
           textAlign: ta.style.textAlign || '',
         };
       })();
-      elements.push({
+      const _elemData =
+        el.dataset.type === 'image'
+          ? _imgStore.get(el.dataset.id) || el.dataset.savedata || ''
+          : el.dataset.savedata || '';
+      const _elemEntry = {
         id: el.dataset.id,
         type: el.dataset.type,
         x: parseFloat(el.style.left) || 0,
@@ -205,12 +209,15 @@ const App = (function () {
         w: parseFloat(el.style.width) || null,
         h: parseFloat(el.style.height) || null,
         z: parseInt(el.style.zIndex) || 100,
-        data:
-          el.dataset.type === 'image'
-            ? _imgStore.get(el.dataset.id) || el.dataset.savedata || ''
-            : el.dataset.savedata || '',
+        data: _elemData,
         style: _elStyle,
-      });
+      };
+      if (el.dataset.type === 'image') {
+        const _origSrc = _imgOrigStore.get(el.dataset.id);
+        if (_origSrc) _elemEntry.origData = _origSrc;
+        if (el.dataset.cropdata) _elemEntry.cropdata = el.dataset.cropdata;
+      }
+      elements.push(_elemEntry);
     });
     // Sauvegarder les connexions
     document.querySelectorAll('#canvas .el-connection').forEach((svg) => {
@@ -5625,6 +5632,10 @@ const App = (function () {
       }
       el.dataset.id = s.id;
     }
+    if (s.type === 'image' && el) {
+      if (s.origData && !_imgOrigStore.has(el.dataset.id)) _imgOrigStore.set(el.dataset.id, s.origData);
+      if (s.cropdata) el.dataset.cropdata = s.cropdata;
+    }
     return el;
   }
 
@@ -8690,6 +8701,11 @@ const App = (function () {
               : el.dataset.savedata || '',
         };
         const newEl = restoreElement(s);
+        if (newEl && el.dataset.type === 'image') {
+          const origSrc = _imgOrigStore.get(el.dataset.id);
+          if (origSrc && !_imgOrigStore.has(newEl.dataset.id)) _imgOrigStore.set(newEl.dataset.id, origSrc);
+          if (el.dataset.cropdata) newEl.dataset.cropdata = el.dataset.cropdata;
+        }
         if (newEl) {
           if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(newEl);
           copies.push(newEl);
@@ -8716,6 +8732,11 @@ const App = (function () {
             : ctxTargetEl.dataset.savedata || '',
       };
       const el = restoreElement(s);
+      if (el && ctxTargetEl.dataset.type === 'image') {
+        const origSrc = _imgOrigStore.get(ctxTargetEl.dataset.id);
+        if (origSrc && !_imgOrigStore.has(el.dataset.id)) _imgOrigStore.set(el.dataset.id, origSrc);
+        if (ctxTargetEl.dataset.cropdata) el.dataset.cropdata = ctxTargetEl.dataset.cropdata;
+      }
       if (el) {
         if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(el);
         selectEl(el);

@@ -1012,7 +1012,7 @@ const App = (function () {
       _cropContainerRect = document.getElementById('crop-container').getBoundingClientRect();
       const handle = e.target.closest('.crop-handle');
       const type = handle
-        ? (handle.classList[1] || '').replace('crop-', '')
+        ? (handle.classList[1] || 'move').replace('crop-', '')
         : 'move';
       _cropDragState = {
         type,

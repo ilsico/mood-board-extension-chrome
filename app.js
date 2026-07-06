@@ -62,6 +62,8 @@ const App = (function () {
   let _syncIntervalId = null;
   // Stockage hors-DOM des données base64 des images (évite des attributs HTML massifs)
   const _imgStore = new Map(); // id -> base64 src
+  const _imgOrigStore = new Map(); // id -> base64 original (avant tout crop)
+  let _lightboxElId = null; // id de l'élément image ouvert dans la lightbox
   let _paperFrame = { active: false, x: 0, y: 0, w: 0, h: 0, realW_mm: null, realH_mm: null };
   let _pfpPrevUnit = 'mm';
   // Rectangle de sélection
@@ -72,6 +74,14 @@ const App = (function () {
   let draggedLibItems = []; // items sélectionnés pour drag multiple vers le board
   let fileReplaceTarget = null; // élément .board-element à remplacer lors du prochain handleFileUpload
   const SHARE_BASE_URL = 'https://moodboard-app-b21b9.web.app';
+
+  // ── FONT SELECTOR ────────────────────────────────────────────────────────
+  let _localFonts = [];           // string[] familles locales (dédupliquées, triées)
+  let _gFontsList = null;         // string[] familles Google Fonts (cache, null = pas encore fetchées)
+  const _loadedGFonts = new Set();// familles déjà injectées via <link> dans le <head>
+  let _fontPreviewOriginal = null;// fontFamily CSS sauvegardé avant ouverture dropdown (revert Echap)
+  let _fontFocusedIdx = -1;       // index de l'item focusé par les touches ↑↓
+  let _fontDropdownOpen = false;  // état ouvert/fermé du dropdown
 
   //// ── PERSISTANCE (IndexedDB - Stockage illimité sur disque dur) ───────────
   const DB_NAME = 'MoodboardDB';
@@ -385,6 +395,8 @@ const App = (function () {
     setupPanelDrop();
     // Fermer les lightboxes au clic sur l'overlay
     document.getElementById('lightbox-overlay').addEventListener('click', closeLightbox);
+    document.getElementById('lightbox-content').addEventListener('click', (e) => e.stopPropagation());
+    document.getElementById('crop-ui').addEventListener('click', (e) => e.stopPropagation());
     document.getElementById('video-lightbox-overlay').addEventListener('click', (e) => {
       if (e.target === document.getElementById('video-lightbox-overlay')) closeVideoLightbox();
     });
@@ -698,10 +710,22 @@ const App = (function () {
     document.addEventListener('click', (e) => {
       const wrap = document.getElementById('share-wrap');
       const menu = document.getElementById('share-menu');
-      if (!menu || !wrap) return;
-      if (menu.classList.contains('hidden')) return;
-      if (!wrap.contains(e.target)) menu.classList.add('hidden');
+      if (menu && wrap && !menu.classList.contains('hidden') && !wrap.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
     });
+
+    addEvt('history-btn', 'click', () => {
+      const panel = document.getElementById('history-panel');
+      if (!panel) return;
+      panel.classList.toggle('hidden');
+      if (!panel.classList.contains('hidden')) renderHistoryPanel();
+    });
+
+    const _histPanelEl = document.getElementById('history-panel');
+    if (_histPanelEl) {
+      _histPanelEl.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
+    }
     addEvt('broken-delete-all', 'click', () => {
       const brokens = document.querySelectorAll('#canvas .board-element.image-broken');
       if (!brokens.length) return;
@@ -757,6 +781,8 @@ const App = (function () {
         const shareWrap = document.getElementById('share-wrap');
         if (shareWrap && window._fbDb && !document.body.classList.contains('readonly-mode'))
           shareWrap.style.display = '';
+        const _hb0 = document.getElementById('history-btn');
+        if (_hb0 && !document.body.classList.contains('readonly-mode')) _hb0.style.display = '';
       } catch (e) {
         toast('Erreur lors du démarrage de la session');
       }
@@ -782,8 +808,8 @@ const App = (function () {
     addEvt('tool-connector', 'click', () => toggleConnectorMode());
 
     // Panneau texte
-    addEvt('tp-roman', 'click', () => applyTextFont('helvetica-roman'));
-    addEvt('tp-bold', 'click', () => applyTextFont('helvetica-bold'));
+    // Sélecteur de police
+    _initFontSelector();
     // Chevrons taille — hold-to-repeat (400 ms délai, puis toutes les 80 ms)
     let _szDragged = false;
     let _szRepeatTimer = null,
@@ -868,6 +894,7 @@ const App = (function () {
           window.removeEventListener('mouseup', onUp);
           window._textPanelKeepOpen = false;
           if (_szDragged) {
+            _pendingStyleDetail = 'Taille texte modifiée (' + _szLastSize + ')';
             _saveStyleChange();
             setTimeout(() => {
               _szDragged = false;
@@ -1423,6 +1450,8 @@ const App = (function () {
         const shareWrap = document.getElementById('share-wrap');
         if (shareWrap && window._fbDb && !document.body.classList.contains('readonly-mode'))
           shareWrap.style.display = '';
+        const _hb1 = document.getElementById('history-btn');
+        if (_hb1 && !document.body.classList.contains('readonly-mode')) _hb1.style.display = '';
         const shareMenu = document.getElementById('share-menu');
         if (shareMenu) shareMenu.classList.add('hidden');
         const collabBtn = document.getElementById('collab-btn');
@@ -1495,6 +1524,10 @@ const App = (function () {
     document.getElementById('home-screen').style.display = 'flex';
     const shareWrap = document.getElementById('share-wrap');
     if (shareWrap) shareWrap.style.display = 'none';
+    const _hbHome = document.getElementById('history-btn');
+    if (_hbHome) _hbHome.style.display = 'none';
+    const _hpHome = document.getElementById('history-panel');
+    if (_hpHome) _hpHome.classList.add('hidden');
     const shareMenu = document.getElementById('share-menu');
     if (shareMenu) shareMenu.classList.add('hidden');
     const brokenBanner = document.getElementById('broken-images-banner');
@@ -2079,6 +2112,10 @@ const App = (function () {
         if (boardScreen && boardScreen.style.display !== 'none') {
           const libPanel = document.getElementById('lib-panel');
           if (libPanel && libPanel.contains(e.target)) return;
+          const histPanel = document.getElementById('history-panel');
+          if (histPanel && histPanel.contains(e.target)) return;
+          const fontDropdown = document.getElementById('font-selector-dropdown');
+          if (fontDropdown && fontDropdown.contains(e.target)) return;
           e.preventDefault();
           // Les resize handles sont position:fixed rattachés au body (hors canvas-wrapper).
           // Si le target n'est pas dans le wrapper, on applique manuellement le zoom/pan
@@ -2737,15 +2774,25 @@ const App = (function () {
 
   // ── CLAVIER ──────────────────────────────────────────────────────────────
   // ── LIGHTBOX ──────────────────────────────────────────────────────────────
-  function openLightbox(src) {
+  function openLightbox(src, elId) {
+    _lightboxElId = elId || null;
     const overlay = document.getElementById('lightbox-overlay');
     const img = document.getElementById('lightbox-img');
     img.src = src;
+    document.getElementById('lightbox-content').style.display = 'flex';
+    document.getElementById('crop-ui').classList.remove('active');
+    document.getElementById('lightbox-crop-btn').style.display =
+      elId ? 'flex' : 'none';
     overlay.classList.add('show');
   }
   function closeLightbox() {
     document.getElementById('lightbox-overlay').classList.remove('show');
     document.getElementById('lightbox-img').src = '';
+    document.getElementById('crop-orig-img').src = '';
+    document.getElementById('crop-ui').classList.remove('active');
+    document.getElementById('lightbox-content').style.display = 'flex';
+    _lightboxElId = null;
+    if (typeof _cropStopDrag === 'function') _cropStopDrag();
   }
 
   function setupKeyboard() {
@@ -2768,8 +2815,10 @@ const App = (function () {
         return;
       }
       if (!document.body.classList.contains('readonly-mode')) {
+        const _ae = document.activeElement;
+        const _canUndoRedo = !isTyping(e) || (!_ae?.isContentEditable && _ae?.tagName !== 'INPUT' && _ae?.tagName !== 'TEXTAREA');
         if (
-          !isTyping(e) &&
+          _canUndoRedo &&
           (e.ctrlKey || e.metaKey) &&
           e.shiftKey &&
           (e.key === 'Z' || e.key === 'z')
@@ -2777,7 +2826,7 @@ const App = (function () {
           e.preventDefault();
           redo();
         } else if (
-          !isTyping(e) &&
+          _canUndoRedo &&
           (e.ctrlKey || e.metaKey) &&
           !e.shiftKey &&
           (e.key === 'z' || e.key === 'Z')
@@ -2786,7 +2835,9 @@ const App = (function () {
           undo();
         }
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !isTyping(e)) {
+      const _libDelete =
+        libSelectedIds.size > 0 && document.activeElement?.id !== 'lib-panel-search';
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (!isTyping(e) || _libDelete)) {
         if (document.body.classList.contains('readonly-mode')) return;
         e.preventDefault();
         if (libSelectedIds.size > 0) {
@@ -2968,6 +3019,7 @@ const App = (function () {
     _actionHistory.push(action);
     if (_actionHistory.length > MAX_ACTIONS) _actionHistory.shift();
     _actionIndex = _actionHistory.length - 1;
+    renderHistoryPanel();
   }
 
   /** Capture l'état d'un élément pour les actions create/delete */
@@ -3021,7 +3073,10 @@ const App = (function () {
         el.dataset.savedata = action.before.data;
         if (action.type === 'editText') {
           const ta = el.querySelector('.el-note-content');
-          if (ta) ta.innerHTML = _noteDataToHtml(action.before.data);
+          if (ta) {
+            ta.innerHTML = _noteDataToHtml(action.before.data);
+            if (action.before.style !== undefined) ta.style.cssText = action.before.style;
+          }
         } else {
           const swatch = el.querySelector('.color-swatch');
           if (swatch) swatch.style.backgroundColor = action.before.data;
@@ -3242,7 +3297,10 @@ const App = (function () {
         el.dataset.savedata = action.after.data;
         if (action.type === 'editText') {
           const ta = el.querySelector('.el-note-content');
-          if (ta) ta.innerHTML = _noteDataToHtml(action.after.data);
+          if (ta) {
+            ta.innerHTML = _noteDataToHtml(action.after.data);
+            if (action.after.style !== undefined) ta.style.cssText = action.after.style;
+          }
         } else {
           const swatch = el.querySelector('.color-swatch');
           if (swatch) swatch.style.backgroundColor = action.after.data;
@@ -3427,7 +3485,7 @@ const App = (function () {
   function undo() {
     const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
 
-    // Mode collab: undo par action
+    // Mode collab: undo par action avec vérification de conflits
     if (isCollab && _actionHistory.length > 0) {
       const NO_CONFLICT_CHECK = new Set([
         'create', 'delete', 'groupCreate', 'groupResize',
@@ -3438,7 +3496,6 @@ const App = (function () {
       let skipped = 0;
       while (_actionIndex >= 0 && skipped < 5) {
         const action = _actionHistory[_actionIndex];
-        // Vérifier les conflits (sauf pour les types exemptés)
         if (!NO_CONFLICT_CHECK.has(action.type)) {
           const elId = Array.isArray(action.elId) ? action.elId[0] : action.elId;
           if (elId && Collab.isLockedByOther(elId)) {
@@ -3455,6 +3512,7 @@ const App = (function () {
         _applyReverse(action);
         _actionIndex--;
         updateCornerHandles();
+        renderHistoryPanel();
         return;
       }
       if (skipped > 0) {
@@ -3463,32 +3521,13 @@ const App = (function () {
       return;
     }
 
-    // Mode solo: undo innerHTML classique
-    if (historyIndex <= 0) {
-      return;
-    }
-    const _undoSelIds = historySelections[historyIndex] || [];
-    historyIndex--;
-    document.getElementById('canvas').innerHTML = history[historyIndex];
-    reattachAllEvents();
-    _resyncImgStore();
-    selectedEl = null;
-    multiSelected.clear();
-    if (_undoSelIds.length > 1) {
-      _undoSelIds.forEach((id) => {
-        const el = document.querySelector('[data-id="' + id + '"]');
-        if (el) {
-          el.classList.add('multi-selected');
-          multiSelected.add(el);
-        }
-      });
-      updateAlignPanel();
-      updateMultiResizeHandle();
-      updateCornerHandles();
-      updateAllConnections();
-    } else {
-      deselectAll();
-    }
+    // Mode solo: undo par action (unifié)
+    if (_actionIndex < 0) return;
+    _applyReverse(_actionHistory[_actionIndex]);
+    _actionIndex--;
+    updateCornerHandles();
+    deselectAll();
+    renderHistoryPanel();
   }
 
   function redo() {
@@ -3496,43 +3535,102 @@ const App = (function () {
 
     // Mode collab: redo par action
     if (isCollab && _actionHistory.length > 0) {
-      if (_actionIndex >= _actionHistory.length - 1) {
-        return;
-      }
+      if (_actionIndex >= _actionHistory.length - 1) return;
       _actionIndex++;
       const action = _actionHistory[_actionIndex];
       _applyForward(action);
       updateCornerHandles();
+      renderHistoryPanel();
       return;
     }
 
-    // Mode solo: redo innerHTML classique
-    if (historyIndex >= history.length - 1) {
-      return;
-    }
-    historyIndex++;
-    const _redoSelIds = historySelections[historyIndex] || [];
-    document.getElementById('canvas').innerHTML = history[historyIndex];
-    reattachAllEvents();
-    _resyncImgStore();
-    selectedEl = null;
-    multiSelected.clear();
-    if (_redoSelIds.length > 1) {
-      _redoSelIds.forEach((id) => {
-        const el = document.querySelector('[data-id="' + id + '"]');
-        if (el) {
-          el.classList.add('multi-selected');
-          multiSelected.add(el);
-        }
-      });
-      updateAlignPanel();
-      updateMultiResizeHandle();
-      updateCornerHandles();
-      updateAllConnections();
-    } else {
-      deselectAll();
+    // Mode solo: redo par action (unifié)
+    if (_actionIndex >= _actionHistory.length - 1) return;
+    _actionIndex++;
+    _applyForward(_actionHistory[_actionIndex]);
+    updateCornerHandles();
+    deselectAll();
+    renderHistoryPanel();
+  }
+  const _EL_TYPE_LABELS = { note: 'Note', color: 'Couleur', link: 'Lien', image: 'Image', file: 'Fichier', video: 'Vidéo' };
+
+  function _enrichedLabel(action) {
+    if (action.detail) return action.detail;
+    switch (action.type) {
+      case 'create': {
+        const t = (action.after && action.after.type) ? (_EL_TYPE_LABELS[action.after.type] || 'Élément') : 'Élément';
+        return t + ' créé';
+      }
+      case 'delete': {
+        const t = (action.before && action.before.type) ? (_EL_TYPE_LABELS[action.before.type] || 'Élément') : 'Élément';
+        return t + ' supprimé';
+      }
+      case 'groupCreate': {
+        const n = Array.isArray(action.elId) ? action.elId.length : '';
+        return 'Éléments créés' + (n ? ' (' + n + ')' : '');
+      }
+      case 'editText': return 'Texte modifié';
+      case 'editColor': return 'Couleur modifiée';
+      case 'move': return 'Déplacé';
+      case 'resize': return 'Redimensionné';
+      case 'groupMove': return 'Groupe déplacé';
+      case 'groupResize': return 'Groupe redimensionné';
+      case 'connection': return 'Connexion créée';
+      case 'disconnection': return 'Connexion supprimée';
+      case 'captionCreate': return 'Légende ajoutée';
+      case 'captionDelete': return 'Légende supprimée';
+      case 'captionEdit': return 'Légende modifiée';
+      case 'libDelete': return 'Bibliothèque mise à jour';
+      case 'editImage': return 'Image remplacée';
+      case 'editFile': return 'Fichier remplacé';
+      case 'zIndex': return 'Ordre modifié';
+      default: return 'Action';
     }
   }
+
+  function renderHistoryPanel() {
+    const panel = document.getElementById('history-panel');
+    if (!panel || panel.classList.contains('hidden')) return;
+    const list = panel.querySelector('.history-list');
+    if (!list) return;
+    if (_actionHistory.length === 0) {
+      list.innerHTML = '<div class="history-empty">Aucune action pour l\'instant</div>';
+      return;
+    }
+    list.innerHTML = '';
+    for (let i = _actionHistory.length - 1; i >= 0; i--) {
+      const action = _actionHistory[i];
+      const entry = document.createElement('div');
+      entry.className = 'history-entry' +
+        (i === _actionIndex ? ' history-current' : (i > _actionIndex ? ' history-future' : ''));
+      const label = document.createElement('span');
+      label.className = 'history-label';
+      label.textContent = _enrichedLabel(action);
+      entry.appendChild(label);
+      const idx = i;
+      entry.addEventListener('click', () => _navigateHistory(idx));
+      list.appendChild(entry);
+    }
+  }
+
+  function _navigateHistory(targetIdx) {
+    if (targetIdx === _actionIndex) return;
+    if (targetIdx < _actionIndex) {
+      while (_actionIndex > targetIdx) {
+        _applyReverse(_actionHistory[_actionIndex]);
+        _actionIndex--;
+      }
+    } else {
+      while (_actionIndex < targetIdx) {
+        _actionIndex++;
+        _applyForward(_actionHistory[_actionIndex]);
+      }
+    }
+    updateCornerHandles();
+    deselectAll();
+    renderHistoryPanel();
+  }
+
   function reattachAllEvents() {
     document.querySelectorAll('#canvas .board-element').forEach((el) => {
       attachElementEvents(el);
@@ -3561,6 +3659,7 @@ const App = (function () {
     if (el.dataset.savedata && !ta.innerHTML.trim())
       ta.innerHTML = _noteDataToHtml(el.dataset.savedata);
     let _noteValueOnFocus = '';
+    let _noteStyleOnFocus = '';
     function activateNoteEdit(e) {
       if (document.body.classList.contains('readonly-mode')) return;
       if (
@@ -3576,6 +3675,7 @@ const App = (function () {
       ta.contentEditable = 'true';
       el.dataset.editing = '1';
       _noteValueOnFocus = ta.innerHTML;
+      _noteStyleOnFocus = ta.style.cssText;
       ta.focus();
       showTextEditPanel(el);
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
@@ -3598,10 +3698,10 @@ const App = (function () {
         Collab.syncElementData(el.dataset.id, ta.innerHTML);
       }
     });
-    ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus));
+    ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus, _noteStyleOnFocus));
   }
 
-  function _handleNoteBlur(e, el, ta, noteValueOnFocus) {
+  function _handleNoteBlur(e, el, ta, noteValueOnFocus, noteStyleOnFocus = '') {
     const sbText = document.querySelector('.sb-text');
     const goingToPanel = sbText && e.relatedTarget && sbText.contains(e.relatedTarget);
     if (goingToPanel || window._textPanelKeepOpen) return;
@@ -3638,14 +3738,22 @@ const App = (function () {
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementDelete(el.dataset.id);
       }
-    } else if (ta.innerHTML !== noteValueOnFocus) {
-      pushAction({
-        type: 'editText',
-        elId: el.dataset.id,
-        before: { data: noteValueOnFocus },
-        after: { data: ta.innerHTML },
-      });
-      pushHistory();
+    } else if (ta.innerHTML !== noteValueOnFocus || ta.style.cssText !== noteStyleOnFocus) {
+      const lastAct = _actionHistory[_actionHistory.length - 1];
+      const alreadyCovered = lastAct &&
+        lastAct.type === 'editText' &&
+        lastAct.elId === el.dataset.id &&
+        lastAct.after.data === ta.innerHTML &&
+        lastAct.after.style === ta.style.cssText;
+      if (!alreadyCovered) {
+        pushAction({
+          type: 'editText',
+          elId: el.dataset.id,
+          before: { data: noteValueOnFocus, style: noteStyleOnFocus },
+          after: { data: ta.innerHTML, style: ta.style.cssText },
+        });
+        pushHistory();
+      }
     }
   }
 
@@ -4566,6 +4674,7 @@ const App = (function () {
             });
           } else if (duplicated) {
             const d = dragEl;
+            const _dupeLabels = { note: 'Note dupliquée', color: 'Couleur dupliquée', link: 'Lien dupliqué', image: 'Image dupliquée', file: 'Fichier dupliqué', video: 'Vidéo dupliquée' };
             pushAction({
               type: 'create',
               elId: d.dataset.id,
@@ -4581,6 +4690,7 @@ const App = (function () {
                     ? _imgStore.get(d.dataset.id) || ''
                     : d.dataset.savedata || '',
               },
+              detail: _dupeLabels[d.dataset.type] || 'Élément dupliqué',
             });
           }
           pushHistory();
@@ -4635,7 +4745,7 @@ const App = (function () {
       e.stopPropagation();
       if (el.dataset.type === 'image') {
         const img = el.querySelector('img');
-        if (img) openLightbox(img.src);
+        if (img) openLightbox(img.src, el.dataset.id);
       }
     });
 
@@ -5035,7 +5145,7 @@ const App = (function () {
                   : el.dataset.savedata || '',
             });
           });
-          pushAction({ type: 'groupCreate', elId: groupIds, after: groupAfter });
+          pushAction({ type: 'groupCreate', elId: groupIds, after: groupAfter, detail: 'Groupe dupliqué' });
         }
         // Collab: sync
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
@@ -5400,6 +5510,8 @@ const App = (function () {
       var shareWrap = document.getElementById('share-wrap');
       if (shareWrap && window._fbDb && !document.body.classList.contains('readonly-mode'))
         shareWrap.style.display = '';
+      var _hb2 = document.getElementById('history-btn');
+      if (_hb2 && !document.body.classList.contains('readonly-mode')) _hb2.style.display = '';
 
       setupUIEvents();
     } catch (e) {
@@ -5621,6 +5733,8 @@ const App = (function () {
         const shareWrap = document.getElementById('share-wrap');
         if (shareWrap && window._fbDb && !document.body.classList.contains('readonly-mode'))
           shareWrap.style.display = '';
+        const _hb3 = document.getElementById('history-btn');
+        if (_hb3 && !document.body.classList.contains('readonly-mode')) _hb3.style.display = '';
       } else {
         // Pas de session Firebase : créer une nouvelle session depuis les données locales
         currentBoardId = board.id;
@@ -5663,6 +5777,8 @@ const App = (function () {
         var shareWrap2 = document.getElementById('share-wrap');
         if (shareWrap2 && window._fbDb && !document.body.classList.contains('readonly-mode'))
           shareWrap2.style.display = '';
+        var _hb4 = document.getElementById('history-btn');
+        if (_hb4 && !document.body.classList.contains('readonly-mode')) _hb4.style.display = '';
         setTimeout(_updateBrokenBanner, 200);
       }
     } catch (e) {
@@ -6039,6 +6155,7 @@ const App = (function () {
     });
 
     let _noteValueOnFocus = '';
+    let _noteStyleOnFocus = '';
 
     function activateNoteEdit(e) {
       if (document.body.classList.contains('readonly-mode')) return;
@@ -6055,6 +6172,7 @@ const App = (function () {
       ta.contentEditable = 'true';
       el.dataset.editing = '1';
       _noteValueOnFocus = ta.innerHTML;
+      _noteStyleOnFocus = ta.style.cssText;
       ta.focus();
       showTextEditPanel(el);
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
@@ -6068,7 +6186,7 @@ const App = (function () {
       if (ta.contentEditable === 'true') e.stopPropagation();
     });
 
-    ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus));
+    ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus, _noteStyleOnFocus));
 
     wrap.appendChild(ta);
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
@@ -7744,7 +7862,8 @@ const App = (function () {
       if (isCollab) Collab.syncElementPosition(el.dataset.id, newX, newY, true);
       afterArr.push({ x: newX, y: newY });
     });
-    pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr });
+    const _alignLabels = { 'left': 'Aligné à gauche', 'center-h': 'Centré horizontalement', 'right': 'Aligné à droite', 'top': 'Aligné en haut', 'center-v': 'Centré verticalement', 'bottom': 'Aligné en bas' };
+    pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr, detail: _alignLabels[type] || 'Alignement' });
     pushHistory();
     updateMultiResizeHandle();
   }
@@ -7817,7 +7936,7 @@ const App = (function () {
       if (isCollab) Collab.syncElementPosition(el.dataset.id, newX, newY, true);
       afterArr.push({ x: newX, y: newY });
     });
-    pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr });
+    pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr, detail: axis === 'h' ? 'Distribution horizontale' : 'Distribution verticale' });
     pushHistory();
     updateMultiResizeHandle();
   }
@@ -7827,8 +7946,11 @@ const App = (function () {
     textEditTarget = el;
     const _styleTarget = el.querySelector('.el-note-content') || el;
     _styleEditBeforeHtml = _styleTarget ? _styleTarget.innerHTML : null;
+    _styleEditBeforeStyle = _styleTarget ? _styleTarget.style.cssText : null;
     document.getElementById('toolbar').style.display = 'none';
     document.querySelector('.sb-text')?.classList.remove('sb-disabled');
+    const _fsBtn = document.getElementById('font-selector-btn');
+    if (_fsBtn) _fsBtn.classList.remove('sb-disabled');
 
     // Déterminer la cible du style (le div note-content dans une note, ou l'élément lui-même si c'est une caption)
     const target = el.querySelector('.el-note-content') || el;
@@ -7838,16 +7960,23 @@ const App = (function () {
       const sizeVal = document.getElementById('text-size-val');
       if (sizeVal) sizeVal.textContent = sz;
 
-      const fw = target.style.fontWeight;
-      document.querySelectorAll('.text-font-btn').forEach((b) => b.classList.remove('active'));
-      const activeId = fw === '700' || fw === 'bold' ? 'tp-bold' : 'tp-roman';
-      const activeBtn = document.getElementById(activeId);
-      if (activeBtn) activeBtn.classList.add('active');
+      const rawFamily = target.style.fontFamily || '';
+      const selectorBtn = document.getElementById('font-selector-btn');
+      if (selectorBtn) {
+        const m = rawFamily.match(/['"]?([^'",]+)['"]?/);
+        const displayFamily = m ? m[1].trim() : '—';
+        selectorBtn.textContent = displayFamily;
+        selectorBtn.style.fontFamily = rawFamily || 'inherit';
+      }
     }
   }
   function hideTextEditPanel() {
     _styleEditBeforeHtml = null;
+    _styleEditBeforeStyle = null;
     document.querySelector('.sb-text')?.classList.add('sb-disabled');
+    const _fsBtnHide = document.getElementById('font-selector-btn');
+    if (_fsBtnHide) { _fsBtnHide.classList.add('sb-disabled'); _fsBtnHide.textContent = '—'; _fsBtnHide.style.fontFamily = 'inherit'; }
+    _closeFontDropdown(false);
     textEditTarget = null;
     updateAlignPanel();
   }
@@ -7909,7 +8038,7 @@ const App = (function () {
       pushHistory();
     }
   }
-  function applyTextFont(val) {
+  function applyTextFont(family, preview) {
     if (!textEditTarget) return;
 
     const noteDiv = textEditTarget.querySelector('.el-note-content');
@@ -7917,11 +8046,15 @@ const App = (function () {
     const ta = noteDiv || caption;
     if (!ta) return;
 
-    const fontFamily =
-      val === 'helvetica-bold'
-        ? "'HelveticaBold','Helvetica Neue',Helvetica,Arial,sans-serif"
-        : "'HelveticaRoman','Helvetica Neue',Helvetica,Arial,sans-serif";
-    const fontWeight = val === 'helvetica-bold' ? '700' : '400';
+    const isHelvetica = family === 'HelveticaRoman' || family === 'HelveticaBold';
+    const fontFamily = isHelvetica
+      ? (family === 'HelveticaBold'
+          ? "'HelveticaBold','Helvetica Neue',Helvetica,Arial,sans-serif"
+          : "'HelveticaRoman','Helvetica Neue',Helvetica,Arial,sans-serif")
+      : ("'" + family + "', sans-serif");
+    const fontWeight = '400';
+
+    if (!isHelvetica && !_localFonts.includes(family)) _loadGFont(family);
 
     if (noteDiv) {
       const sel = window.getSelection();
@@ -7931,7 +8064,6 @@ const App = (function () {
         !sel.isCollapsed &&
         noteDiv.contains(sel.getRangeAt(0).commonAncestorContainer)
       ) {
-        // Sélection active dans la note → formater uniquement le texte sélectionné
         const range = sel.getRangeAt(0);
         const span = document.createElement('span');
         span.style.fontFamily = fontFamily;
@@ -7939,7 +8071,6 @@ const App = (function () {
         try {
           range.surroundContents(span);
         } catch (_) {
-          // Sélection multi-nœuds : extraire + envelopper
           const frag = range.extractContents();
           span.appendChild(frag);
           range.insertNode(span);
@@ -7949,7 +8080,6 @@ const App = (function () {
         newRange.selectNodeContents(span);
         sel.addRange(newRange);
       } else {
-        // Pas de sélection → appliquer à toute la note
         noteDiv.style.fontFamily = fontFamily;
         noteDiv.style.fontWeight = fontWeight;
       }
@@ -7959,12 +8089,266 @@ const App = (function () {
       ta.style.fontWeight = fontWeight;
     }
 
-    document.querySelectorAll('.text-font-btn').forEach((b) => b.classList.remove('active'));
-    const activeBtn = document.getElementById(val === 'helvetica-bold' ? 'tp-bold' : 'tp-roman');
-    if (activeBtn) activeBtn.classList.add('active');
-    _collabSyncStyle();
-    _saveStyleChange();
+    const selectorBtn = document.getElementById('font-selector-btn');
+    if (selectorBtn) {
+      selectorBtn.textContent = family;
+      selectorBtn.style.fontFamily = fontFamily;
+    }
+
+    if (!preview) {
+      _pendingStyleDetail = 'Police : ' + family;
+      _collabSyncStyle();
+      _saveStyleChange();
+      const _recent = JSON.parse(localStorage.getItem('mb_fonts_recent') || '[]').filter((f) => f !== family);
+      _recent.unshift(family);
+      if (_recent.length > 10) _recent.pop();
+      localStorage.setItem('mb_fonts_recent', JSON.stringify(_recent));
+    }
   }
+
+  async function _loadLocalFonts() {
+    if (!window.queryLocalFonts) return;
+    try {
+      const fonts = await window.queryLocalFonts();
+      const seen = new Set();
+      _localFonts = fonts
+        .filter((f) => {
+          if (seen.has(f.family)) return false;
+          seen.add(f.family);
+          return true;
+        })
+        .map((f) => f.family)
+        .sort((a, b) => a.localeCompare(b));
+    } catch (_) {
+      _localFonts = [];
+    }
+  }
+
+  function _loadGFont(family) {
+    if (_loadedGFonts.has(family)) return;
+    _loadedGFonts.add(family);
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href =
+      'https://fonts.googleapis.com/css2?family=' +
+      encodeURIComponent(family).replace(/%20/g, '+') +
+      '&display=swap';
+    document.head.appendChild(link);
+  }
+
+  async function _fetchGFontsList() {
+    if (_gFontsList !== null) return;
+    _gFontsList = [];
+    try {
+      const res = await fetch(
+        'https://www.googleapis.com/webfonts/v1/webfonts?key=AIzaSyAB9hrE2Ww0TZmfhoOQcQtJczB1IcxNqpw&sort=popularity'
+      );
+      const data = await res.json();
+      _gFontsList = (data.items || []).map((f) => f.family);
+    } catch (_) {
+      _gFontsList = [];
+    }
+  }
+
+  function _renderFontList(filter) {
+    const list = document.getElementById('font-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const q = filter.toLowerCase();
+
+    function makeSection(label) {
+      const sec = document.createElement('div');
+      sec.className = 'font-list-section';
+      sec.textContent = label;
+      list.appendChild(sec);
+    }
+
+    function makeItem(family, source) {
+      const item = document.createElement('div');
+      item.className = 'font-list-item';
+      item.dataset.family = family;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = family;
+      const cssFamily = source === 'local'
+        ? (family + ', sans-serif')
+        : ("'" + family + "', sans-serif");
+      nameSpan.style.fontFamily = cssFamily;
+      if (source !== 'local') _loadGFont(family);
+      item.appendChild(nameSpan);
+
+      if (source === 'my-google') {
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'font-remove-btn';
+        removeBtn.textContent = '×';
+        removeBtn.title = 'Retirer';
+        removeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          let saved = JSON.parse(localStorage.getItem('mb_fonts_list') || '[]');
+          saved = saved.filter((f) => f.family !== family);
+          localStorage.setItem('mb_fonts_list', JSON.stringify(saved));
+          _renderFontList(filter);
+        });
+        item.appendChild(removeBtn);
+      } else if (source === 'google-result') {
+        const addBtn = document.createElement('button');
+        addBtn.className = 'font-add-btn';
+        addBtn.textContent = '+';
+        addBtn.title = 'Ajouter à mes polices';
+        addBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          let saved = JSON.parse(localStorage.getItem('mb_fonts_list') || '[]');
+          if (!saved.some((f) => f.family === family)) {
+            saved.push({ family: family, source: 'google' });
+            localStorage.setItem('mb_fonts_list', JSON.stringify(saved));
+          }
+          _renderFontList(filter);
+        });
+        item.appendChild(addBtn);
+      }
+
+      item.addEventListener('mouseenter', () => {
+        applyTextFont(family, true);
+      });
+
+      item.addEventListener('click', () => {
+        applyTextFont(family);
+        _closeFontDropdown(false);
+      });
+
+      list.appendChild(item);
+    }
+
+    const recent = JSON.parse(localStorage.getItem('mb_fonts_recent') || '[]');
+    const recentFiltered = recent.filter((f) => !q || f.toLowerCase().includes(q));
+    if (recentFiltered.length) {
+      makeSection('Récemment utilisées');
+      recentFiltered.forEach((f) => {
+        const isLocal = _localFonts.includes(f);
+        makeItem(f, isLocal ? 'local' : 'my-google');
+      });
+    }
+
+    const localFiltered = _localFonts.filter((f) => !q || f.toLowerCase().includes(q));
+    if (localFiltered.length) {
+      makeSection('Polices locales');
+      localFiltered.forEach((f) => makeItem(f, 'local'));
+    }
+
+    const saved = JSON.parse(localStorage.getItem('mb_fonts_list') || '[]');
+    const myFiltered = saved.filter((f) => !q || f.family.toLowerCase().includes(q));
+    if (myFiltered.length) {
+      makeSection('Mes Google Fonts');
+      myFiltered.forEach((f) => makeItem(f.family, 'my-google'));
+    }
+
+    if (filter.length >= 2) {
+      if (_gFontsList === null) {
+        _fetchGFontsList().then(() => _renderFontList(filter));
+        const loading = document.createElement('div');
+        loading.className = 'font-list-section';
+        loading.textContent = 'Chargement…';
+        list.appendChild(loading);
+      } else {
+        const savedSet = new Set(saved.map((f) => f.family));
+        const localSet = new Set(_localFonts);
+        const results = _gFontsList
+          .filter((f) => f.toLowerCase().includes(q) && !savedSet.has(f) && !localSet.has(f))
+          .slice(0, 30);
+        if (results.length) {
+          makeSection('Résultats Google');
+          results.forEach((f) => makeItem(f, 'google-result'));
+        }
+      }
+    }
+  }
+
+  function _updateFocusedItem(items) {
+    items.forEach((it, i) => it.classList.toggle('focused', i === _fontFocusedIdx));
+    const focused = items[_fontFocusedIdx];
+    if (focused) {
+      focused.scrollIntoView({ block: 'nearest' });
+      const family = focused.dataset.family;
+      if (family) applyTextFont(family, true);
+    }
+  }
+
+  function _closeFontDropdown(revert) {
+    if (!_fontDropdownOpen) return;
+    const dropdown = document.getElementById('font-selector-dropdown');
+    if (dropdown) dropdown.style.display = 'none';
+    _fontDropdownOpen = false;
+    if (revert && _fontPreviewOriginal !== null) {
+      const m = _fontPreviewOriginal.match(/['"]?([^'",]+)['"]?/);
+      if (m) applyTextFont(m[1].trim());
+      else applyTextFont('HelveticaRoman');
+    }
+    _fontPreviewOriginal = null;
+    _fontFocusedIdx = -1;
+  }
+
+  function _initFontSelector() {
+    const btn = document.getElementById('font-selector-btn');
+    const dropdown = document.getElementById('font-selector-dropdown');
+    const searchInput = document.getElementById('font-search-input');
+    const wrap = document.getElementById('font-selector-wrap');
+    if (!btn || !dropdown || !searchInput || !wrap) return;
+
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (_fontDropdownOpen) {
+        _closeFontDropdown(false);
+        return;
+      }
+      if (btn.classList.contains('sb-disabled')) return;
+      await _loadLocalFonts();
+      const ta = textEditTarget
+        ? (textEditTarget.querySelector('.el-note-content') || textEditTarget)
+        : null;
+      _fontPreviewOriginal = ta ? ta.style.fontFamily || null : null;
+      _fontFocusedIdx = -1;
+      searchInput.value = '';
+      _renderFontList('');
+      dropdown.style.display = 'flex';
+      _fontDropdownOpen = true;
+      searchInput.focus();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (_fontDropdownOpen && !wrap.contains(e.target)) _closeFontDropdown(false);
+    });
+
+    dropdown.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
+
+    searchInput.addEventListener('input', () => {
+      _fontFocusedIdx = -1;
+      _renderFontList(searchInput.value.trim());
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      const list = document.getElementById('font-list');
+      if (!list) return;
+      const items = list.querySelectorAll('.font-list-item[data-family]');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _fontFocusedIdx = Math.min(_fontFocusedIdx + 1, items.length - 1);
+        _updateFocusedItem(items);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _fontFocusedIdx = Math.max(_fontFocusedIdx - 1, 0);
+        _updateFocusedItem(items);
+      } else if (e.key === 'Enter') {
+        const focused = items[_fontFocusedIdx];
+        if (focused) {
+          const family = focused.dataset.family;
+          if (family) { applyTextFont(family); _closeFontDropdown(false); }
+        }
+      } else if (e.key === 'Escape') {
+        _closeFontDropdown(true);
+      }
+    });
+  }
+
   function applyTextSizeDelta(delta) {
     if (!textEditTarget) return;
     const ta = textEditTarget.querySelector('.el-note-content') || textEditTarget;
@@ -7974,6 +8358,7 @@ const App = (function () {
     ta.style.fontSize = next + 'px';
     const sizeVal = document.getElementById('text-size-val');
     if (sizeVal) sizeVal.textContent = next;
+    _pendingStyleDetail = 'Taille texte modifiée (' + next + ')';
     _collabSyncStyle();
     _saveStyleChange();
   }
@@ -7993,37 +8378,49 @@ const App = (function () {
     const id = { left: 'ta-left', center: 'ta-center', right: 'ta-right' }[align];
     const btn = document.getElementById(id);
     if (btn) btn.classList.add('active');
+    _pendingStyleDetail = { left: 'Texte aligné gauche', center: 'Texte centré', right: 'Texte aligné droite' }[align] || 'Alignement de texte';
     _collabSyncStyle();
     _saveStyleChange();
   }
 
   let _styleEditBeforeHtml = null;
+  let _styleEditBeforeStyle = null;
   let _saveStyleTimer = null;
+  let _pendingStyleDetail = null;
   function _saveStyleChange() {
+    const detail = _pendingStyleDetail;
+    _pendingStyleDetail = null;
     const isCollab = typeof Collab !== 'undefined' && Collab.isActive();
-    if (isCollab) {
-      if (!textEditTarget || _styleEditBeforeHtml === null) return;
-      const ta = textEditTarget.querySelector('.el-note-content') || textEditTarget;
-      if (!ta) return;
-      const afterHtml = ta.innerHTML;
-      if (afterHtml !== _styleEditBeforeHtml) {
-        pushAction({
-          type: 'editText',
-          elId: textEditTarget.dataset.id || textEditTarget.dataset.capId,
-          before: { data: _styleEditBeforeHtml },
-          after: { data: afterHtml },
-        });
-        _styleEditBeforeHtml = afterHtml;
-        pushHistory();
+    if (!textEditTarget || _styleEditBeforeHtml === null) {
+      if (!isCollab) {
+        clearTimeout(_saveStyleTimer);
+        _saveStyleTimer = setTimeout(() => { saveCurrentBoard(); pushHistory(); }, 300);
       }
+      return;
+    }
+    const ta = textEditTarget.querySelector('.el-note-content') || textEditTarget;
+    if (!ta) return;
+    const afterHtml = ta.innerHTML;
+    const afterStyle = ta.style.cssText;
+    if (afterHtml !== _styleEditBeforeHtml || afterStyle !== _styleEditBeforeStyle) {
+      const actionObj = {
+        type: 'editText',
+        elId: textEditTarget.dataset.id || textEditTarget.dataset.capId,
+        before: { data: _styleEditBeforeHtml, style: _styleEditBeforeStyle },
+        after: { data: afterHtml, style: afterStyle },
+      };
+      if (detail) actionObj.detail = detail;
+      pushAction(actionObj);
+      _styleEditBeforeHtml = afterHtml;
+      _styleEditBeforeStyle = afterStyle;
+      pushHistory();
+    }
+    if (isCollab) {
       saveCurrentBoard();
       return;
     }
     clearTimeout(_saveStyleTimer);
-    _saveStyleTimer = setTimeout(() => {
-      saveCurrentBoard();
-      pushHistory();
-    }, 300);
+    _saveStyleTimer = setTimeout(() => { saveCurrentBoard(); pushHistory(); }, 300);
   }
 
   function ctxBringFront() {
@@ -8238,17 +8635,26 @@ const App = (function () {
     const existingEmptyBtn = document.getElementById('lib-trash-empty-btn');
     if (existingEmptyBtn) existingEmptyBtn.remove();
     if (panelFolder === '__trash__') {
+      const trashBar = document.createElement('div');
+      trashBar.id = 'lib-trash-empty-btn';
+      trashBar.style.cssText = 'display:flex;gap:8px;margin:0 14px 10px;';
+      const restoreSelBtn = document.createElement('button');
+      restoreSelBtn.textContent = 'Restaurer la sélection';
+      restoreSelBtn.style.cssText =
+        'flex:1;padding:7px 0;background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.18);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;';
+      restoreSelBtn.addEventListener('click', () => _restoreSelectedLibItems());
       const emptyBtn = document.createElement('button');
-      emptyBtn.id = 'lib-trash-empty-btn';
       emptyBtn.textContent = 'Vider la corbeille';
       emptyBtn.style.cssText =
-        'display:block;width:calc(100% - 28px);margin:0 14px 10px;padding:7px 0;background:#ff3c00;color:#fff;border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;';
+        'flex:1;padding:7px 0;background:#ff3c00;color:#fff;border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;';
       emptyBtn.addEventListener('click', () => {
         library['__trash__'] = [];
         saveLibrary();
         renderPanelLib();
       });
-      grid.parentNode.insertBefore(emptyBtn, grid);
+      trashBar.appendChild(restoreSelBtn);
+      trashBar.appendChild(emptyBtn);
+      grid.parentNode.insertBefore(trashBar, grid);
     }
     let items = [];
     if (panelFolder === 'all') {
@@ -8305,6 +8711,7 @@ const App = (function () {
         // Désélectionner les éléments du board pour éviter qu'un Suppr ultérieur
         // ne les supprime alors que l'intention est sur la bibliothèque.
         deselectAll();
+        document.getElementById('lib-panel-search')?.blur();
         if (e.shiftKey && _libLastClickedId) {
           const all = Array.from(document.querySelectorAll('.lib-panel-item'));
           const startIdx = all.findIndex((n) => n.dataset.libId === _libLastClickedId);
@@ -8465,6 +8872,17 @@ const App = (function () {
 
       div.appendChild(img);
       div.appendChild(name);
+      if (panelFolder === '__trash__') {
+        const restoreBtn = document.createElement('button');
+        restoreBtn.className = 'lib-item-restore';
+        restoreBtn.textContent = '↩';
+        restoreBtn.title = 'Restaurer';
+        restoreBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          _restoreLibItem(item.id);
+        });
+        div.appendChild(restoreBtn);
+      }
       div.appendChild(delBtn);
       grid.appendChild(div);
     });
@@ -8523,6 +8941,7 @@ const App = (function () {
     library[folder] = library[folder].filter((i) => i.id !== id);
     if (folder !== '__trash__') {
       if (!library['__trash__']) library['__trash__'] = [];
+      item._origFolder = folder;
       library['__trash__'].push(item);
     }
     libSelectedIds.delete(id);
@@ -8532,17 +8951,16 @@ const App = (function () {
 
   function _deleteSelectedLibItems() {
     if (!libSelectedIds.size) return;
-    const ids = libSelectedIds;
+    const ids = new Set(libSelectedIds);
     const removed = [];
     if (!library['__trash__']) library['__trash__'] = [];
     Object.keys(library).forEach((folder) => {
+      if (folder === '__trash__') return;
       const arr = library[folder];
       for (let i = 0; i < arr.length; i++) {
         if (ids.has(arr[i].id)) removed.push({ folder, index: i, item: arr[i] });
       }
-      if (folder !== '__trash__') {
-        arr.filter((it) => ids.has(it.id)).forEach((it) => library['__trash__'].push(it));
-      }
+      arr.filter((it) => ids.has(it.id)).forEach((it) => { it._origFolder = folder; library['__trash__'].push(it); });
       library[folder] = arr.filter((it) => !ids.has(it.id));
     });
     libSelectedIds.clear();
@@ -8553,6 +8971,38 @@ const App = (function () {
       pushAction({ type: 'libDelete', before: removed });
       pushHistory();
     }
+  }
+
+  function _restoreLibItem(id) {
+    const trash = library['__trash__'] || [];
+    const item = trash.find((i) => i.id === id);
+    if (!item) return;
+    const target = item._origFolder || 'image';
+    if (!library[target]) library[target] = [];
+    library['__trash__'] = trash.filter((i) => i.id !== id);
+    delete item._origFolder;
+    library[target].push(item);
+    libSelectedIds.delete(id);
+    saveLibrary();
+    renderPanelLib();
+  }
+
+  function _restoreSelectedLibItems() {
+    if (!libSelectedIds.size) return;
+    const ids = new Set(libSelectedIds);
+    const trash = library['__trash__'] || [];
+    trash.forEach((item) => {
+      if (!ids.has(item.id)) return;
+      const target = item._origFolder || 'image';
+      if (!library[target]) library[target] = [];
+      delete item._origFolder;
+      library[target].push(item);
+    });
+    library['__trash__'] = trash.filter((it) => !ids.has(it.id));
+    libSelectedIds.clear();
+    _libLastClickedId = null;
+    saveLibrary();
+    renderPanelLib();
   }
 
   function addNewLibFolder() {

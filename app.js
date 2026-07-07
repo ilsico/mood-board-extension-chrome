@@ -3299,6 +3299,13 @@ const App = (function () {
         updateConnectionsForEl(el);
         if (isCollab)
           Collab.syncElementPosition(action.elId, action.before.x, action.before.y, true);
+        { const _elH = el.offsetHeight;
+          document.querySelectorAll(`.el-caption[data-parent-id="${action.elId}"]`).forEach((cap) => {
+            cap.style.left = action.before.x + 'px';
+            cap.style.top = (action.before.y + _elH) + 'px';
+            if (isCollab && cap.dataset.capId)
+              Collab.syncCaptionPosition(cap.dataset.capId, action.before.x, action.before.y + _elH, true);
+          }); }
         break;
       }
       case 'resize': {
@@ -3372,6 +3379,13 @@ const App = (function () {
           updateConnectionsForEl(el);
           if (isCollab)
             Collab.syncElementPosition(id, action.before[i].x, action.before[i].y, true);
+          const _elH = el.offsetHeight;
+          document.querySelectorAll(`.el-caption[data-parent-id="${id}"]`).forEach((cap) => {
+            cap.style.left = action.before[i].x + 'px';
+            cap.style.top = (action.before[i].y + _elH) + 'px';
+            if (isCollab && cap.dataset.capId)
+              Collab.syncCaptionPosition(cap.dataset.capId, action.before[i].x, action.before[i].y + _elH, true);
+          });
         });
         deselectAll();
         action.elId.forEach((id) => {
@@ -3528,6 +3542,13 @@ const App = (function () {
         el.style.top = action.after.y + 'px';
         updateConnectionsForEl(el);
         if (isCollab) Collab.syncElementPosition(action.elId, action.after.x, action.after.y, true);
+        { const _elH = el.offsetHeight;
+          document.querySelectorAll(`.el-caption[data-parent-id="${action.elId}"]`).forEach((cap) => {
+            cap.style.left = action.after.x + 'px';
+            cap.style.top = (action.after.y + _elH) + 'px';
+            if (isCollab && cap.dataset.capId)
+              Collab.syncCaptionPosition(cap.dataset.capId, action.after.x, action.after.y + _elH, true);
+          }); }
         break;
       }
       case 'resize': {
@@ -3595,6 +3616,13 @@ const App = (function () {
           el.style.top = action.after[i].y + 'px';
           updateConnectionsForEl(el);
           if (isCollab) Collab.syncElementPosition(id, action.after[i].x, action.after[i].y, true);
+          const _elH = el.offsetHeight;
+          document.querySelectorAll(`.el-caption[data-parent-id="${id}"]`).forEach((cap) => {
+            cap.style.left = action.after[i].x + 'px';
+            cap.style.top = (action.after[i].y + _elH) + 'px';
+            if (isCollab && cap.dataset.capId)
+              Collab.syncCaptionPosition(cap.dataset.capId, action.after[i].x, action.after[i].y + _elH, true);
+          });
         });
         deselectAll();
         action.elId.forEach((id) => {
@@ -4885,6 +4913,12 @@ const App = (function () {
           !dragEl._collabPendingCreate
         ) {
           Collab.syncElementPosition(dragEl.dataset.id, targetX, targetY, false);
+          const _dragElH = dragEl.offsetHeight;
+          document.querySelectorAll(`.el-caption[data-parent-id="${dragEl.dataset.id}"]`).forEach((cap) => {
+            if (cap.dataset.capId) {
+              Collab.syncCaptionPosition(cap.dataset.capId, targetX, targetY + _dragElH, false);
+            }
+          });
         }
       };
 

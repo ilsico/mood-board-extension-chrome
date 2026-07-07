@@ -496,6 +496,7 @@ window.Collab = (function () {
   // ── SYNC ÉLÉMENTS ──────────────────────────────────────────────────────
 
   const _throttledPositionSync = {};
+  const _throttledCaptionPositionSync = {};
 
   function syncElementPosition(elId, x, y, isFinal) {
     if (!_active || !_sessionRef) return;
@@ -659,6 +660,24 @@ window.Collab = (function () {
       width: width || '',
       text: text || '',
     });
+  }
+
+  function syncCaptionPosition(capId, x, y, isFinal) {
+    if (!_active || !_sessionRef) return;
+    if (isFinal) {
+      if (_throttledCaptionPositionSync[capId]) {
+        _throttledCaptionPositionSync[capId].cancel();
+        delete _throttledCaptionPositionSync[capId];
+      }
+      _sessionRef.child('captions/' + capId).update({ x: x, y: y });
+    } else {
+      if (!_throttledCaptionPositionSync[capId]) {
+        _throttledCaptionPositionSync[capId] = _makeThrottle(function (id, px, py) {
+          _sessionRef.child('captions/' + id).update({ x: px, y: py });
+        }, DRAG_SYNC_INTERVAL);
+      }
+      _throttledCaptionPositionSync[capId](capId, x, y);
+    }
   }
 
   function syncCaptionText(capId, text, immediate) {
@@ -1483,6 +1502,7 @@ window.Collab = (function () {
     syncConnection: syncConnection,
     syncConnectionDelete: syncConnectionDelete,
     syncCaption: syncCaption,
+    syncCaptionPosition: syncCaptionPosition,
     syncCaptionText: syncCaptionText,
     syncCaptionDelete: syncCaptionDelete,
     syncCaptionStyle: syncCaptionStyle,

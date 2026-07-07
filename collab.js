@@ -920,7 +920,7 @@ window.Collab = (function () {
         if (el.dataset.editing) {
           isBeingEditedLocally = true;
         }
-        var ta = el.querySelector('textarea');
+        var ta = el.querySelector('.el-note-content');
         if (ta && document.activeElement === ta) {
           isBeingEditedLocally = true;
         }
@@ -935,7 +935,7 @@ window.Collab = (function () {
     }
     // Style (police, taille, alignement)
     if (data.style) {
-      var target = el.querySelector('textarea') || el;
+      var target = el.querySelector('.el-note-content') || el;
       if (data.style.fontSize) target.style.fontSize = data.style.fontSize;
       if (data.style.fontFamily) target.style.fontFamily = data.style.fontFamily;
       if (data.style.fontWeight) target.style.fontWeight = data.style.fontWeight;
@@ -973,10 +973,9 @@ window.Collab = (function () {
 
   function _applyRemoteData(el, type, data) {
     if (type === 'note') {
-      const ta = el.querySelector('textarea');
+      const ta = el.querySelector('.el-note-content');
       if (ta && document.activeElement !== ta) {
-        ta.value = data;
-        ta.setAttribute('data-snap-value', data);
+        ta.innerHTML = data;
       }
       el.dataset.savedata = data;
     } else if (type === 'color') {
@@ -986,6 +985,17 @@ window.Collab = (function () {
       const hexInput = el.querySelector('.color-hex-input');
       if (hexInput && document.activeElement !== hexInput) {
         hexInput.value = data;
+      }
+      if (data && /^#[0-9A-Fa-f]{3,6}$/.test(data)) {
+        const elColor = el.querySelector('.el-color');
+        if (elColor) elColor.style.backgroundColor = data;
+        const info = el.querySelector('.color-info');
+        if (info) info.style.backgroundColor = data;
+        const h = data.replace('#', '');
+        const r = parseInt(h.length === 3 ? h[0] + h[0] : h.slice(0, 2), 16);
+        const g = parseInt(h.length === 3 ? h[1] + h[1] : h.slice(2, 4), 16);
+        const b = parseInt(h.length === 3 ? h[2] + h[2] : h.slice(4, 6), 16);
+        el.style.setProperty('--color-card-contrast', (r * 299 + g * 587 + b * 114) / 1000 > 128 ? '#000000' : '#ffffff');
       }
     } else if (type === 'image') {
       if (data && data !== 'pending') {

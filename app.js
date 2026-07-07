@@ -999,6 +999,7 @@ const App = (function () {
     addEvt('ctx-bring-front', 'click', () => ctxBringFront());
     addEvt('ctx-send-back', 'click', () => ctxSendBack());
     addEvt('ctx-duplicate', 'click', () => ctxDuplicate());
+    addEvt('ctx-img-copy', 'click', () => ctxCopyImage());
     addEvt('ctx-img-download', 'click', () => ctxDownloadImage());
     addEvt('ctx-img-replace', 'click', () => ctxReplaceImage());
     addEvt('ctx-img-caption', 'click', () => ctxAddCaption());
@@ -2789,7 +2790,14 @@ const App = (function () {
       }
     });
 
-    wrapper.addEventListener('contextmenu', (e) => e.preventDefault());
+    wrapper.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (document.body.classList.contains('readonly-mode')) return;
+      if (selectedEl || multiSelected.size > 0) {
+        ctxTargetEl = selectedEl || null;
+        showContextMenu(e.clientX, e.clientY);
+      }
+    });
 
     // Empêcher le scroll automatique du navigateur au clic molette sur tout le wrapper
     wrapper.addEventListener(
@@ -3088,6 +3096,30 @@ const App = (function () {
         e.preventDefault();
         toggleLibPanel();
       }
+      if (
+        (e.key === 'w' || e.key === 'W') &&
+        !isTyping(e) &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.shiftKey
+      ) {
+        e.preventDefault();
+        toggleTheme();
+      }
+      if (
+        (e.key === 'h' || e.key === 'H') &&
+        !isTyping(e) &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.shiftKey
+      ) {
+        e.preventDefault();
+        const _hp = document.getElementById('history-panel');
+        if (_hp) {
+          _hp.classList.toggle('hidden');
+          if (!_hp.classList.contains('hidden')) renderHistoryPanel();
+        }
+      }
       if ((e.key === 'a' || e.key === 'A') && !isTyping(e) && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         if (e.shiftKey) {
@@ -3313,6 +3345,10 @@ const App = (function () {
           if (selectedEl === el) selectedEl = null;
           multiSelected.delete(el);
           if (hoveredEl === el) hoveredEl = null;
+          if (el.dataset.type === 'image') {
+            _imgStore.delete(action.elId);
+            _imgOrigStore.delete(action.elId);
+          }
           el.remove();
         }
         if (isCollab) Collab.syncElementDelete(action.elId);
@@ -3541,6 +3577,10 @@ const App = (function () {
           removeConnectionsForEl(el);
           removeCaptionsForEl(el);
           if (hoveredEl === el) hoveredEl = null;
+          if (el.dataset.type === 'image') {
+            _imgStore.delete(action.elId);
+            _imgOrigStore.delete(action.elId);
+          }
           el.remove();
         }
         if (isCollab) Collab.syncElementDelete(action.elId);
@@ -4219,6 +4259,11 @@ const App = (function () {
     let done = 0;
     toDelete.forEach((el) =>
       animateRemove(el, () => {
+        if (el.dataset.type === 'image') {
+          const id = el.dataset.id;
+          _imgStore.delete(id);
+          _imgOrigStore.delete(id);
+        }
         done++;
         if (done === toDelete.length) {
           pushHistory();
@@ -5601,6 +5646,11 @@ const App = (function () {
       if (s.style) _applyStyleToEl(cap, s.style);
 
       // Liaison au panneau de texte
+      cap.addEventListener('input', () => {
+        if (typeof Collab !== 'undefined' && Collab.isActive() && cap.dataset.capId) {
+          Collab.syncCaptionText(cap.dataset.capId, cap.textContent);
+        }
+      });
       cap.addEventListener('focus', () => { _capValueOnFocus = cap.textContent; showTextEditPanel(cap); });
       cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
 
@@ -7577,6 +7627,7 @@ const App = (function () {
     allSelEls.forEach((el) => { if (el.dataset.type === 'image') selImageCount++; });
     const multiImages = selImageCount >= 2;
     document.getElementById('ctx-img-divider').style.display = isImage ? '' : 'none';
+    document.getElementById('ctx-img-copy').style.display = (isImage && !multiImages) ? '' : 'none';
     document.getElementById('ctx-img-download').style.display = isImage ? '' : 'none';
     document.getElementById('ctx-img-replace').style.display = (isImage && !multiImages) ? '' : 'none';
     document.getElementById('ctx-img-caption').style.display = (isImage && !multiImages) ? '' : 'none';
@@ -7665,6 +7716,20 @@ const App = (function () {
         }
       });
     }
+  }
+
+  function ctxCopyImage() {
+    if (!ctxTargetEl || ctxTargetEl.dataset.type !== 'image') return;
+    hideContextMenu();
+    const src = _imgStore.get(ctxTargetEl.dataset.id) || (ctxTargetEl.querySelector('img') || {}).src || '';
+    if (!src) return;
+    fetch(src)
+      .then((r) => r.blob())
+      .then((blob) => {
+        const png = blob.type === 'image/png' ? blob : new Blob([blob], { type: 'image/png' });
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      })
+      .catch(() => {});
   }
 
   let replaceTargetEl = null;
@@ -7961,6 +8026,11 @@ const App = (function () {
     cap.style.top = y + 'px';
     if (width) cap.style.width = width;
     cap.textContent = text || '';
+    cap.addEventListener('input', () => {
+      if (typeof Collab !== 'undefined' && Collab.isActive() && cap.dataset.capId) {
+        Collab.syncCaptionText(cap.dataset.capId, cap.textContent);
+      }
+    });
     cap.addEventListener('focus', () => { _capValueOnFocus = cap.textContent; showTextEditPanel(cap); });
     cap.addEventListener('blur', (e) => handleCaptionBlur(e, cap));
     document.getElementById('canvas').appendChild(cap);

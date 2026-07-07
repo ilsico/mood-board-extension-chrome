@@ -545,6 +545,7 @@ window.Collab = (function () {
   }
 
   const _debouncedDataSync = {};
+  const _debouncedCaptionSync = {};
 
   function syncElementData(elId, data, immediate) {
     if (!_active || !_sessionRef) return;
@@ -651,13 +652,28 @@ window.Collab = (function () {
 
   function syncCaption(captionId, parentId, x, y, width, text) {
     if (!_active || !_sessionRef) return;
-    _sessionRef.child('captions/' + captionId).set({
+    _sessionRef.child('captions/' + captionId).update({
       parentId: parentId || '',
       x: x,
       y: y,
       width: width || '',
       text: text || '',
     });
+  }
+
+  function syncCaptionText(capId, text, immediate) {
+    if (!_active || !_sessionRef) return;
+    var _doSync = function (id, t) {
+      _sessionRef.child('captions/' + id).update({ text: t || '' });
+    };
+    if (immediate) {
+      _doSync(capId, text);
+      return;
+    }
+    if (!_debouncedCaptionSync[capId]) {
+      _debouncedCaptionSync[capId] = _makeDebounce(_doSync, TEXT_SYNC_DEBOUNCE);
+    }
+    _debouncedCaptionSync[capId](capId, text);
   }
 
   function syncCaptionDelete(captionId) {
@@ -1467,6 +1483,7 @@ window.Collab = (function () {
     syncConnection: syncConnection,
     syncConnectionDelete: syncConnectionDelete,
     syncCaption: syncCaption,
+    syncCaptionText: syncCaptionText,
     syncCaptionDelete: syncCaptionDelete,
     syncCaptionStyle: syncCaptionStyle,
 

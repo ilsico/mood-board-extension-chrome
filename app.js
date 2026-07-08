@@ -8903,14 +8903,14 @@ const App = (function () {
       _mergeAdjacentLists(ta);
     }
 
-    el.dataset.savedata = ta.innerHTML;
-
-    if (typeof Collab !== 'undefined' && Collab.isActive()) {
-      Collab.syncElementData(el.dataset.id, ta.innerHTML);
-    }
-
     const afterHtml = ta.innerHTML;
     if (afterHtml !== beforeHtml) {
+      el.dataset.savedata = ta.innerHTML;
+
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(el.dataset.id, ta.innerHTML);
+      }
+
       pushAction({
         type: 'editText',
         elId: el.dataset.id,

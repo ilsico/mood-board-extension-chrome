@@ -9052,12 +9052,6 @@ const App = (function () {
     const q = document.getElementById('lib-panel-search').value.toLowerCase();
     if (q) items = items.filter((i) => i.name.toLowerCase().includes(q));
 
-    items.sort((a, b) => {
-      const ta = parseInt(a.id.split('_')[1]) || 0;
-      const tb = parseInt(b.id.split('_')[1]) || 0;
-      return tb - ta;
-    });
-
     if (!items.length) {
       grid.style.display = 'none';
       if (panelFolder !== '__trash__') {

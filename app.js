@@ -8731,9 +8731,197 @@ const App = (function () {
     else if (state === 'todo') todoBtn.classList.add('active');
   }
 
+  function _makeListItem(type, content) {
+    const li = document.createElement('li');
+    if (type === 'todo') {
+      li.className = 'todo-item';
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.className = 'todo-check';
+      check.setAttribute('contenteditable', 'false');
+      const span = document.createElement('span');
+      span.innerHTML = content || '';
+      li.appendChild(check);
+      li.appendChild(span);
+    } else {
+      li.innerHTML = content || '';
+    }
+    return li;
+  }
+
+  function _getBlocksInRange(ta, range) {
+    const blocks = [];
+    ta.childNodes.forEach((child) => {
+      if (child.nodeName === 'UL') {
+        child.querySelectorAll('li').forEach((li) => {
+          if (range.intersectsNode(li)) blocks.push(li);
+        });
+      } else if (range.intersectsNode(child)) {
+        blocks.push(child);
+      }
+    });
+    return blocks;
+  }
+
+  function _mergeAdjacentLists(ta) {
+    let changed = true;
+    let i = 0;
+    while (changed && i++ < 50) {
+      changed = false;
+      const uls = Array.from(ta.querySelectorAll(':scope > ul'));
+      for (let j = 0; j < uls.length - 1; j++) {
+        const a = uls[j];
+        const b = uls[j + 1];
+        if (a.nextElementSibling === b) {
+          const sameType =
+            a.classList.contains('todo-list') === b.classList.contains('todo-list');
+          if (sameType) {
+            while (b.firstChild) a.appendChild(b.firstChild);
+            b.remove();
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  function _unwrapListItem(li, type) {
+    const ul = li.parentElement;
+    if (!ul) return;
+    let inner;
+    if (type === 'todo') {
+      const span = li.querySelector('span');
+      inner = span ? span.innerHTML : '';
+    } else {
+      inner = li.innerHTML;
+    }
+    const itemsAfter = [];
+    let next = li.nextElementSibling;
+    while (next) {
+      itemsAfter.push(next);
+      next = next.nextElementSibling;
+    }
+    const div = document.createElement('div');
+    div.innerHTML = inner || '<br>';
+    li.remove();
+    ul.parentNode.insertBefore(div, ul.nextSibling);
+    if (itemsAfter.length > 0) {
+      const newUl = document.createElement('ul');
+      if (type === 'todo') newUl.className = 'todo-list';
+      itemsAfter.forEach((item) => {
+        item.remove();
+        newUl.appendChild(item);
+      });
+      div.parentNode.insertBefore(newUl, div.nextSibling);
+    }
+    if (!ul.querySelector('li')) ul.remove();
+  }
+
   function applyListToggle(type) {
-    // Full implementation in Task 3
     if (!textEditTarget) return;
+    const el = textEditTarget;
+    const ta = el.querySelector('.el-note-content');
+    if (!ta) return;
+
+    ta.focus();
+
+    const beforeHtml = ta.innerHTML;
+    const beforeStyle = ta.style.cssText;
+
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+
+    const blocks = _getBlocksInRange(ta, range);
+    if (blocks.length === 0) return;
+
+    const allSameType = blocks.every((node) => {
+      if (node.nodeName !== 'LI') return false;
+      const ul = node.parentElement;
+      return (
+        ul &&
+        ul.nodeName === 'UL' &&
+        (type === 'todo'
+          ? ul.classList.contains('todo-list')
+          : !ul.classList.contains('todo-list'))
+      );
+    });
+
+    if (allSameType) {
+      blocks.forEach((node) => {
+        if (node.nodeName === 'LI') _unwrapListItem(node, type);
+      });
+    } else {
+      blocks.forEach((node) => {
+        if (node.nodeName === 'LI') {
+          const ul = node.parentElement;
+          if (!ul) return;
+          const currentType = ul.classList.contains('todo-list') ? 'todo' : 'bullet';
+          if (currentType === type) return;
+          if (type === 'todo') {
+            // bullet → todo
+            const text = node.innerHTML;
+            node.innerHTML = '';
+            node.className = 'todo-item';
+            const check = document.createElement('input');
+            check.type = 'checkbox';
+            check.className = 'todo-check';
+            check.setAttribute('contenteditable', 'false');
+            const span = document.createElement('span');
+            span.innerHTML = text;
+            node.appendChild(check);
+            node.appendChild(span);
+            ul.classList.add('todo-list');
+          } else {
+            // todo → bullet
+            const span = node.querySelector('span');
+            node.innerHTML = span ? span.innerHTML : node.innerHTML;
+            node.classList.remove('todo-item', 'todo-done');
+            if (!ul.querySelector('li.todo-item')) ul.classList.remove('todo-list');
+          }
+        } else {
+          // Plain block (div, text node, br)
+          let content = '';
+          if (node.nodeType === Node.TEXT_NODE) {
+            content = node.textContent;
+          } else if (node.nodeName === 'DIV') {
+            content = node.innerHTML;
+          }
+          const li = _makeListItem(type, content);
+          const ul = document.createElement('ul');
+          if (type === 'todo') ul.className = 'todo-list';
+          ul.appendChild(li);
+          if (node.nodeType === Node.TEXT_NODE) {
+            node.parentNode.insertBefore(ul, node);
+            node.remove();
+          } else {
+            node.parentNode.replaceChild(ul, node);
+          }
+        }
+      });
+      _mergeAdjacentLists(ta);
+    }
+
+    el.dataset.savedata = ta.innerHTML;
+
+    if (typeof Collab !== 'undefined' && Collab.isActive()) {
+      Collab.syncElementData(el.dataset.id, ta.innerHTML);
+    }
+
+    const afterHtml = ta.innerHTML;
+    if (afterHtml !== beforeHtml) {
+      pushAction({
+        type: 'editText',
+        elId: el.dataset.id,
+        before: { data: beforeHtml, style: beforeStyle },
+        after: { data: afterHtml, style: ta.style.cssText },
+        detail: type === 'bullet' ? 'Liste à puces' : 'Todo liste',
+      });
+      pushHistory();
+    }
+
+    _updateListBtns();
   }
 
   function applyTextAlign(align) {

@@ -918,6 +918,11 @@ const App = (function () {
     addEvt('ta-left', 'click', () => applyTextAlign('left'));
     addEvt('ta-center', 'click', () => applyTextAlign('center'));
     addEvt('ta-right', 'click', () => applyTextAlign('right'));
+    addEvt('list-bullet-btn', 'click', () => applyListToggle('bullet'));
+    addEvt('list-todo-btn', 'click', () => applyListToggle('todo'));
+    document.addEventListener('selectionchange', () => {
+      if (textEditTarget) _updateListBtns();
+    });
 
     // Panneau alignement multi-sélection
     addEvt('align-left', 'click', () => alignElements('left'));
@@ -8301,6 +8306,7 @@ const App = (function () {
         selectorBtn.style.fontFamily = rawFamily || 'inherit';
       }
     }
+    _updateListBtns();
   }
   function hideTextEditPanel() {
     _styleEditBeforeHtml = null;
@@ -8311,6 +8317,7 @@ const App = (function () {
     _closeFontDropdown(false);
     textEditTarget = null;
     updateAlignPanel();
+    document.querySelectorAll('.list-type-btn').forEach((b) => b.classList.remove('active'));
   }
 
   function handleCaptionBlur(e, cap) {
@@ -8694,6 +8701,41 @@ const App = (function () {
     _collabSyncStyle();
     _saveStyleChange();
   }
+  function _detectListState(ta) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    let node = sel.getRangeAt(0).startContainer;
+    while (node && node !== ta) {
+      if (node.nodeName === 'LI') {
+        const ul = node.parentElement;
+        if (ul && ul.nodeName === 'UL') {
+          return ul.classList.contains('todo-list') ? 'todo' : 'bullet';
+        }
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function _updateListBtns() {
+    const bulletBtn = document.getElementById('list-bullet-btn');
+    const todoBtn = document.getElementById('list-todo-btn');
+    if (!bulletBtn || !todoBtn) return;
+    bulletBtn.classList.remove('active');
+    todoBtn.classList.remove('active');
+    if (!textEditTarget) return;
+    const ta = textEditTarget.querySelector('.el-note-content');
+    if (!ta) return;
+    const state = _detectListState(ta);
+    if (state === 'bullet') bulletBtn.classList.add('active');
+    else if (state === 'todo') todoBtn.classList.add('active');
+  }
+
+  function applyListToggle(type) {
+    // Full implementation in Task 3
+    if (!textEditTarget) return;
+  }
+
   function applyTextAlign(align) {
     if (!textEditTarget) return;
     const noteDiv = textEditTarget.querySelector('.el-note-content');
@@ -9009,6 +9051,12 @@ const App = (function () {
     }
     const q = document.getElementById('lib-panel-search').value.toLowerCase();
     if (q) items = items.filter((i) => i.name.toLowerCase().includes(q));
+
+    items.sort((a, b) => {
+      const ta = parseInt(a.id.split('_')[1]) || 0;
+      const tb = parseInt(b.id.split('_')[1]) || 0;
+      return tb - ta;
+    });
 
     if (!items.length) {
       grid.style.display = 'none';

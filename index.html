@@ -112,7 +112,8 @@
         border-color: rgba(0, 0, 0, 0.15);
       }
       body.light-mode .text-font-btn.active,
-      body.light-mode .text-align-btn.active {
+      body.light-mode .text-align-btn.active,
+      body.light-mode .list-type-btn.active {
         background: var(--bg-input);
         border-color: #222222;
         color: #222222;
@@ -125,7 +126,8 @@
       }
       body.light-mode .text-font-btn:hover,
       body.light-mode .text-size-btn:hover,
-      body.light-mode .text-align-btn:hover {
+      body.light-mode .text-align-btn:hover,
+      body.light-mode .list-type-btn:hover {
         background: rgba(0, 0, 0, 0.1);
       }
       body.light-mode #lib-panel.open {
@@ -1544,7 +1546,8 @@
       }
       .text-font-btn,
       .text-size-btn,
-      .text-align-btn {
+      .text-align-btn,
+      .list-type-btn {
         border: none;
         background: none;
         cursor: pointer;
@@ -1580,13 +1583,30 @@
         border-radius: 4px;
         transition: background 0.12s;
       }
+      .list-type-btn {
+        width: 32px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border-radius: 4px;
+        transition: background 0.12s;
+      }
+      .list-type-btns {
+        display: flex;
+        gap: 6px;
+        padding: 0 2px;
+      }
       .text-font-btn:hover,
       .text-size-btn:hover,
-      .text-align-btn:hover {
+      .text-align-btn:hover,
+      .list-type-btn:hover {
         background: rgba(255, 255, 255, 0.12);
       }
       .text-font-btn.active,
-      .text-align-btn.active {
+      .text-align-btn.active,
+      .list-type-btn.active {
         background: #3d3d3d;
         border: 1px solid white;
         color: white;
@@ -2105,6 +2125,31 @@
         content: attr(data-placeholder);
         color: #aaa;
         pointer-events: none;
+      }
+      .el-note-content ul {
+        padding-left: 18px;
+        margin: 2px 0;
+      }
+      .el-note-content ul li {
+        margin: 1px 0;
+      }
+      .el-note-content ul.todo-list {
+        list-style: none;
+        padding-left: 4px;
+      }
+      .el-note-content .todo-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+      }
+      .el-note-content .todo-item.todo-done span {
+        opacity: 0.4;
+      }
+      .el-note-content .todo-check {
+        pointer-events: auto;
+        margin-top: 3px;
+        flex-shrink: 0;
+        cursor: pointer;
       }
 
       .board-element[data-type='color'] {
@@ -3837,6 +3882,21 @@
               </svg>
             </button>
           </div>
+          <div class="list-type-btns">
+            <button class="list-type-btn" id="list-bullet-btn" title="Liste à puces">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/>
+                <path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>
+              </svg>
+            </button>
+            <button class="list-type-btn" id="list-todo-btn" title="Todo liste">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/>
+                <path d="m3 17 2 2 4-4"/>
+                <rect x="3" y="4" width="6" height="6" rx="1"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <!-- ── Section Aligner ───────────────────────── -->
@@ -4515,6 +4575,7 @@
     <div id="context-menu">
       <div class="ctx-item" id="ctx-duplicate">Dupliquer</div>
       <div class="ctx-divider" id="ctx-img-divider" style="display: none"></div>
+      <div class="ctx-item" id="ctx-img-copy" style="display: none">Copier</div>
       <div class="ctx-item" id="ctx-img-download" style="display: none">Télécharger</div>
       <div class="ctx-item" id="ctx-img-replace" style="display: none">Remplacer</div>
       <div class="ctx-item" id="ctx-img-caption" style="display: none">Commentaire</div>

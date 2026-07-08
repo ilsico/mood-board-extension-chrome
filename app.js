@@ -3992,6 +3992,7 @@ const App = (function () {
       }
     });
     ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus, _noteStyleOnFocus));
+    ta.addEventListener('keydown', (e) => _handleNoteListKeydown(e, ta, el));
   }
 
   function _handleNoteBlur(e, el, ta, noteValueOnFocus, noteStyleOnFocus = '') {
@@ -6428,6 +6429,90 @@ const App = (function () {
   }
 
   // ── NOTE ──────────────────────────────────────────────────────────────────
+  function _exitListAfterLi(li, ta, type) {
+    const ul = li.parentElement;
+    const itemsAfter = [];
+    let next = li.nextElementSibling;
+    while (next) {
+      itemsAfter.push(next);
+      next = next.nextElementSibling;
+    }
+    const newDiv = document.createElement('div');
+    const textNode = document.createTextNode('');
+    newDiv.appendChild(textNode);
+    li.remove();
+    ul.parentNode.insertBefore(newDiv, ul.nextSibling);
+    if (itemsAfter.length > 0) {
+      const newUl = document.createElement('ul');
+      if (type === 'todo') newUl.className = 'todo-list';
+      itemsAfter.forEach((item) => {
+        item.remove();
+        newUl.appendChild(item);
+      });
+      newDiv.parentNode.insertBefore(newUl, newDiv.nextSibling);
+    }
+    if (!ul.querySelector('li')) ul.remove();
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(textNode, 0);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  function _handleNoteListKeydown(e, ta, el) {
+    if (e.key !== 'Enter' && e.key !== 'Backspace') return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    let node = sel.getRangeAt(0).startContainer;
+    let li = null;
+    while (node && node !== ta) {
+      if (node.nodeName === 'LI') { li = node; break; }
+      node = node.parentElement;
+    }
+    if (!li) return;
+    const ul = li.parentElement;
+    const type = ul.classList.contains('todo-list') ? 'todo' : 'bullet';
+    const getText = () =>
+      type === 'todo'
+        ? (li.querySelector('span') ? li.querySelector('span').textContent : li.textContent)
+        : li.textContent;
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!getText().trim()) {
+        _exitListAfterLi(li, ta, type);
+      } else {
+        const newLi = _makeListItem(type, '');
+        li.parentNode.insertBefore(newLi, li.nextSibling);
+        const target = type === 'todo' ? newLi.querySelector('span') : newLi;
+        if (target) {
+          const textNode = document.createTextNode('');
+          target.appendChild(textNode);
+          const r = document.createRange();
+          r.setStart(textNode, 0);
+          r.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        }
+      }
+      el.dataset.savedata = ta.innerHTML;
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(el.dataset.id, ta.innerHTML);
+      }
+    } else if (e.key === 'Backspace') {
+      if (getText().trim()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      _exitListAfterLi(li, ta, type);
+      el.dataset.savedata = ta.innerHTML;
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(el.dataset.id, ta.innerHTML);
+      }
+    }
+  }
+
   function addNote() {
     const c = getCenter();
     const el = createNoteElement('', c.x - 110, c.y - 75, 290, 75);
@@ -6504,6 +6589,7 @@ const App = (function () {
     });
 
     ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus, _noteStyleOnFocus));
+    ta.addEventListener('keydown', (e) => _handleNoteListKeydown(e, ta, el));
 
     wrap.appendChild(ta);
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));

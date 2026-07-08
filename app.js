@@ -5632,7 +5632,11 @@ const App = (function () {
   function _applyStyleToEl(el, style) {
     if (!el || !style) return;
     const target = el.querySelector('.el-note-content') || el;
-    if (style.fontFamily) target.style.fontFamily = style.fontFamily;
+    if (style.fontFamily) {
+      target.style.fontFamily = style.fontFamily;
+      const _fam = style.fontFamily.split(',')[0].trim().replace(/['"]/g, '');
+      if (_fam) _loadGFont(_fam);
+    }
     if (style.fontWeight) target.style.fontWeight = style.fontWeight;
     if (style.fontSize) target.style.fontSize = style.fontSize;
     if (style.textAlign) target.style.textAlign = style.textAlign;
@@ -8469,7 +8473,7 @@ const App = (function () {
     _gFontsList = [];
     try {
       const res = await fetch(
-        'https://www.googleapis.com/webfonts/v1/webfonts?key=AIzaSyAB9hrE2Ww0TZmfhoOQcQtJczB1IcxNqpw&sort=popularity'
+        'https://www.googleapis.com/webfonts/v1/webfonts?key=AIzaSyBEpnmNwg__zubNb1ckG98LFpkFgcGDrS4&sort=popularity'
       );
       const data = await res.json();
       _gFontsList = (data.items || []).map((f) => f.family);

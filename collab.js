@@ -37,6 +37,19 @@ window.Collab = (function () {
 
   // ── UTILITAIRES ─────────────────────────────────────────────────────────
 
+  var _loadedGFontsRemote = new Set();
+  function _loadGFontIfNeeded(cssFontFamily) {
+    if (!cssFontFamily) return;
+    var family = cssFontFamily.split(',')[0].trim().replace(/['"]/g, '');
+    if (!family) return;
+    if (_loadedGFontsRemote.has(family)) return;
+    _loadedGFontsRemote.add(family);
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(family).replace(/%20/g, '+') + '&display=swap';
+    document.head.appendChild(link);
+  }
+
   function _lerp(a, b, t) {
     return a + (b - a) * t;
   }
@@ -972,7 +985,7 @@ window.Collab = (function () {
     if (data.style) {
       var target = el.querySelector('.el-note-content') || el;
       if (data.style.fontSize) target.style.fontSize = data.style.fontSize;
-      if (data.style.fontFamily) target.style.fontFamily = data.style.fontFamily;
+      if (data.style.fontFamily) { target.style.fontFamily = data.style.fontFamily; _loadGFontIfNeeded(data.style.fontFamily); }
       if (data.style.fontWeight) target.style.fontWeight = data.style.fontWeight;
       if (data.style.textAlign) target.style.textAlign = data.style.textAlign;
     }
@@ -1147,7 +1160,7 @@ window.Collab = (function () {
       // Style
       if (data.style) {
         if (data.style.fontSize) cap.style.fontSize = data.style.fontSize;
-        if (data.style.fontFamily) cap.style.fontFamily = data.style.fontFamily;
+        if (data.style.fontFamily) { cap.style.fontFamily = data.style.fontFamily; _loadGFontIfNeeded(data.style.fontFamily); }
         if (data.style.fontWeight) cap.style.fontWeight = data.style.fontWeight;
         if (data.style.textAlign) cap.style.textAlign = data.style.textAlign;
       }

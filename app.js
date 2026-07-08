@@ -6523,11 +6523,21 @@ const App = (function () {
       _checkBeforeHtml = ta.innerHTML;
     });
 
+    wrap.addEventListener('keydown', (e) => {
+      if (e.key !== ' ') return;
+      const cb = e.target.closest('.todo-check');
+      if (!cb) return;
+      e.stopPropagation();
+      _checkBeforeHtml = ta.innerHTML;
+    });
+
     wrap.addEventListener('change', (e) => {
       const check = e.target.closest('.todo-check');
       if (!check) return;
       const li = check.closest('li');
       if (li) li.classList.toggle('todo-done', check.checked);
+      if (check.checked) check.setAttribute('checked', '');
+      else check.removeAttribute('checked');
       el.dataset.savedata = ta.innerHTML;
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementData(el.dataset.id, ta.innerHTML);

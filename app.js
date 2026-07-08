@@ -3993,6 +3993,7 @@ const App = (function () {
     });
     ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus, _noteStyleOnFocus));
     ta.addEventListener('keydown', (e) => _handleNoteListKeydown(e, ta, el));
+    _attachNoteCheckboxListener(wrap, ta, el);
   }
 
   function _handleNoteBlur(e, el, ta, noteValueOnFocus, noteStyleOnFocus = '') {
@@ -6513,6 +6514,38 @@ const App = (function () {
     }
   }
 
+  function _attachNoteCheckboxListener(wrap, ta, el) {
+    let _checkBeforeHtml = null;
+
+    wrap.addEventListener('mousedown', (e) => {
+      if (!e.target.closest('.todo-check')) return;
+      e.stopPropagation();
+      _checkBeforeHtml = ta.innerHTML;
+    });
+
+    wrap.addEventListener('change', (e) => {
+      const check = e.target.closest('.todo-check');
+      if (!check) return;
+      const li = check.closest('li');
+      if (li) li.classList.toggle('todo-done', check.checked);
+      el.dataset.savedata = ta.innerHTML;
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(el.dataset.id, ta.innerHTML);
+      }
+      if (_checkBeforeHtml !== null && _checkBeforeHtml !== ta.innerHTML) {
+        pushAction({
+          type: 'editText',
+          elId: el.dataset.id,
+          before: { data: _checkBeforeHtml, style: ta.style.cssText },
+          after: { data: ta.innerHTML, style: ta.style.cssText },
+          detail: check.checked ? 'Todo coché' : 'Todo décoché',
+        });
+        pushHistory();
+      }
+      _checkBeforeHtml = null;
+    });
+  }
+
   function addNote() {
     const c = getCenter();
     const el = createNoteElement('', c.x - 110, c.y - 75, 290, 75);
@@ -6590,6 +6623,7 @@ const App = (function () {
 
     ta.addEventListener('blur', (e) => _handleNoteBlur(e, el, ta, _noteValueOnFocus, _noteStyleOnFocus));
     ta.addEventListener('keydown', (e) => _handleNoteListKeydown(e, ta, el));
+    _attachNoteCheckboxListener(wrap, ta, el);
 
     wrap.appendChild(ta);
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));

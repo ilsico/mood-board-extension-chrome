@@ -1320,9 +1320,7 @@
         padding: 0 12px;
         height: 28px;
         cursor: pointer;
-        transition:
-          border-color 0.12s,
-          background 0.12s;
+        transition: border-color 0.12s;
         flex-shrink: 0;
       }
       .export-fmt-btn:hover {
@@ -1773,7 +1771,7 @@
         color: var(--fg);
         opacity: 0.65;
         font-weight: 600;
-        transition: all 0.15s;
+        transition: background 0.15s, border-color 0.15s, opacity 0.15s;
         white-space: nowrap;
       }
       .lib-folder-chip:hover {
@@ -4577,6 +4575,7 @@
     <div id="context-menu">
       <div class="ctx-item" id="ctx-duplicate">Dupliquer</div>
       <div class="ctx-divider" id="ctx-img-divider" style="display: none"></div>
+      <div class="ctx-item" id="ctx-img-copy" style="display: none">Copier l'image</div>
       <div class="ctx-item" id="ctx-img-download" style="display: none">Télécharger</div>
       <div class="ctx-item" id="ctx-img-replace" style="display: none">Remplacer</div>
       <div class="ctx-item" id="ctx-img-caption" style="display: none">Commentaire</div>

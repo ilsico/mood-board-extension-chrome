@@ -22,8 +22,9 @@ L'extension Chrome Moodboard est inaccessible depuis un iPhone (Safari ne suppor
 ### Firebase — structure de données
 ```
 /users/{uid}/
-  pinned_boards/           ← boards épinglés (id, nom, snapshot base64, savedAt)
-    {boardId}: { name, snapshot, savedAt, pinned: true }
+  pinned_boards/           ← boards épinglés (id, nom, thumb base64, savedAt)
+    {boardId}: { name, thumb, savedAt, pinned: true }
+    // thumb = board.coverImage || board.snapshot (déjà généré par l'extension, JPEG base64)
   boards/{boardId}/        ← données complètes (elements[]) du board épinglé
   inbox/                   ← captures iPhone en attente d'import
     {itemId}: { type: 'image'|'url', data, url, addedAt, imported: false }
@@ -91,8 +92,9 @@ async function togglePinBoard(boardId) {
     showToast('Board retiré du mobile');
     _updatePinBtn(false);
   } else {
-    const snapshot = await _generateBoardSnapshot(boardId); // canvas → base64 PNG 400px
-    await ref.set({ name: board.name, snapshot, savedAt: board.savedAt, pinned: true });
+    // Réutilise le thumb déjà généré (coverImage prioritaire, sinon snapshot)
+    const thumb = board.coverImage || board.snapshot || '';
+    await ref.set({ name: board.name, thumb, savedAt: board.savedAt, pinned: true });
     await _syncBoardElements(boardId); // écrit elements[] dans users/{uid}/boards/{boardId}
     showToast('Board épinglé sur iPhone');
     _updatePinBtn(true);
@@ -165,7 +167,11 @@ Le champ `share_target` expose la PWA dans le Share Sheet iOS (Safari, Photos, e
 
 ### ① Écran d'accueil — "Mes boards"
 - Grille 2 colonnes de cards
-- Chaque card : snapshot du board (image), nom, date "Modifié il y a Xh"
+- Chaque card affiche le thumb `board.coverImage || board.snapshot` **exactement comme la `.wheel-card` de l'extension** :
+  - Ratio fixe **500:340** (≈ 1.47:1, paysage)
+  - `object-fit: cover` — le thumb remplit la card, centré, recadré si nécessaire
+  - Fond `#000` si pas encore de thumb
+- Nom du board en bas de la card, date "Modifié il y a Xh"
 - Point coloré `#ff3c00` si le board a été modifié depuis la dernière ouverture de la PWA
 - Tap → Board Viewer
 - Badge rouge sur la tab Inbox si captures en attente
@@ -184,7 +190,7 @@ Le champ `share_target` expose la PWA dans le Share Sheet iOS (Safari, Photos, e
 - Liste des captures non importées : miniature + type (image/URL) + date
 - Bouton "+" → picker galerie iOS (input `type=file accept=image/*`) ou champ URL
 - Chaque item : swipe gauche pour supprimer, badge "Importé" après import desktop
-- Vide : illustration + message "Rien pour l'instant — partage une image depuis Safari"
+- Vide : illustration + message "Rien pour l'instant — partage une image"
 
 ### ④ Journal d'activité
 - Feed chronologique des modifications sur les boards partagés

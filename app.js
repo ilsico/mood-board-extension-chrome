@@ -13,6 +13,8 @@ const App = (function () {
   let _cardTitleTimeout = null; // timer différé pour afficher le titre de carte
   let library = {}; // bibliothèque du board courant — chargée dans openBoard()
   let currentBoardId = null;
+  let _currentUser = null; // utilisateur Firebase Google (null si non connecté / anonyme)
+  let _pinnedBoards = new Set(); // IDs des boards épinglés sur mobile
   let currentFolder = 'all';
   let panelFolder = 'all';
   let libPanelOpen = false;
@@ -249,6 +251,25 @@ const App = (function () {
     board.theme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
     board.savedAt = Date.now();
     saveBoards();
+    if (_currentUser && _isPinned(currentBoardId)) {
+      _syncBoardElements(currentBoardId);
+      // Mettre à jour le thumb si disponible
+      if (board.coverImage || board.snapshot) {
+        const thumb = board.coverImage || board.snapshot;
+        window._fbDb.ref('users/' + _currentUser.uid + '/pinned_boards/' + currentBoardId + '/thumb')
+          .set(thumb).catch(function () {});
+      }
+    }
+    if (_currentUser && !_currentUser.isAnonymous &&
+        typeof Collab !== 'undefined' && Collab.isActive() && window._fbDb) {
+      window._fbDb.ref('boards/' + currentBoardId + '/activity').push({
+        uid: _currentUser.uid,
+        displayName: _currentUser.displayName || 'Inconnu',
+        photoURL: _currentUser.photoURL || '',
+        action: 'modified',
+        at: Date.now(),
+      }).catch(function () {});
+    }
     // Sync Firebase (fire-and-forget, silencieux) — strip base64 image data pour éviter "Write too large"
     if (window._fbDb) {
       const fbElements = board.elements.map((el) =>
@@ -260,6 +281,138 @@ const App = (function () {
         .set(payload)
         .catch((e) => console.warn('Firebase sync error:', e));
     }
+  }
+
+  function _isPinned(boardId) {
+    return _pinnedBoards.has(boardId);
+  }
+
+  function _updatePinBtn(pinned) {
+    const btn = document.getElementById('pin-mobile-btn');
+    if (!btn) return;
+    btn.classList.toggle('active', !!pinned);
+  }
+
+  function _syncBoardElements(boardId) {
+    if (!_currentUser || !window._fbDb) return;
+    const board = boards.find(function (b) { return b.id === boardId; });
+    if (!board || !board.elements) return;
+    // Inclure les données images (base64) pour que la PWA puisse les afficher
+    const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
+    window._fbDb.ref('users/' + _currentUser.uid + '/boards/' + boardId)
+      .set(payload)
+      .catch(function () {});
+  }
+
+  async function togglePinBoard(boardId) {
+    if (!_currentUser) { showToast('Connecte-toi pour épingler sur l\'iPhone'); return; }
+    if (!window._fbDb) return;
+    const board = boards.find(function (b) { return b.id === boardId; });
+    if (!board) return;
+    const ref = window._fbDb.ref('users/' + _currentUser.uid + '/pinned_boards/' + boardId);
+    const snap = await ref.get();
+    if (snap.exists()) {
+      await ref.remove();
+      window._fbDb.ref('users/' + _currentUser.uid + '/boards/' + boardId).remove().catch(function () {});
+      _pinnedBoards.delete(boardId);
+      showToast('Board retiré du mobile');
+      _updatePinBtn(false);
+    } else {
+      const thumb = board.coverImage || board.snapshot || '';
+      await ref.set({ name: board.name, thumb: thumb, savedAt: board.savedAt, pinned: true });
+      _pinnedBoards.add(boardId);
+      _syncBoardElements(boardId);
+      showToast('Board épinglé sur iPhone');
+      _updatePinBtn(true);
+    }
+  }
+
+  function _syncPinnedBoards() {
+    if (!_currentUser || !window._fbDb) return;
+    window._fbDb.ref('users/' + _currentUser.uid + '/pinned_boards').get().then(function (snap) {
+      _pinnedBoards.clear();
+      if (snap.exists()) {
+        Object.keys(snap.val()).forEach(function (id) { _pinnedBoards.add(id); });
+      }
+    }).catch(function () {});
+  }
+
+  let _inboxUnsubscribe = null; // fonction pour détacher le listener Firebase inbox
+
+  function _setupInboxListener() {
+    if (!_currentUser || !window._fbDb) return;
+    if (_inboxUnsubscribe) { _inboxUnsubscribe(); _inboxUnsubscribe = null; }
+    const ref = window._fbDb.ref('users/' + _currentUser.uid + '/inbox');
+    const handler = ref.on('value', function (snap) {
+      const items = [];
+      if (snap.exists()) {
+        snap.forEach(function (child) {
+          const v = child.val();
+          if (!v.imported) items.push(Object.assign({ _key: child.key }, v));
+        });
+      }
+      const count = items.length;
+      const badge = document.getElementById('inbox-count');
+      const btn = document.getElementById('inbox-btn');
+      if (badge) {
+        badge.textContent = count > 0 ? count : '';
+        badge.classList.toggle('visible', count > 0);
+      }
+      if (btn) btn.classList.toggle('has-items', count > 0);
+      _renderInboxPanel(items);
+    });
+    _inboxUnsubscribe = function () { ref.off('value', handler); };
+  }
+
+  function _renderInboxPanel(items) {
+    const list = document.getElementById('inbox-list');
+    if (!list) return;
+    if (!items || items.length === 0) {
+      list.innerHTML = '<div class="inbox-empty">Aucune capture en attente.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    items.forEach(function (item) {
+      const div = document.createElement('div');
+      div.className = 'inbox-item';
+      const isImage = item.type === 'image';
+      const dateStr = item.addedAt ? new Date(item.addedAt).toLocaleDateString('fr-FR') : '';
+      div.innerHTML = (isImage
+        ? '<img class="inbox-item-thumb" src="' + (item.data || '') + '" alt="">'
+        : '<div class="inbox-item-thumb" style="display:flex;align-items:center;justify-content:center;opacity:0.3;font-size:22px;">🔗</div>'
+      ) + '<div class="inbox-item-info">'
+        + '<div class="inbox-item-type">' + (isImage ? 'Image' : 'Lien') + '</div>'
+        + '<div class="inbox-item-data">' + (isImage ? 'Depuis iPhone' : (item.url || '')) + '</div>'
+        + '<div class="inbox-item-date">' + dateStr + '</div>'
+        + '</div>'
+        + '<button class="inbox-import-btn" data-key="' + item._key + '" data-type="' + item.type + '">Importer</button>';
+      list.appendChild(div);
+    });
+    list.querySelectorAll('.inbox-import-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        _importInboxItem(btn.dataset.key, btn.dataset.type, items.find(function (i) { return i._key === btn.dataset.key; }));
+      });
+    });
+  }
+
+  function _importInboxItem(key, type, item) {
+    if (!currentBoardId) { showToast('Ouvre un board avant d\'importer'); return; }
+    if (!item) return;
+    const cx = (window.innerWidth / 2 - panX) / zoomLevel;
+    const cy = (window.innerHeight / 2 - panY) / zoomLevel;
+    if (type === 'image') {
+      createImageElement(item.data, cx - 150, cy - 100, 300, null);
+    } else if (type === 'url') {
+      const url = item.url || '';
+      const el = makeElement('link', cx - 150, cy - 60, 300, 120);
+      el.dataset.savedata = JSON.stringify({ url: url, title: url, img: '' });
+    }
+    pushHistory();
+    // Marquer importé dans Firebase
+    if (_currentUser && window._fbDb) {
+      window._fbDb.ref('users/' + _currentUser.uid + '/inbox/' + key + '/imported').set(true).catch(function () {});
+    }
+    showToast('Importé sur le canvas');
   }
 
   function triggerManualSync() {
@@ -451,6 +604,24 @@ const App = (function () {
     // ── Mode normal uniquement ──
     await loadBoardsFromStorage();
 
+    document.addEventListener('fb-auth-change', function (e) {
+      const user = e.detail;
+      // On considère "connecté Google" uniquement si l'utilisateur n'est pas anonyme
+      _currentUser = (user && !user.isAnonymous) ? user : null;
+      const signinBtn = document.getElementById('google-signin-btn');
+      if (signinBtn) {
+        signinBtn.classList.toggle('visible', _currentUser === null);
+      }
+      if (_currentUser) {
+        _syncPinnedBoards();
+        _setupInboxListener();
+      } else {
+        if (_inboxUnsubscribe) { _inboxUnsubscribe(); _inboxUnsubscribe = null; }
+        const badge = document.getElementById('inbox-count');
+        if (badge) { badge.textContent = ''; badge.classList.remove('visible'); }
+      }
+    });
+
     if (!boards.length) addBoard('Mon premier moodboard', false);
     // Migration : si une bibliothèque globale (mb_library) existe, la copier dans le premier board
     const legacyLib = localStorage.getItem('mb_library');
@@ -496,6 +667,37 @@ const App = (function () {
       const el = document.getElementById(id);
       if (el) el.addEventListener(event, handler);
     };
+
+    const signinBtn = document.getElementById('google-signin-btn');
+    if (signinBtn) {
+      signinBtn.addEventListener('click', function () {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        firebase.auth().signInWithPopup(provider).catch(function () {
+          showToast('Connexion annulée');
+        });
+      });
+    }
+
+    const pinMobileBtn = document.getElementById('pin-mobile-btn');
+    if (pinMobileBtn) {
+      pinMobileBtn.addEventListener('click', function () {
+        if (currentBoardId) togglePinBoard(currentBoardId);
+      });
+    }
+
+    const inboxBtn = document.getElementById('inbox-btn');
+    const inboxPanel = document.getElementById('inbox-panel');
+    const inboxCloseBtn = document.getElementById('inbox-close-btn');
+    if (inboxBtn && inboxPanel) {
+      inboxBtn.addEventListener('click', function () {
+        inboxPanel.classList.toggle('open');
+      });
+    }
+    if (inboxCloseBtn && inboxPanel) {
+      inboxCloseBtn.addEventListener('click', function () {
+        inboxPanel.classList.remove('open');
+      });
+    }
 
     // Guard mousedown pour garder sb-text actif quand on clique ses boutons
     const _sbText = document.querySelector('.sb-text');
@@ -1495,6 +1697,15 @@ const App = (function () {
         currentBoardId = id;
         loadLibraryForBoard(id); // charger la bibliothèque propre à ce board
         document.getElementById('board-title-display').textContent = board.name;
+        const pinBtn = document.getElementById('pin-mobile-btn');
+        if (pinBtn) {
+          if (_currentUser) {
+            pinBtn.classList.add('visible');
+            _updatePinBtn(_isPinned(id));
+          } else {
+            pinBtn.classList.remove('visible');
+          }
+        }
         const shareWrap = document.getElementById('share-wrap');
         if (shareWrap && window._fbDb && !document.body.classList.contains('readonly-mode'))
           shareWrap.style.display = '';
@@ -1572,6 +1783,10 @@ const App = (function () {
     document.getElementById('home-screen').style.display = 'flex';
     const shareWrap = document.getElementById('share-wrap');
     if (shareWrap) shareWrap.style.display = 'none';
+    const pinBtn = document.getElementById('pin-mobile-btn');
+    if (pinBtn) pinBtn.classList.remove('visible', 'active');
+    const inboxPanel = document.getElementById('inbox-panel');
+    if (inboxPanel) inboxPanel.classList.remove('open');
     const _hbHome = document.getElementById('history-btn');
     if (_hbHome) _hbHome.style.display = 'none';
     const _hpHome = document.getElementById('history-panel');

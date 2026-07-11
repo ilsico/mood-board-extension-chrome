@@ -44,6 +44,14 @@ try {
   window._fbDb.ref('.info/connected').on('value', function (snap) {
     document.dispatchEvent(new CustomEvent('fb-connection', { detail: !!snap.val() }));
   });
+
+  // Maintenir une référence à l'utilisateur courant pour le mobile sync
+  window._currentFirebaseUser = null;
+  firebase.auth().onAuthStateChanged(function (user) {
+    window._currentFirebaseUser = user;
+    if (user) window._fbUid = user.uid; // met à jour le UID pour collab aussi
+    document.dispatchEvent(new CustomEvent('fb-auth-change', { detail: user }));
+  });
 } catch (e) {
   console.warn('Firebase init failed:', e);
   window._fbDb = null;

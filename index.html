@@ -732,6 +732,129 @@
       .share-btn:hover {
         opacity: 0.85;
       }
+      #google-signin-btn {
+        display: none;
+        align-items: center;
+        gap: 6px;
+        border: none;
+        background: var(--bg-input);
+        color: var(--fg);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-family: 'HelveticaRoman', sans-serif;
+        font-size: 12px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #google-signin-btn:hover { opacity: 0.8; }
+      #google-signin-btn.visible { display: flex; }
+      #pin-mobile-btn {
+        display: none;
+        border: none;
+        background: none;
+        color: var(--fg);
+        cursor: pointer;
+        padding: 4px 6px;
+        border-radius: 6px;
+        opacity: 0.5;
+        transition: opacity 0.15s;
+      }
+      #pin-mobile-btn:hover { opacity: 1; }
+      #pin-mobile-btn.active { color: #ff3c00; opacity: 1; }
+      #pin-mobile-btn.visible { display: flex; align-items: center; }
+      #inbox-btn {
+        position: relative;
+        display: flex;
+        align-items: center;
+        border: none;
+        background: none;
+        color: var(--fg);
+        cursor: pointer;
+        padding: 4px 6px;
+        border-radius: 6px;
+        opacity: 0.5;
+      }
+      #inbox-btn:hover { opacity: 1; }
+      #inbox-btn.has-items { opacity: 1; }
+      #inbox-count {
+        position: absolute;
+        top: 0; right: 0;
+        background: #ff3c00;
+        color: #fff;
+        border-radius: 10px;
+        font-size: 10px;
+        font-family: 'HelveticaBold', sans-serif;
+        min-width: 16px;
+        height: 16px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 0 3px;
+      }
+      #inbox-count.visible { display: flex; }
+      #inbox-panel {
+        position: fixed;
+        top: 0; right: -360px;
+        width: 340px;
+        height: 100%;
+        background: var(--bg);
+        border-left: 1px solid var(--border);
+        z-index: 10000;
+        transition: right 0.28s cubic-bezier(0.16,1,0.3,1);
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+        box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+      }
+      #inbox-panel.open { right: 0; }
+      .inbox-panel-header {
+        padding: 16px 18px 12px;
+        font-family: 'HelveticaBold', sans-serif;
+        font-size: 14px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .inbox-close-btn {
+        border: none; background: none; cursor: pointer;
+        color: var(--fg); opacity: 0.5; font-size: 18px; padding: 0 4px;
+      }
+      .inbox-close-btn:hover { opacity: 1; }
+      .inbox-list { flex: 1; overflow-y: auto; padding: 8px; }
+      .inbox-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px; border-radius: 8px;
+        border: 1px solid var(--border);
+        margin-bottom: 6px;
+        background: var(--bg-input);
+      }
+      .inbox-item-thumb {
+        width: 48px; height: 48px; border-radius: 4px;
+        object-fit: cover; flex-shrink: 0; background: #222;
+      }
+      .inbox-item-info { flex: 1; min-width: 0; }
+      .inbox-item-type {
+        font-size: 10px; opacity: 0.5; text-transform: uppercase;
+        font-family: 'HelveticaBold', sans-serif; letter-spacing: 0.06em;
+      }
+      .inbox-item-data {
+        font-size: 12px; white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
+      }
+      .inbox-item-date { font-size: 10px; opacity: 0.4; margin-top: 2px; }
+      .inbox-import-btn {
+        border: 1px solid var(--border);
+        background: none; color: var(--fg);
+        border-radius: 6px; padding: 4px 8px;
+        font-size: 11px; cursor: pointer; flex-shrink: 0;
+        font-family: 'HelveticaRoman', sans-serif;
+      }
+      .inbox-import-btn:hover { background: var(--bg-input); }
+      .inbox-empty {
+        text-align: center; padding: 40px 20px;
+        opacity: 0.4; font-size: 13px;
+      }
       .share-menu {
         position: absolute;
         bottom: calc(100% + 8px);
@@ -4111,6 +4234,29 @@
             <path d="M12 7v5l4 2" />
           </svg>
         </button>
+        <button id="google-signin-btn" title="Se connecter pour épingler des boards sur l'iPhone">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20.283 10.356h-8.327v3.451h4.792c-.446 2.193-2.313 3.338-4.792 3.338a5.197 5.197 0 0 1 0-10.395c1.248 0 2.382.44 3.26 1.16l2.46-2.461A8.644 8.644 0 0 0 11.956 3a8.956 8.956 0 1 0 0 17.912c4.962 0 8.427-3.494 8.427-8.418 0-.564-.051-1.105-.1-1.138z" fill="currentColor"/>
+          </svg>
+          Connexion
+        </button>
+        <button id="pin-mobile-btn" title="Épingler sur l'iPhone">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"/>
+            <path d="M10 19v-3.96 3.15"/>
+            <path d="M7 19h5"/>
+            <rect width="6" height="10" x="16" y="12" rx="2"/>
+          </svg>
+        </button>
+        <button id="inbox-btn" title="Captures depuis l'iPhone">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m22 11-1.296-1.296a2.4 2.4 0 0 0-3.408 0L11 16"/>
+            <path d="M4 8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2"/>
+            <circle cx="13" cy="7" r="1" fill="currentColor"/>
+            <rect x="8" y="2" width="14" height="14" rx="2"/>
+          </svg>
+          <span id="inbox-count"></span>
+        </button>
         <div id="share-wrap" style="position: relative; display: none">
           <button id="share-btn" class="share-btn" title="Partager ce board">
             <svg
@@ -4808,5 +4954,12 @@
     <div id="resize-edge-s"></div>
     <div id="resize-edge-w"></div>
     <script src="./pwa-init.js"></script>
+    <div id="inbox-panel">
+      <div class="inbox-panel-header">
+        <span>Captures iPhone</span>
+        <button class="inbox-close-btn" id="inbox-close-btn">×</button>
+      </div>
+      <div class="inbox-list" id="inbox-list"></div>
+    </div>
   </body>
 </html>

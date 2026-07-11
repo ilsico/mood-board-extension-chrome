@@ -785,7 +785,7 @@
       }
       .fit-btn-group {
         position: fixed;
-        top: 84px;
+        top: 92px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
@@ -2143,13 +2143,17 @@
         gap: 6px;
       }
       .el-note-content .todo-item.todo-done span {
-        opacity: 0.4;
+        text-decoration: line-through;
+        opacity: 0.45;
       }
       .el-note-content .todo-check {
         pointer-events: auto;
         margin-top: 3px;
         flex-shrink: 0;
         cursor: pointer;
+        accent-color: #007AFF;
+        width: 15px;
+        height: 15px;
       }
 
       .board-element[data-type='color'] {
@@ -3342,18 +3346,13 @@
       }
 
       #collab-status-bar {
-        position: fixed;
-        bottom: 12px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.75);
-        color: #fff;
-        padding: 6px 16px;
-        border-radius: 20px;
-        font-size: 12px;
+        margin-left: auto;
+        font-size: 11px;
         font-family: 'HelveticaRoman', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        z-index: 100000;
+        color: var(--fg-muted, var(--fg));
+        opacity: 0.6;
         pointer-events: none;
+        white-space: nowrap;
       }
       #collab-status-bar.hidden {
         display: none;
@@ -3781,6 +3780,10 @@
           <img src="PNG/retour.png" alt="" style="width: 16px; height: 16px" />
         </button>
         <div class="board-title-display" id="board-title-display">Moodboard</div>
+        <div id="collab-status-bar" class="hidden">
+          <span id="collab-user-count">0 utilisateurs</span>
+          <span id="collab-connection-status"></span>
+        </div>
       </header>
 
       <div id="subheader">
@@ -4795,11 +4798,7 @@
       </div>
     </div>
 
-    <!-- Collab status bar -->
-    <div id="collab-status-bar" class="hidden">
-      <span id="collab-user-count">0 utilisateurs</span>
-      <span id="collab-connection-status"></span>
-    </div>
+
     <div id="resize-corner-nw"></div>
     <div id="resize-corner-ne"></div>
     <div id="resize-corner-sw"></div>

@@ -627,7 +627,7 @@ const App = (function () {
         input.type = 'text';
         input.value = b.name;
         input.style.cssText =
-          'font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit;background:#fff;border:none;border-bottom:1px solid #000000;outline:none;text-align:center;width:220px;max-width:100%;padding:2px 6px;box-sizing:border-box;';
+          'font-family:inherit;font-size:inherit;font-weight:inherit;color:var(--fg);background:var(--bg);border:none;border-bottom:1px solid var(--fg);outline:none;text-align:center;width:220px;max-width:100%;padding:2px 6px;box-sizing:border-box;';
 
         titleEl.textContent = '';
         titleEl.appendChild(input);
@@ -1664,9 +1664,13 @@ const App = (function () {
 
   function deleteBoard(id) {
     if (!id) return;
+    const board = boards.find((b) => b.id === id);
     boards = boards.filter((b) => b.id !== id);
     saveBoards();
     renderBoardsWheel();
+    if (typeof Collab !== 'undefined') {
+      Collab.deleteSession(id);
+    }
   }
 
   function renameBoardPrompt(id) {
@@ -6485,12 +6489,31 @@ const App = (function () {
       if (!getText().trim()) {
         _exitListAfterLi(li, ta, type);
       } else {
-        const newLi = _makeListItem(type, '');
+        const editTarget = type === 'todo' ? li.querySelector('span') : li;
+        let afterHtml = '';
+        if (editTarget) {
+          try {
+            const splitRange = sel.getRangeAt(0);
+            const afterRange = document.createRange();
+            afterRange.setStart(splitRange.startContainer, splitRange.startOffset);
+            afterRange.setEnd(editTarget, editTarget.childNodes.length);
+            const frag = afterRange.extractContents();
+            const tmp = document.createElement('div');
+            tmp.appendChild(frag);
+            afterHtml = tmp.innerHTML.replace(/<br\s*\/?>\s*$/i, '');
+          } catch (_) { afterHtml = ''; }
+        }
+        const newLi = _makeListItem(type, afterHtml);
         li.parentNode.insertBefore(newLi, li.nextSibling);
         const target = type === 'todo' ? newLi.querySelector('span') : newLi;
         if (target) {
-          const textNode = document.createTextNode('');
-          target.appendChild(textNode);
+          let textNode = target.firstChild && target.firstChild.nodeType === Node.TEXT_NODE
+            ? target.firstChild
+            : null;
+          if (!textNode) {
+            textNode = document.createTextNode('');
+            target.insertBefore(textNode, target.firstChild || null);
+          }
           const r = document.createRange();
           r.setStart(textNode, 0);
           r.collapse(true);
@@ -9012,11 +9035,20 @@ const App = (function () {
           }
         } else {
           // Plain block (div, text node, br)
+          if (node.nodeName === 'BR') {
+            if (node.parentNode) node.parentNode.removeChild(node);
+            return;
+          }
           let content = '';
           if (node.nodeType === Node.TEXT_NODE) {
             content = node.textContent;
           } else if (node.nodeName === 'DIV') {
-            content = node.innerHTML;
+            content = node.innerHTML.replace(/<br\s*\/?>\s*$/i, '');
+          }
+          // Skip empty blocks
+          if (!content.replace(/<br\s*\/?>/gi, '').trim()) {
+            if (node.parentNode && node.nodeType !== Node.TEXT_NODE) node.parentNode.removeChild(node);
+            return;
           }
           const li = _makeListItem(type, content);
           const ul = document.createElement('ul');
@@ -9362,10 +9394,10 @@ const App = (function () {
     if (panelFolder === 'all') {
       Object.keys(library).forEach((f) => {
         if (f === '__trash__') return;
-        items = items.concat(library[f].map((i) => ({ ...i, folder: f })));
+        items = items.concat(library[f].slice().reverse().map((i) => ({ ...i, folder: f })));
       });
     } else {
-      items = (library[panelFolder] || []).map((i) => ({ ...i, folder: panelFolder }));
+      items = (library[panelFolder] || []).slice().reverse().map((i) => ({ ...i, folder: panelFolder }));
     }
     const q = document.getElementById('lib-panel-search').value.toLowerCase();
     if (q) items = items.filter((i) => i.name.toLowerCase().includes(q));
@@ -10839,6 +10871,7 @@ const App = (function () {
     removeEl,
     ctxDuplicate,
     ctxDelete,
+    ctxCopyImage,
     ctxDownloadImage,
     ctxReplaceImage,
     ctxConnect,

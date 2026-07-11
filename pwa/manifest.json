@@ -1,0 +1,26 @@
+{
+  "name": "Moodboard",
+  "short_name": "Moodboard",
+  "description": "Vos moodboards sur iPhone",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/pwa/",
+  "scope": "/pwa/",
+  "theme_color": "#111111",
+  "background_color": "#111111",
+  "icons": [
+    { "src": "../icon extension/icon48.png", "sizes": "48x48", "type": "image/png" },
+    { "src": "../icon extension/icon128.png", "sizes": "128x128", "type": "image/png" }
+  ],
+  "share_target": {
+    "action": "/pwa/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [{ "name": "file", "accept": ["image/*"] }]
+    }
+  }
+}

@@ -132,7 +132,7 @@ const App = (function () {
     const b = boards.find((x) => x.id === boardId);
     const raw = b && b.library ? b.library : {};
     library = raw;
-    ['typographie', 'couleur', 'logo', 'image', '__trash__'].forEach((f) => {
+    ['typographie', 'couleur', 'logo', 'image', 'captures', '__trash__'].forEach((f) => {
       if (!library[f]) library[f] = [];
     });
   }
@@ -273,7 +273,7 @@ const App = (function () {
     // Sync Firebase (fire-and-forget, silencieux) — strip base64 image data pour éviter "Write too large"
     if (window._fbDb) {
       const fbElements = board.elements.map((el) =>
-        el.type === 'image' ? Object.assign({}, el, { data: '' }) : el
+        el.type === 'image' ? Object.assign({}, el, { data: '', origData: '' }) : el
       );
       const payload = { name: board.name, elements: fbElements, savedAt: board.savedAt };
       window._fbDb
@@ -297,15 +297,18 @@ const App = (function () {
     if (!_currentUser || !window._fbDb) return;
     const board = boards.find(function (b) { return b.id === boardId; });
     if (!board || !board.elements) return;
-    // Inclure les données images (base64) pour que la PWA puisse les afficher
-    const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
+    // Strip image base64 — les images sont affichées via snapshotUrl dans la PWA
+    const fbElements = board.elements.map(function (el) {
+      return el.type === 'image' ? Object.assign({}, el, { data: '', origData: '' }) : el;
+    });
+    const payload = { name: board.name, elements: fbElements, savedAt: board.savedAt };
     window._fbDb.ref('users/' + _currentUser.uid + '/boards/' + boardId)
       .set(payload)
       .catch(function () {});
   }
 
   async function togglePinBoard(boardId) {
-    if (!_currentUser) { showToast('Connecte-toi pour épingler sur l\'iPhone'); return; }
+    if (!_currentUser) { toast('Connecte-toi pour épingler sur l\'iPhone'); return; }
     if (!window._fbDb) return;
     const board = boards.find(function (b) { return b.id === boardId; });
     if (!board) return;
@@ -315,14 +318,14 @@ const App = (function () {
       await ref.remove();
       window._fbDb.ref('users/' + _currentUser.uid + '/boards/' + boardId).remove().catch(function () {});
       _pinnedBoards.delete(boardId);
-      showToast('Board retiré du mobile');
+      toast('Board retiré du mobile');
       _updatePinBtn(false);
     } else {
       const thumb = board.coverImage || board.snapshot || '';
       await ref.set({ name: board.name, thumb: thumb, savedAt: board.savedAt, pinned: true });
       _pinnedBoards.add(boardId);
       _syncBoardElements(boardId);
-      showToast('Board épinglé sur iPhone');
+      toast('Board épinglé sur iPhone');
       _updatePinBtn(true);
     }
   }
@@ -344,75 +347,32 @@ const App = (function () {
     if (_inboxUnsubscribe) { _inboxUnsubscribe(); _inboxUnsubscribe = null; }
     const ref = window._fbDb.ref('users/' + _currentUser.uid + '/inbox');
     const handler = ref.on('value', function (snap) {
-      const items = [];
-      if (snap.exists()) {
-        snap.forEach(function (child) {
-          const v = child.val();
-          if (!v.imported) items.push(Object.assign({ _key: child.key }, v));
-        });
+      if (!snap.exists()) return;
+      let imported = 0;
+      snap.forEach(function (child) {
+        const v = child.val();
+        if (v.imported || v.type !== 'image' || !v.data) return;
+        const dateStr = v.addedAt ? new Date(v.addedAt).toLocaleDateString('fr-FR') : 'iPhone';
+        const libItem = {
+          id: 'cap_' + child.key,
+          src: v.data,
+          name: 'iPhone ' + dateStr,
+        };
+        // Dédupliquer par id
+        if (!library['captures']) library['captures'] = [];
+        if (!library['captures'].find(function (i) { return i.id === libItem.id; })) {
+          library['captures'].push(libItem);
+          imported++;
+        }
+        window._fbDb.ref('users/' + _currentUser.uid + '/inbox/' + child.key + '/imported').set(true).catch(function () {});
+      });
+      if (imported > 0) {
+        saveLibrary();
+        if (libPanelOpen) renderPanelLib();
+        toast(imported === 1 ? '1 image ajoutée à la bibliothèque' : imported + ' images ajoutées à la bibliothèque');
       }
-      const count = items.length;
-      const badge = document.getElementById('inbox-count');
-      const btn = document.getElementById('inbox-btn');
-      if (badge) {
-        badge.textContent = count > 0 ? count : '';
-        badge.classList.toggle('visible', count > 0);
-      }
-      if (btn) btn.classList.toggle('has-items', count > 0);
-      _renderInboxPanel(items);
     });
     _inboxUnsubscribe = function () { ref.off('value', handler); };
-  }
-
-  function _renderInboxPanel(items) {
-    const list = document.getElementById('inbox-list');
-    if (!list) return;
-    if (!items || items.length === 0) {
-      list.innerHTML = '<div class="inbox-empty">Aucune capture en attente.</div>';
-      return;
-    }
-    list.innerHTML = '';
-    items.forEach(function (item) {
-      const div = document.createElement('div');
-      div.className = 'inbox-item';
-      const isImage = item.type === 'image';
-      const dateStr = item.addedAt ? new Date(item.addedAt).toLocaleDateString('fr-FR') : '';
-      div.innerHTML = (isImage
-        ? '<img class="inbox-item-thumb" src="' + (item.data || '') + '" alt="">'
-        : '<div class="inbox-item-thumb" style="display:flex;align-items:center;justify-content:center;opacity:0.3;font-size:22px;">🔗</div>'
-      ) + '<div class="inbox-item-info">'
-        + '<div class="inbox-item-type">' + (isImage ? 'Image' : 'Lien') + '</div>'
-        + '<div class="inbox-item-data">' + (isImage ? 'Depuis iPhone' : (item.url || '')) + '</div>'
-        + '<div class="inbox-item-date">' + dateStr + '</div>'
-        + '</div>'
-        + '<button class="inbox-import-btn" data-key="' + item._key + '" data-type="' + item.type + '">Importer</button>';
-      list.appendChild(div);
-    });
-    list.querySelectorAll('.inbox-import-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        _importInboxItem(btn.dataset.key, btn.dataset.type, items.find(function (i) { return i._key === btn.dataset.key; }));
-      });
-    });
-  }
-
-  function _importInboxItem(key, type, item) {
-    if (!currentBoardId) { showToast('Ouvre un board avant d\'importer'); return; }
-    if (!item) return;
-    const cx = (window.innerWidth / 2 - panX) / zoomLevel;
-    const cy = (window.innerHeight / 2 - panY) / zoomLevel;
-    if (type === 'image') {
-      createImageElement(item.data, cx - 150, cy - 100, 300, null);
-    } else if (type === 'url') {
-      const url = item.url || '';
-      const el = makeElement('link', cx - 150, cy - 60, 300, 120);
-      el.dataset.savedata = JSON.stringify({ url: url, title: url, img: '' });
-    }
-    pushHistory();
-    // Marquer importé dans Firebase
-    if (_currentUser && window._fbDb) {
-      window._fbDb.ref('users/' + _currentUser.uid + '/inbox/' + key + '/imported').set(true).catch(function () {});
-    }
-    showToast('Importé sur le canvas');
   }
 
   function triggerManualSync() {
@@ -445,6 +405,11 @@ const App = (function () {
                 .ref('boards/' + currentBoardId + '/snapshot')
                 .set(thumb)
                 .catch(() => {});
+              if (window._fbStorage) {
+                // Capture séparée en PNG scale 2 pour la PWA (qualité maximale)
+                const _sid = currentBoardId;
+                _captureAndUploadSnapshot(_sid);
+              }
             }
           }
           toast('Moodboard synchronisé !');
@@ -557,7 +522,10 @@ const App = (function () {
     _applyCustomCursor();
     setupPanelDrop();
     // Fermer les lightboxes au clic sur l'overlay
-    document.getElementById('lightbox-overlay').addEventListener('click', closeLightbox);
+    document.getElementById('lightbox-overlay').addEventListener('click', () => {
+      if (document.getElementById('crop-ui').classList.contains('active')) return;
+      closeLightbox();
+    });
     document.getElementById('lightbox-content').addEventListener('click', (e) => e.stopPropagation());
     document.getElementById('crop-ui').addEventListener('click', (e) => e.stopPropagation());
     document.getElementById('video-lightbox-overlay').addEventListener('click', (e) => {
@@ -608,19 +576,33 @@ const App = (function () {
       const user = e.detail;
       // On considère "connecté Google" uniquement si l'utilisateur n'est pas anonyme
       _currentUser = (user && !user.isAnonymous) ? user : null;
-      const signinBtn = document.getElementById('google-signin-btn');
-      if (signinBtn) {
-        signinBtn.classList.toggle('visible', _currentUser === null);
+      const homeSigninBtn = document.getElementById('home-signin-btn');
+      const homeUserInfo = document.getElementById('home-user-info');
+      if (homeSigninBtn) homeSigninBtn.style.display = _currentUser ? 'none' : '';
+      if (homeUserInfo) {
+        homeUserInfo.classList.toggle('visible', !!_currentUser);
+        if (_currentUser) {
+          const avatar = document.getElementById('home-user-avatar');
+          const name = document.getElementById('home-user-name');
+          if (avatar) { avatar.src = _currentUser.photoURL || ''; avatar.style.display = _currentUser.photoURL ? '' : 'none'; }
+          if (name) name.textContent = _currentUser.displayName || _currentUser.email || '';
+        }
       }
       if (_currentUser) {
         _syncPinnedBoards();
         _setupInboxListener();
       } else {
         if (_inboxUnsubscribe) { _inboxUnsubscribe(); _inboxUnsubscribe = null; }
-        const badge = document.getElementById('inbox-count');
-        if (badge) { badge.textContent = ''; badge.classList.remove('visible'); }
       }
     });
+
+    // Si fb-auth-change a été dispatché avant l'enregistrement du listener (race condition au chargement),
+    // on le re-déclenche manuellement une fois l'état auth stabilisé.
+    if (window._fbAuthReady) {
+      window._fbAuthReady.then(function () {
+        document.dispatchEvent(new CustomEvent('fb-auth-change', { detail: window._currentFirebaseUser }));
+      });
+    }
 
     if (!boards.length) addBoard('Mon premier moodboard', false);
     // Migration : si une bibliothèque globale (mb_library) existe, la copier dans le premier board
@@ -660,6 +642,34 @@ const App = (function () {
     saveCurrentBoard();
   }
 
+  // ── AUTH GOOGLE ───────
+  function _signInWithGoogle() {
+    const CLIENT_ID = '467105545598-mtdfgnh362ep7vfp8ln1l6cv1mku6rh1.apps.googleusercontent.com';
+    const redirectUrl = chrome.identity.getRedirectURL();
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth' +
+      '?client_id=' + encodeURIComponent(CLIENT_ID) +
+      '&response_type=token' +
+      '&redirect_uri=' + encodeURIComponent(redirectUrl) +
+      '&scope=' + encodeURIComponent('email profile') +
+      '&prompt=select_account';
+    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, function (responseUrl) {
+      if (chrome.runtime.lastError || !responseUrl) {
+        toast('Connexion annulée');
+        return;
+      }
+      const params = new URLSearchParams(new URL(responseUrl).hash.substring(1));
+      const accessToken = params.get('access_token');
+      if (!accessToken) {
+        toast('Connexion échouée');
+        return;
+      }
+      const credential = firebase.auth.GoogleAuthProvider.credential(null, accessToken);
+      firebase.auth().signInWithCredential(credential).catch(function () {
+        toast('Connexion Firebase échouée');
+      });
+    });
+  }
+
   // ── ÉVÉNEMENTS UI ───────
   function setupUIEvents() {
     // Utilitaire pour éviter de crasher si un élément n'existe pas dans le HTML
@@ -668,12 +678,16 @@ const App = (function () {
       if (el) el.addEventListener(event, handler);
     };
 
-    const signinBtn = document.getElementById('google-signin-btn');
-    if (signinBtn) {
-      signinBtn.addEventListener('click', function () {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        firebase.auth().signInWithPopup(provider).catch(function () {
-          showToast('Connexion annulée');
+    const homeSigninBtnEvt = document.getElementById('home-signin-btn');
+    if (homeSigninBtnEvt) homeSigninBtnEvt.addEventListener('click', _signInWithGoogle);
+
+    const homeSignoutBtn = document.getElementById('home-signout-btn');
+    if (homeSignoutBtn) {
+      homeSignoutBtn.addEventListener('click', function () {
+        firebase.auth().signOut().then(function () {
+          return firebase.auth().signInAnonymously();
+        }).catch(function () {
+          toast('Déconnexion échouée');
         });
       });
     }
@@ -1218,6 +1232,11 @@ const App = (function () {
     addEvt('lightbox-crop-btn', 'click', (e) => {
       e.stopPropagation();
       if (_lightboxElId) openCropMode(_lightboxElId);
+    });
+
+    addEvt('lightbox-rotate-btn', 'click', (e) => {
+      e.stopPropagation();
+      _rotateImageCW();
     });
 
     addEvt('crop-confirm-btn', 'click', (e) => { e.stopPropagation(); _confirmCrop(); });
@@ -1778,6 +1797,8 @@ const App = (function () {
     } catch (e) {
       console.warn('Erreur sauvegarde:', e);
     }
+    const _snapId = currentBoardId;
+    if (_snapId && _isPinned(_snapId)) _captureAndUploadSnapshot(_snapId);
     document.body.classList.remove('light-mode');
     document.getElementById('board-screen').style.display = 'none';
     document.getElementById('home-screen').style.display = 'flex';
@@ -1801,7 +1822,8 @@ const App = (function () {
     renderBoardsWheel();
   }
 
-  function captureBoardThumbnail() {
+  function captureBoardThumbnail(scale) {
+    scale = scale || 1.5;
     return new Promise((resolve, reject) => {
       const canvasEl = document.getElementById('canvas');
       const els = canvasEl.querySelectorAll('.board-element');
@@ -1856,7 +1878,7 @@ const App = (function () {
       ghost.getBoundingClientRect();
 
       html2canvas(ghost, {
-        scale: 1.5,
+        scale: scale,
         useCORS: true,
         allowTaint: true,
         x: cropX,
@@ -1875,6 +1897,50 @@ const App = (function () {
           reject(err);
         });
     });
+  }
+
+  function _uploadBoardSnapshot(boardId, dataUrl, mimeType) {
+    mimeType = mimeType || 'image/png';
+    if (!window._fbStorage || !boardId) return Promise.resolve(null);
+    var byteString = atob(dataUrl.split(',')[1]);
+    var ab = new ArrayBuffer(byteString.length);
+    var ia = new Uint8Array(ab);
+    for (var i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+    var blob = new Blob([ab], { type: mimeType });
+    var ext = mimeType === 'image/png' ? 'png' : 'jpg';
+    var ref = window._fbStorage.ref('boards/' + boardId + '/snapshot.' + ext);
+    return ref.put(blob, { contentType: mimeType }).then(function (snap) {
+      return snap.ref.getDownloadURL();
+    });
+  }
+
+  function _captureAndUploadSnapshot(boardId) {
+    if (typeof html2canvas === 'undefined' || !window._fbStorage || !window._fbDb) return;
+    captureBoardThumbnail(1.5).then(function (result) {
+      // Redimensionner à max 1800px (longest side) pour éviter crash iOS, JPEG 92%
+      var img = new Image();
+      img.onload = function () {
+        var maxDim = 1800;
+        var w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        var cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        var jpeg = cv.toDataURL('image/jpeg', 0.92);
+        _uploadBoardSnapshot(boardId, jpeg, 'image/jpeg').then(function (url) {
+          if (url && window._fbDb) {
+            window._fbDb.ref('boards/' + boardId + '/snapshotUrl').set(url).catch(function () {});
+            if (_currentUser) {
+              window._fbDb.ref('users/' + _currentUser.uid + '/boards/' + boardId + '/snapshotUrl').set(url).catch(function () {});
+            }
+          }
+        }).catch(function () {});
+      };
+      img.src = result.dataUrl;
+    }).catch(function () {});
   }
 
   function deleteBoard(id) {
@@ -3057,6 +3123,8 @@ const App = (function () {
     document.getElementById('crop-ui').classList.remove('active');
     document.getElementById('lightbox-crop-btn').style.display =
       elId ? 'flex' : 'none';
+    document.getElementById('lightbox-rotate-btn').style.display =
+      elId ? 'flex' : 'none';
     overlay.classList.add('show');
   }
   function closeLightbox() {
@@ -3136,33 +3204,164 @@ const App = (function () {
     const s = _cropDragState.startRect;
     const cont = _cropContainerRect;
     const MIN = 20;
-    let { x, y, w, h } = s;
+    const t = _cropDragState.type;
 
-    if (_cropDragState.type === 'move') {
-      x = Math.max(0, Math.min(s.x + dx, cont.width - w));
-      y = Math.max(0, Math.min(s.y + dy, cont.height - h));
-    } else {
-      const t = _cropDragState.type;
-      if (t === 'se' || t === 'e' || t === 'ne') w = Math.max(MIN, Math.min(s.w + dx, cont.width - x));
-      if (t === 'sw' || t === 'w' || t === 'nw') {
-        const nx = Math.min(s.x + dx, s.x + s.w - MIN);
-        w = s.x + s.w - Math.max(0, nx);
-        x = Math.max(0, nx);
+    if (t === 'move') {
+      _cropRect = {
+        x: Math.round(Math.max(0, Math.min(s.x + dx, cont.width - s.w))),
+        y: Math.round(Math.max(0, Math.min(s.y + dy, cont.height - s.h))),
+        w: Math.round(s.w),
+        h: Math.round(s.h),
+      };
+      _applyCropFrame();
+      return;
+    }
+
+    // Coins et centre de départ
+    const sL = s.x, sR = s.x + s.w, sT = s.y, sB = s.y + s.h;
+    const sCx = (sL + sR) / 2, sCy = (sT + sB) / 2;
+    const ratio = s.w / s.h;
+
+    const movesR = t === 'e' || t === 'se' || t === 'ne';
+    const movesL = t === 'w' || t === 'sw' || t === 'nw';
+    const movesB = t === 's' || t === 'se' || t === 'sw';
+    const movesT = t === 'n' || t === 'ne' || t === 'nw';
+
+    // Bords bruts
+    let L = sL, R = sR, T = sT, B = sB;
+    if (movesR) R = sR + dx;
+    if (movesL) L = sL + dx;
+    if (movesB) B = sB + dy;
+    if (movesT) T = sT + dy;
+
+    // Alt → recadrage depuis le centre
+    if (e.altKey) {
+      if (movesR) L = 2 * sCx - R;
+      if (movesL) R = 2 * sCx - L;
+      if (movesB) T = 2 * sCy - B;
+      if (movesT) B = 2 * sCy - T;
+    }
+
+    // Shift → recadrage proportionnel
+    if (e.shiftKey) {
+      const newW = R - L;
+      const newH = B - T;
+      const wChange = Math.abs(newW - s.w);
+      const hChange = Math.abs(newH - s.h);
+
+      // Point d'ancrage : centre si Alt, sinon bord opposé au handle
+      const anchorX = e.altKey ? sCx : movesR ? L : movesL ? R : sCx;
+      const anchorY = e.altKey ? sCy : movesB ? T : movesT ? B : sCy;
+
+      let targetW, targetH;
+      if (wChange >= hChange) {
+        targetW = Math.max(MIN, newW);
+        targetH = targetW / ratio;
+      } else {
+        targetH = Math.max(MIN, newH);
+        targetW = targetH * ratio;
       }
-      if (t === 'se' || t === 's' || t === 'sw') h = Math.max(MIN, Math.min(s.h + dy, cont.height - y));
-      if (t === 'ne' || t === 'n' || t === 'nw') {
-        const ny = Math.min(s.y + dy, s.y + s.h - MIN);
-        h = s.y + s.h - Math.max(0, ny);
-        y = Math.max(0, ny);
+
+      // Cap à l'espace disponible dans le container avant placement
+      if (e.altKey) {
+        const maxHW = Math.min(sCx, cont.width - sCx);
+        const maxHH = Math.min(sCy, cont.height - sCy);
+        targetW = Math.min(targetW, maxHW * 2);
+        targetH = targetW / ratio;
+        if (targetH / 2 > maxHH) { targetH = maxHH * 2; targetW = targetH * ratio; }
+      } else {
+        const maxW = movesR ? cont.width - anchorX : movesL ? anchorX : Math.min(anchorX, cont.width - anchorX) * 2;
+        const maxH = movesB ? cont.height - anchorY : movesT ? anchorY : Math.min(anchorY, cont.height - anchorY) * 2;
+        targetW = Math.min(targetW, maxW);
+        targetH = targetW / ratio;
+        if (targetH > maxH) { targetH = maxH; targetW = targetH * ratio; }
+      }
+      targetW = Math.max(MIN, targetW);
+      targetH = Math.max(MIN, targetH);
+
+      if (e.altKey) {
+        L = anchorX - targetW / 2;
+        R = anchorX + targetW / 2;
+        T = anchorY - targetH / 2;
+        B = anchorY + targetH / 2;
+      } else {
+        if (movesR)       { L = anchorX; R = anchorX + targetW; }
+        else if (movesL)  { R = anchorX; L = anchorX - targetW; }
+        else              { L = anchorX - targetW / 2; R = anchorX + targetW / 2; }
+
+        if (movesB)       { T = anchorY; B = anchorY + targetH; }
+        else if (movesT)  { B = anchorY; T = anchorY - targetH; }
+        else              { T = anchorY - targetH / 2; B = anchorY + targetH / 2; }
       }
     }
 
-    _cropRect = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+    // Clamp dans le container (filet de sécurité)
+    L = Math.max(0, L);
+    T = Math.max(0, T);
+    R = Math.min(cont.width, R);
+    B = Math.min(cont.height, B);
+    if (R - L < MIN) R = L + MIN;
+    if (B - T < MIN) B = T + MIN;
+
+    _cropRect = { x: Math.round(L), y: Math.round(T), w: Math.round(R - L), h: Math.round(B - T) };
     _applyCropFrame();
   }
 
   function _onCropMouseUp() {
     _cropStopDrag();
+  }
+
+  function _rotateImageCW() {
+    const elId = _lightboxElId;
+    if (!elId) return;
+    const el = document.querySelector('[data-id="' + elId + '"]');
+    if (!el) return;
+    const src = _imgStore.get(elId) || '';
+    if (!src) return;
+
+    const tmpImg = new Image();
+    tmpImg.onload = function () {
+      const w = tmpImg.naturalWidth;
+      const h = tmpImg.naturalHeight;
+      const cvs = document.createElement('canvas');
+      cvs.width = h;
+      cvs.height = w;
+      const ctx = cvs.getContext('2d');
+      ctx.translate(h, 0);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(tmpImg, 0, 0);
+      const rotatedSrc = cvs.toDataURL('image/png');
+
+      const oldSrc = src;
+      const oldW = parseFloat(el.style.width) || null;
+      const oldH = parseFloat(el.style.height) || null;
+
+      const newRatio = h / w;
+      const currentW = oldW || h;
+      const newH = Math.round(currentW / newRatio);
+
+      _imgStore.set(elId, rotatedSrc);
+      const domImg = el.querySelector('img');
+      if (domImg) domImg.src = rotatedSrc;
+      el.style.height = newH + 'px';
+      el.dataset.ratio = newRatio.toFixed(6);
+      document.getElementById('lightbox-img').src = rotatedSrc;
+
+      pushAction({
+        type: 'editImage',
+        elId,
+        detail: 'Image pivotée',
+        before: { data: oldSrc, w: oldW, h: oldH },
+        after:  { data: rotatedSrc, w: currentW, h: newH },
+      });
+      pushHistory();
+
+      if (typeof Collab !== 'undefined' && Collab.isActive()) {
+        Collab.syncElementData(elId, rotatedSrc);
+        Collab.syncElementSize(elId, currentW, newH, true);
+      }
+    };
+    tmpImg.src = src;
   }
 
   function _confirmCrop() {
@@ -8834,13 +9033,24 @@ const App = (function () {
   function _loadGFont(family) {
     if (_loadedGFonts.has(family)) return;
     _loadedGFonts.add(family);
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href =
-      'https://fonts.googleapis.com/css2?family=' +
-      encodeURIComponent(family).replace(/%20/g, '+') +
-      '&display=swap';
-    document.head.appendChild(link);
+    const url = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(family).replace(/%20/g, '+') + '&display=swap';
+    function _inject() {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = url;
+      document.head.appendChild(link);
+    }
+    _fetchGFontsList().then(function () {
+      if (_gFontsList && _gFontsList.length > 0) {
+        // List loaded — inject only if font is a known Google Font
+        if (_gFontsList.includes(family)) _inject();
+      } else {
+        // List unavailable — probe first to avoid MIME type errors
+        fetch(url).then(function (r) {
+          if (r.ok && (r.headers.get('content-type') || '').includes('text/css')) _inject();
+        }).catch(function () {});
+      }
+    });
   }
 
   async function _fetchGFontsList() {
@@ -9492,6 +9702,7 @@ const App = (function () {
       couleur: 'Couleur',
       logo: 'Logo',
       image: 'Image',
+      captures: 'iPhone',
     };
     const allFolders = ['all', ...Object.keys(library).filter((k) => k !== '__trash__')];
 
@@ -9509,7 +9720,7 @@ const App = (function () {
       btn.textContent = `${label} (${count})`;
 
       btn.addEventListener('click', () => setPanelFolder(f, btn));
-      if (f !== 'all' && f !== 'image' && f !== '__trash__') {
+      if (f !== 'all' && f !== 'image' && f !== 'captures' && f !== '__trash__') {
         btn.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           _showLibFolderContextMenu(f, e.clientX, e.clientY);

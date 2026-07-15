@@ -27,6 +27,8 @@ window.Collab = (function () {
   let _pendingLocks = {}; // elId -> Promise resolve
   let _userCount = 0;
   let _recentDataEdits = {}; // elId -> timestamp du dernier syncElementData local
+  let _heartbeatTimer = null;
+  let _staleCleanupTimer = null;
 
   
   const COLORS = ['#0b36ed'];
@@ -44,10 +46,16 @@ window.Collab = (function () {
     if (!family) return;
     if (_loadedGFontsRemote.has(family)) return;
     _loadedGFontsRemote.add(family);
-    var link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(family).replace(/%20/g, '+') + '&display=swap';
-    document.head.appendChild(link);
+    var url = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(family).replace(/%20/g, '+') + '&display=swap';
+    fetch(url).then(function (r) {
+      var ct = r.headers.get('content-type') || '';
+      if (r.ok && ct.includes('text/css')) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = url;
+        document.head.appendChild(link);
+      }
+    }).catch(function () {});
   }
 
   function _lerp(a, b, t) {
@@ -149,6 +157,42 @@ window.Collab = (function () {
     };
   }
 
+  // ── HEARTBEAT & STALE PRESENCE CLEANUP ─────────────────────────────────
+
+  function _startHeartbeat() {
+    clearInterval(_heartbeatTimer);
+    clearInterval(_staleCleanupTimer);
+
+    // Rafraîchir notre propre timestamp toutes les 30s
+    _heartbeatTimer = setInterval(function () {
+      if (!_active || !_sessionRef) return;
+      _sessionRef.child('presence/' + _userId + '/timestamp').set(
+        firebase.database.ServerValue.TIMESTAMP
+      );
+    }, 30000);
+
+    // Nettoyer les présences fantômes toutes les 60s
+    _staleCleanupTimer = setInterval(function () {
+      _cleanStalePresences();
+    }, 60000);
+  }
+
+  function _cleanStalePresences() {
+    if (!_active || !_sessionRef) return;
+    _sessionRef.child('presence').get().then(function (snap) {
+      if (!snap.exists()) return;
+      var now = Date.now();
+      snap.forEach(function (child) {
+        if (child.key === _userId) return;
+        var pData = child.val();
+        // 90 000 ms = 3 heartbeats manqués → présence fantôme
+        if (pData.timestamp && now - pData.timestamp > 90000) {
+          _sessionRef.child('presence/' + child.key).remove();
+        }
+      });
+    });
+  }
+
   // ── LIFECYCLE ───────────────────────────────────────────────────────────
 
   /**
@@ -187,12 +231,13 @@ window.Collab = (function () {
       _userColor =
         COLORS.find((c) => !usedColors.has(c)) || COLORS[_hashStr(_userId) % COLORS.length];
 
-      // Nettoyer les présences périmées (> 5 min)
+      // Nettoyer les présences périmées (> 90s = 3 heartbeats manqués)
       if (presenceSnap.exists()) {
         var now = Date.now();
         presenceSnap.forEach(function (child) {
+          if (child.key === _userId) return;
           var pData = child.val();
-          if (pData.timestamp && now - pData.timestamp > 300000) {
+          if (pData.timestamp && now - pData.timestamp > 90000) {
             _sessionRef.child('presence/' + child.key).remove();
           }
         });
@@ -208,6 +253,9 @@ window.Collab = (function () {
         timestamp: firebase.database.ServerValue.TIMESTAMP,
       });
       presenceRef.onDisconnect().remove();
+
+      // Démarrer le heartbeat pour maintenir la présence à jour
+      _startHeartbeat();
 
       if (isOwner) {
         await _sessionRef.child('meta').set({
@@ -354,6 +402,12 @@ window.Collab = (function () {
 
     // Nettoyer les sélections distantes (classes CSS sur les éléments)
     _clearAllRemoteSelections();
+
+    // Arrêter le heartbeat et le cleanup périodique
+    clearInterval(_heartbeatTimer);
+    clearInterval(_staleCleanupTimer);
+    _heartbeatTimer = null;
+    _staleCleanupTimer = null;
 
     // Arrêter le RAF des curseurs
     if (_cursorRAFId) cancelAnimationFrame(_cursorRAFId);
@@ -777,8 +831,11 @@ window.Collab = (function () {
     const uid = snap.key;
     if (uid === _userId) return; // ignorer soi-même
     const data = snap.val();
+    // Ignorer les présences fantômes (heartbeat absent depuis > 90s)
+    // Les règles Firebase empêchent souvent de supprimer l'entrée d'un autre user,
+    // on les filtre donc côté client plutôt que de tenter un remove.
+    if (data.timestamp && Date.now() - data.timestamp > 90000) return;
     _createRemoteCursor(uid, data.color);
-    _userCount++;
     _updateStatusBar();
   }
 
@@ -807,7 +864,6 @@ window.Collab = (function () {
     _removeRemoteCursor(uid);
     _clearRemoteSelection(uid);
     _removeRemoteSelRect(uid);
-    _userCount--;
     _updateStatusBar();
   }
 
@@ -1396,8 +1452,8 @@ window.Collab = (function () {
     const bar = document.getElementById('collab-status-bar');
     const countEl = document.getElementById('collab-user-count');
     if (bar) bar.classList.remove('hidden');
-    // +1 pour inclure l'utilisateur local
-    const total = _userCount + 1;
+    // Dériver depuis _remoteCursors (source de vérité) + 1 pour l'utilisateur local
+    const total = Object.keys(_remoteCursors).length + 1;
     if (countEl) countEl.textContent = total + ' utilisateur' + (total > 1 ? 's' : '');
   }
 
@@ -1428,9 +1484,9 @@ window.Collab = (function () {
           type: d.type,
           x: d.x,
           y: d.y,
-          w: d.w,
-          h: d.h,
-          z: d.z,
+          w: d.w != null ? d.w : null,
+          h: d.h != null ? d.h : null,
+          z: d.z != null ? d.z : null,
           data: elData,
           style: d.style || null,
         });
@@ -1468,12 +1524,18 @@ window.Collab = (function () {
     }
   }
 
+  function deleteSession(boardId) {
+    if (!boardId || !window._fbDb) return Promise.resolve();
+    return window._fbDb.ref('collabSessions/' + boardId).remove();
+  }
+
   // ── API PUBLIQUE ──────────────────────────────────────────────────────
 
   return {
     // Lifecycle
     startSession: startSession,
     endSession: endSession,
+    deleteSession: deleteSession,
     isActive: function () {
       return _active;
     },

@@ -12,16 +12,21 @@ try {
   // Auth anonyme — chaque navigateur reçoit un UID Firebase unique
   // pour que les règles de sécurité (auth != null) autorisent l'accès
   if (firebase.auth) {
-    window._fbAuthReady = firebase
-      .auth()
-      .signInAnonymously()
-      .then(function (cred) {
-        window._fbUid = cred.user.uid;
-      })
-      .catch(function (err) {
-        console.warn('Firebase anonymous auth failed:', err);
-        window._fbUid = null;
+    // Attendre la résolution initiale de l'état auth : si un utilisateur (Google ou anonyme)
+    // est déjà connecté (session stockée), ne pas appeler signInAnonymously() qui écraserait la session.
+    window._fbAuthReady = new Promise(function (resolve) {
+      var _initUnsub = firebase.auth().onAuthStateChanged(function (user) {
+        _initUnsub();
+        if (user) {
+          window._fbUid = user.uid;
+          resolve();
+        } else {
+          firebase.auth().signInAnonymously()
+            .then(function (cred) { window._fbUid = cred.user.uid; resolve(); })
+            .catch(function (err) { console.warn('Firebase anonymous auth failed:', err); window._fbUid = null; resolve(); });
+        }
       });
+    });
   } else {
     console.warn('Firebase Auth SDK not loaded');
     window._fbAuthReady = Promise.resolve();
@@ -29,6 +34,7 @@ try {
 
   // Créer l'instance de base de données AVANT de forcer les WebSockets
   window._fbDb = firebase.database();
+  window._fbStorage = (firebase.storage && typeof firebase.storage === 'function') ? firebase.storage() : null;
 
   // Force WebSocket transport — obligatoire pour les extensions Chrome MV3
   // Le long-polling injecte des <script> distants, ce qui est bloqué par

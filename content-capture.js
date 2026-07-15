@@ -130,13 +130,19 @@
   }
 
   function handleMouseDown(e) {
-    if (!captureActive || e.button !== 0) return;
+    if (!captureActive || e.button !== 0 || !e.ctrlKey) return;
     captureCurrentImage(e);
   }
 
   function handleClick(e) {
-    if (!captureActive) return;
-    captureCurrentImage(e);
+    if (!captureActive || !e.ctrlKey) return;
+    let result = findImageAt(e.clientX, e.clientY);
+    if (!result) result = findImageFromTarget(e.target);
+    if (!result && currentHoveredImg && currentHoveredSrc) result = { el: currentHoveredImg, src: currentHoveredSrc };
+    if (!result) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
   }
 
   function handleKeyDown(e) {

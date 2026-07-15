@@ -38,6 +38,7 @@ function showScreen(name) {
   document.querySelectorAll('.tab-btn').forEach(function (b) {
     b.classList.toggle('active', b.dataset.screen === name);
   });
+  document.getElementById('app').classList.toggle('viewer-open', name === 'viewer');
   _currentScreen = name;
   if (name === 'inbox') _renderInboxScreen();
   if (name === 'activity') _renderActivityScreen();
@@ -49,7 +50,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
   });
 });
 
-document.getElementById('viewer-back-btn').addEventListener('click', function () {
+document.getElementById('viewer-fab-back').addEventListener('click', function () {
   showScreen('home');
 });
 
@@ -162,7 +163,6 @@ var _viewerBoardId = null;
 
 function _openBoardViewer(boardId, name) {
   _viewerBoardId = boardId;
-  document.getElementById('viewer-title').textContent = name;
   var canvas = document.getElementById('viewer-canvas');
   canvas.innerHTML = '<div class="pwa-loading">Chargement…</div>';
   _viewerResetTransform();
@@ -174,10 +174,56 @@ function _openBoardViewer(boardId, name) {
     }
     var data = snap.val();
     canvas.innerHTML = '';
-    (data.elements || []).forEach(function (el) {
+    var elements = data.elements || [];
+    if (data.snapshotUrl) {
+      // Calculer le bounding box (même formule que captureBoardThumbnail dans app.js)
+      var minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+      elements.forEach(function (el) {
+        var l = el.x || 0, t = el.y || 0;
+        var r = l + (el.w || 200), b = t + (el.h || 100);
+        if (l < minL) minL = l; if (t < minT) minT = t;
+        if (r > maxR) maxR = r; if (b > maxB) maxB = b;
+      });
+
+      var snapImg = document.createElement('img');
+      snapImg.className = 'pwa-el snapshot-bg';
+      snapImg.style.zIndex = '0';
+
+      if (isFinite(minL) && elements.length) {
+        var contentW = maxR - minL, contentH = maxB - minT;
+        var marginX = contentW * 0.07, marginY = contentH * 0.07;
+        snapImg.style.left = (minL - marginX) + 'px';
+        snapImg.style.top = (minT - marginY) + 'px';
+        snapImg.style.width = (contentW + marginX * 2) + 'px';
+        snapImg.style.height = (contentH + marginY * 2) + 'px';
+      } else {
+        snapImg.style.left = '0px';
+        snapImg.style.top = '0px';
+        snapImg.onload = function () {
+          snapImg.style.width = snapImg.naturalWidth + 'px';
+          snapImg.style.height = snapImg.naturalHeight + 'px';
+        };
+      }
+
+      canvas.appendChild(snapImg);
+      snapImg.src = data.snapshotUrl;
+
+      // Superposer les éléments non-image en DOM par-dessus le snapshot
+      elements.forEach(function (el) {
+        if (el.type === 'image') return;
+        var node = _renderBoardElement(el);
+        if (node) canvas.appendChild(node);
+      });
+
+      snapImg.onload = function () { _viewerAutoFit(); };
+      setTimeout(_viewerAutoFit, 30);
+      return;
+    }
+    elements.forEach(function (el) {
       var node = _renderBoardElement(el);
       if (node) canvas.appendChild(node);
     });
+    setTimeout(_viewerAutoFit, 30);
   }).catch(function () {
     canvas.innerHTML = '<div class="pwa-loading">Erreur de chargement.</div>';
   });
@@ -260,6 +306,7 @@ function _openLightbox(src) {
 var _vx = 0, _vy = 0, _vz = 1;
 var _vDragStart = null;
 var _vPinchDist = 0;
+var _vPinchMid = null;
 
 function _viewerResetTransform() {
   _vx = 0; _vy = 0; _vz = 1;
@@ -269,6 +316,31 @@ function _viewerResetTransform() {
 function _applyViewerTransform() {
   var c = document.getElementById('viewer-canvas');
   if (c) c.style.transform = 'translate(' + _vx + 'px,' + _vy + 'px) scale(' + _vz + ')';
+}
+
+function _viewerAutoFit() {
+  var canvas = document.getElementById('viewer-canvas');
+  var wrap = document.getElementById('viewer-wrap');
+  var els = canvas.querySelectorAll('.pwa-el');
+  if (!els.length) { _viewerResetTransform(); return; }
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  els.forEach(function (el) {
+    var x = parseFloat(el.style.left) || 0;
+    var y = parseFloat(el.style.top) || 0;
+    var w = parseFloat(el.style.width) || el.offsetWidth || 200;
+    var h = parseFloat(el.style.height) || el.offsetHeight || 100;
+    minX = Math.min(minX, x); minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
+  });
+  if (!isFinite(minX) || maxX <= minX || maxY <= minY) { _viewerResetTransform(); return; }
+  var pad = 40;
+  var vW = wrap.clientWidth, vH = wrap.clientHeight;
+  var scale = Math.min((vW - pad * 2) / (maxX - minX), (vH - pad * 2) / (maxY - minY));
+  scale = Math.min(Math.max(scale, 0.03), 1);
+  _vz = scale;
+  _vx = (vW - (maxX - minX) * scale) / 2 - minX * scale;
+  _vy = (vH - (maxY - minY) * scale) / 2 - minY * scale;
+  _applyViewerTransform();
 }
 
 function _pinchDist(touches) {
@@ -283,6 +355,10 @@ _wrap.addEventListener('touchstart', function (e) {
     _vDragStart = { x: e.touches[0].clientX - _vx, y: e.touches[0].clientY - _vy };
   } else if (e.touches.length === 2) {
     _vPinchDist = _pinchDist(e.touches);
+    _vPinchMid = {
+      x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+    };
     _vDragStart = null;
   }
 }, { passive: true });
@@ -295,8 +371,15 @@ _wrap.addEventListener('touchmove', function (e) {
     _applyViewerTransform();
   } else if (e.touches.length === 2) {
     var dist = _pinchDist(e.touches);
+    var mid = {
+      x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+    };
     var ratio = dist / _vPinchDist;
-    _vz = Math.min(Math.max(_vz * ratio, 0.2), 5);
+    var newZ = Math.min(Math.max(_vz * ratio, 0.03), 5);
+    _vx = mid.x - (mid.x - _vx) * (newZ / _vz);
+    _vy = mid.y - (mid.y - _vy) * (newZ / _vz);
+    _vz = newZ;
     _vPinchDist = dist;
     _applyViewerTransform();
   }

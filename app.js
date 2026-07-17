@@ -6856,9 +6856,11 @@ const App = (function () {
       itemsAfter.push(next);
       next = next.nextElementSibling;
     }
+    // <div><br></div> : sans le <br>, le div ne génère aucune line box en
+    // contenteditable (hauteur nulle, caret invisible). C'est le placeholder que
+    // Chrome produit lui-même pour un paragraphe vide et qu'il remplace à la frappe.
     const newDiv = document.createElement('div');
-    const textNode = document.createTextNode('');
-    newDiv.appendChild(textNode);
+    newDiv.appendChild(document.createElement('br'));
     li.remove();
     ul.parentNode.insertBefore(newDiv, ul.nextSibling);
     if (itemsAfter.length > 0) {
@@ -6873,34 +6875,55 @@ const App = (function () {
     if (!ul.querySelector('li')) ul.remove();
     const sel = window.getSelection();
     const r = document.createRange();
-    r.setStart(textNode, 0);
+    r.setStart(newDiv, 0);
     r.collapse(true);
     sel.removeAllRanges();
     sel.addRange(r);
+  }
+
+  function _findAncestorLi(ta, node) {
+    while (node && node !== ta) {
+      if (node.nodeName === 'LI') return node;
+      node = node.parentElement;
+    }
+    return null;
   }
 
   function _handleNoteListKeydown(e, ta, el) {
     if (e.key !== 'Enter' && e.key !== 'Backspace') return;
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return;
-    let node = sel.getRangeAt(0).startContainer;
-    let li = null;
-    while (node && node !== ta) {
-      if (node.nodeName === 'LI') { li = node; break; }
-      node = node.parentElement;
-    }
+    let li = _findAncestorLi(ta, sel.getRangeAt(0).startContainer);
     if (!li) return;
-    const ul = li.parentElement;
-    const type = ul.classList.contains('todo-list') ? 'todo' : 'bullet';
-    const getText = () =>
-      type === 'todo'
-        ? (li.querySelector('span') ? li.querySelector('span').textContent : li.textContent)
-        : li.textContent;
+    // Re-dérivés depuis le <li> courant : supprimer une sélection peut fusionner
+    // des <li>, donc ni le li ni son type ne sont stables sur toute la fonction.
+    const typeOf = (n) =>
+      n.parentElement && n.parentElement.classList.contains('todo-list') ? 'todo' : 'bullet';
+    const textOf = (n, t) =>
+      t === 'todo'
+        ? (n.querySelector('span') ? n.querySelector('span').textContent : n.textContent)
+        : n.textContent;
 
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      if (!getText().trim()) {
+      // Comme Word, Entrée remplace la sélection. On délègue la suppression au
+      // moteur d'édition : il fusionne les <li> partiellement couverts, là où un
+      // Range.deleteContents() laisserait deux <li> tronqués côte à côte.
+      if (!sel.isCollapsed) {
+        document.execCommand('delete');
+        li = sel.rangeCount ? _findAncestorLi(ta, sel.getRangeAt(0).startContainer) : null;
+      }
+      if (!li) {
+        // La suppression a sorti le caret de toute liste : rien à scinder.
+        el.dataset.savedata = ta.innerHTML;
+        if (typeof Collab !== 'undefined' && Collab.isActive()) {
+          Collab.syncElementData(el.dataset.id, ta.innerHTML);
+        }
+        return;
+      }
+      const type = typeOf(li);
+      if (!textOf(li, type).trim()) {
         _exitListAfterLi(li, ta, type);
       } else {
         const editTarget = type === 'todo' ? li.querySelector('span') : li;
@@ -6940,10 +6963,31 @@ const App = (function () {
         Collab.syncElementData(el.dataset.id, ta.innerHTML);
       }
     } else if (e.key === 'Backspace') {
-      if (getText().trim()) return;
-      e.preventDefault();
-      e.stopPropagation();
-      _exitListAfterLi(li, ta, type);
+      if (!sel.isCollapsed) return;
+      const type = typeOf(li);
+      if (textOf(li, type).trim()) {
+        // Item non vide : n'intercepter qu'en tout début d'item, où le natif
+        // supprimerait la checkbox non-éditable qui précède le texte. Comme Word,
+        // le premier Backspace retire la puce et repasse l'item en paragraphe.
+        const editTarget = type === 'todo' ? li.querySelector('span') || li : li;
+        const r0 = sel.getRangeAt(0);
+        if (_textOffsetInNode(editTarget, r0.startContainer, r0.startOffset) !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const div = _unwrapListItem(li, type);
+        const p = div ? _pointAtTextOffset(div, 0) : null;
+        if (p) {
+          const r = document.createRange();
+          r.setStart(p.node, p.offset);
+          r.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        }
+      } else {
+        e.preventDefault();
+        e.stopPropagation();
+        _exitListAfterLi(li, ta, type);
+      }
       el.dataset.savedata = ta.innerHTML;
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementData(el.dataset.id, ta.innerHTML);
@@ -6951,8 +6995,34 @@ const App = (function () {
     }
   }
 
+  // Mêmes gardes que activateNoteEdit : cocher une todo est le seul chemin
+  // d'écriture d'une note qui ne passe pas par lui.
+  function _todoCheckBlocked(el) {
+    if (document.body.classList.contains('readonly-mode')) return 'readonly';
+    if (
+      typeof Collab !== 'undefined' &&
+      Collab.isActive() &&
+      Collab.isLockedByOther(el.dataset.id)
+    ) {
+      return 'locked';
+    }
+    return null;
+  }
+
   function _attachNoteCheckboxListener(wrap, ta, el) {
     let _checkBeforeHtml = null;
+
+    // preventDefault() sur le click annule l'activation de la checkbox : l'état
+    // coché est restauré et 'change' n'est pas émis. Bloquer dans 'change' la
+    // laisserait cochée à l'écran sans être ni persistée ni synchronisée.
+    wrap.addEventListener('click', (e) => {
+      if (!e.target.closest('.todo-check')) return;
+      const blocked = _todoCheckBlocked(el);
+      if (!blocked) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (blocked === 'locked') toast("Élément en cours d'édition");
+    });
 
     wrap.addEventListener('mousedown', (e) => {
       if (!e.target.closest('.todo-check')) return;
@@ -9327,6 +9397,73 @@ const App = (function () {
     return li;
   }
 
+  // Isole un <li> dans son propre <ul> (même classe que le <ul> source) en scindant
+  // la liste autour de lui. Retourne le <ul> ne contenant que ce <li>.
+  function _isolateListItem(li) {
+    const ul = li.parentElement;
+    if (!ul || ul.nodeName !== 'UL') return null;
+    if (ul.children.length === 1) return ul;
+    const itemsAfter = [];
+    let next = li.nextElementSibling;
+    while (next) {
+      itemsAfter.push(next);
+      next = next.nextElementSibling;
+    }
+    const mid = document.createElement('ul');
+    if (ul.className) mid.className = ul.className;
+    li.remove();
+    mid.appendChild(li);
+    ul.parentNode.insertBefore(mid, ul.nextSibling);
+    if (itemsAfter.length > 0) {
+      const tail = document.createElement('ul');
+      if (ul.className) tail.className = ul.className;
+      itemsAfter.forEach((item) => {
+        item.remove();
+        tail.appendChild(item);
+      });
+      mid.parentNode.insertBefore(tail, mid.nextSibling);
+    }
+    if (!ul.querySelector('li')) ul.remove();
+    return mid;
+  }
+
+  // Offset caractère du point (node, offset) depuis le début de container.
+  // La checkbox d'un todo ne compte pour aucun caractère : offsets identiques
+  // que l'on mesure sur le <li> ou sur son <span>.
+  function _textOffsetInNode(container, node, offset) {
+    if (!container || !node) return 0;
+    const r = document.createRange();
+    try {
+      r.selectNodeContents(container);
+      r.setEnd(node, offset);
+    } catch (_) {
+      return 0;
+    }
+    return r.toString().length;
+  }
+
+  // Inverse de _textOffsetInNode : retrouve {node, offset} pour un offset caractère.
+  function _pointAtTextOffset(container, offset) {
+    if (!container) return null;
+    if (container.nodeType === Node.TEXT_NODE) {
+      return { node: container, offset: Math.min(offset, container.length) };
+    }
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+    let remaining = offset;
+    let last = null;
+    let node = walker.nextNode();
+    while (node) {
+      if (remaining <= node.length) return { node: node, offset: remaining };
+      remaining -= node.length;
+      last = node;
+      node = walker.nextNode();
+    }
+    if (last) return { node: last, offset: last.length };
+    const t = document.createTextNode('');
+    container.insertBefore(t, container.firstChild || null);
+    return { node: t, offset: 0 };
+  }
+
   function _getBlocksInRange(ta, range) {
     const blocks = [];
     ta.childNodes.forEach((child) => {
@@ -9366,7 +9503,7 @@ const App = (function () {
 
   function _unwrapListItem(li, type) {
     const ul = li.parentElement;
-    if (!ul) return;
+    if (!ul) return null;
     let inner;
     if (type === 'todo') {
       const span = li.querySelector('span');
@@ -9394,6 +9531,32 @@ const App = (function () {
       div.parentNode.insertBefore(newUl, div.nextSibling);
     }
     if (!ul.querySelector('li')) ul.remove();
+    return div;
+  }
+
+  // Replace la sélection après remplacement des blocs : targets[i] est le conteneur
+  // éditable issu de blocks[i] (null si le bloc a été supprimé).
+  function _restoreSelectionInBlocks(targets, startIdx, startOff, endIdx, endOff) {
+    const startC = startIdx >= 0 ? targets[startIdx] : null;
+    if (!startC || !startC.isConnected) return;
+    const sp = _pointAtTextOffset(startC, startOff);
+    if (!sp) return;
+    const r = document.createRange();
+    r.setStart(sp.node, sp.offset);
+    r.collapse(true);
+    const endC = endIdx >= 0 ? targets[endIdx] : null;
+    const inOrder = endIdx > startIdx || (endIdx === startIdx && endOff >= startOff);
+    if (endC && endC.isConnected && inOrder) {
+      const ep = _pointAtTextOffset(endC, endOff);
+      if (ep) {
+        try {
+          r.setEnd(ep.node, ep.offset);
+        } catch (_) {}
+      }
+    }
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
   }
 
   function applyListToggle(type) {
@@ -9414,6 +9577,25 @@ const App = (function () {
     const blocks = _getBlocksInRange(ta, range);
     if (blocks.length === 0) return;
 
+    // Mémoriser les extrémités de la sélection (bloc + offset texte) avant mutation :
+    // les nœuds qui portent le caret sont détruits par la conversion.
+    const findBlockIdx = (node) => {
+      for (let i = 0; i < blocks.length; i++) {
+        const b = blocks[i];
+        if (b === node || (b.nodeType === Node.ELEMENT_NODE && b.contains(node))) return i;
+      }
+      return -1;
+    };
+    const startIdx = findBlockIdx(range.startContainer);
+    const endIdx = findBlockIdx(range.endContainer);
+    const startOff =
+      startIdx >= 0
+        ? _textOffsetInNode(blocks[startIdx], range.startContainer, range.startOffset)
+        : 0;
+    const endOff =
+      endIdx >= 0 ? _textOffsetInNode(blocks[endIdx], range.endContainer, range.endOffset) : 0;
+    const caretTargets = new Array(blocks.length).fill(null);
+
     const allSameType = blocks.every((node) => {
       if (node.nodeName !== 'LI') return false;
       const ul = node.parentElement;
@@ -9427,16 +9609,24 @@ const App = (function () {
     });
 
     if (allSameType) {
-      blocks.forEach((node) => {
-        if (node.nodeName === 'LI') _unwrapListItem(node, type);
+      blocks.forEach((node, idx) => {
+        if (node.nodeName === 'LI') caretTargets[idx] = _unwrapListItem(node, type);
       });
     } else {
-      blocks.forEach((node) => {
+      blocks.forEach((node, idx) => {
         if (node.nodeName === 'LI') {
           const ul = node.parentElement;
-          if (!ul) return;
+          if (!ul || ul.nodeName !== 'UL') return;
           const currentType = ul.classList.contains('todo-list') ? 'todo' : 'bullet';
-          if (currentType === type) return;
+          if (currentType === type) {
+            caretTargets[idx] = type === 'todo' ? node.querySelector('span') || node : node;
+            return;
+          }
+          // Le type est porté par le <ul> : convertir sans scinder retirerait la puce
+          // (ou la case) des items voisins non sélectionnés. _mergeAdjacentLists
+          // recolle ensuite les <ul> de même type restés adjacents.
+          const holder = _isolateListItem(node);
+          if (!holder) return;
           if (type === 'todo') {
             // bullet → todo
             const text = node.innerHTML;
@@ -9450,13 +9640,16 @@ const App = (function () {
             span.innerHTML = text;
             node.appendChild(check);
             node.appendChild(span);
-            ul.classList.add('todo-list');
+            holder.className = 'todo-list';
+            caretTargets[idx] = span;
           } else {
             // todo → bullet
             const span = node.querySelector('span');
             node.innerHTML = span ? span.innerHTML : node.innerHTML;
             node.classList.remove('todo-item', 'todo-done');
-            if (!ul.querySelector('li.todo-item')) ul.classList.remove('todo-list');
+            if (!node.className) node.removeAttribute('class');
+            holder.removeAttribute('class');
+            caretTargets[idx] = node;
           }
         } else {
           // Plain block (div, text node, br)
@@ -9479,6 +9672,7 @@ const App = (function () {
           const ul = document.createElement('ul');
           if (type === 'todo') ul.className = 'todo-list';
           ul.appendChild(li);
+          caretTargets[idx] = type === 'todo' ? li.querySelector('span') : li;
           if (node.nodeType === Node.TEXT_NODE) {
             node.parentNode.insertBefore(ul, node);
             node.remove();
@@ -9489,6 +9683,8 @@ const App = (function () {
       });
       _mergeAdjacentLists(ta);
     }
+
+    _restoreSelectionInBlocks(caretTargets, startIdx, startOff, endIdx, endOff);
 
     const afterHtml = ta.innerHTML;
     if (afterHtml !== beforeHtml) {

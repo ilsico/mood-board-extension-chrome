@@ -234,6 +234,7 @@ const App = (function () {
     document.querySelectorAll('#canvas .el-caption').forEach((cap) => {
       elements.push({
         type: 'caption',
+        capId: cap.dataset.capId || '',
         x: parseFloat(cap.style.left) || 0,
         y: parseFloat(cap.style.top) || 0,
         width: cap.style.width,
@@ -6101,7 +6102,10 @@ const App = (function () {
       cap.dataset.placeholder = 'Ajouter un commentaire…';
       cap.dataset.parentId = s.parentId || '';
       cap.dataset.type = 'caption';
-      if (s.capId) cap.dataset.capId = s.capId;
+      // Toujours un capId : sans lui la caption est invisible pour la sync collab
+      // et startSession en génère un autre, ce qui la duplique.
+      cap.dataset.capId =
+        s.capId || 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
       cap.style.left = s.x + 'px';
       cap.style.top = s.y + 'px';
       if (s.width) cap.style.width = s.width;
@@ -11352,8 +11356,8 @@ const App = (function () {
   function _collabRemoveCaptionsForEl(el) {
     removeCaptionsForEl(el);
   }
-  function _collabCreateConnection(from, to) {
-    createConnection(from, to);
+  function _collabCreateConnection(from, to, connId) {
+    createConnection(from, to, connId);
   }
   function _imgStoreGet(elId) {
     return _imgStore.get(elId);
@@ -11420,6 +11424,7 @@ const App = (function () {
     document.querySelectorAll('#canvas .el-caption').forEach((cap) => {
       elements.push({
         type: 'caption',
+        capId: cap.dataset.capId || '',
         x: parseFloat(cap.style.left) || 0,
         y: parseFloat(cap.style.top) || 0,
         width: cap.style.width,

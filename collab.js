@@ -150,11 +150,28 @@ window.Collab = (function () {
   /** Crée un debounce simple */
   function _makeDebounce(fn, ms) {
     let timer = null;
-    return function () {
-      const args = arguments;
+    let lastArgs = null;
+    const debounced = function () {
+      lastArgs = arguments;
       clearTimeout(timer);
-      timer = setTimeout(() => fn.apply(null, args), ms);
+      timer = setTimeout(() => {
+        timer = null;
+        fn.apply(null, lastArgs);
+      }, ms);
     };
+    /** Exécute immédiatement l'appel en attente (s'il y en a un) */
+    debounced.flush = function () {
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = null;
+      fn.apply(null, lastArgs);
+    };
+    debounced.cancel = function () {
+      clearTimeout(timer);
+      timer = null;
+      lastArgs = null;
+    };
+    return debounced;
   }
 
   // ── HEARTBEAT & STALE PRESENCE CLEANUP ─────────────────────────────────
@@ -303,7 +320,10 @@ window.Collab = (function () {
             if (el.type === 'connection') {
               updates['connections/' + el.connId] = { from: el.from, to: el.to };
             } else if (el.type === 'caption') {
-              const capId = 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+              // Réutiliser le capId du DOM : en générer un nouveau ferait échouer
+              // la reconnaissance dans _onCaptionAdded, qui dupliquerait la caption.
+              const capId =
+                el.capId || 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
               updates['captions/' + capId] = {
                 parentId: el.parentId || '',
                 x: el.x,
@@ -361,6 +381,9 @@ window.Collab = (function () {
   function endSession() {
     if (!_active) return;
 
+    // Vider les timers de sync tant que _active et _sessionRef sont valides
+    _flushPendingSyncs();
+
     // Libérer tous les locks
     releaseAllMyLocks();
 
@@ -371,6 +394,10 @@ window.Collab = (function () {
 
     // Télécharger les images Storage en local puis sauvegarder
     if (_sessionRef) {
+      // Capturer ref et boardId : la suite d'endSession les remet à null de façon
+      // synchrone, avant que le .then ci-dessous ne s'exécute.
+      var _endSessionRef = _sessionRef;
+      var _endBoardId = _boardId;
       var endBtn = document.getElementById('collab-btn');
       var _endBtnOriginal = endBtn ? endBtn.innerHTML : null;
       var _setEndProgress = function (done, total) {
@@ -378,7 +405,7 @@ window.Collab = (function () {
       };
       _downloadStorageImages(_setEndProgress).then(function () {
         if (endBtn && _endBtnOriginal !== null) endBtn.innerHTML = _endBtnOriginal;
-        _mergeSessionToLocal();
+        _mergeSessionToLocal(_endSessionRef, _endBoardId);
       });
     }
 
@@ -576,6 +603,7 @@ window.Collab = (function () {
       _sessionRef.child('elements/' + elId).update({
         x: x,
         y: y,
+        version: firebase.database.ServerValue.increment(1),
         lastEditBy: _userId,
         lastEditAt: firebase.database.ServerValue.TIMESTAMP,
       });
@@ -583,6 +611,7 @@ window.Collab = (function () {
       // Sync throttlée pendant le drag (sans version++)
       if (!_throttledPositionSync[elId]) {
         _throttledPositionSync[elId] = _makeThrottle((id, px, py) => {
+          if (!_active || !_sessionRef) return;
           _sessionRef.child('elements/' + id).update({
             x: px,
             y: py,
@@ -600,6 +629,7 @@ window.Collab = (function () {
       _sessionRef.child('elements/' + elId).update({
         w: w,
         h: h,
+        version: firebase.database.ServerValue.increment(1),
         lastEditBy: _userId,
         lastEditAt: firebase.database.ServerValue.TIMESTAMP,
       });
@@ -615,14 +645,38 @@ window.Collab = (function () {
   const _debouncedDataSync = {};
   const _debouncedCaptionSync = {};
 
+  /**
+   * Vide les timers de sync en attente. Appelé par endSession AVANT la remise à
+   * zéro de _sessionRef, sinon un timer en vol écrirait sur une ref nulle.
+   * Les éditions de texte sont flushées (ne pas perdre les dernières frappes),
+   * les positions intermédiaires de drag sont annulées (la position finale est
+   * déjà partie via isFinal).
+   */
+  function _flushPendingSyncs() {
+    [_debouncedDataSync, _debouncedCaptionSync].forEach(function (map) {
+      Object.keys(map).forEach(function (k) {
+        if (map[k] && map[k].flush) map[k].flush();
+        delete map[k];
+      });
+    });
+    [_throttledPositionSync, _throttledCaptionPositionSync].forEach(function (map) {
+      Object.keys(map).forEach(function (k) {
+        if (map[k] && map[k].cancel) map[k].cancel();
+        delete map[k];
+      });
+    });
+  }
+
   function syncElementData(elId, data, immediate) {
     if (!_active || !_sessionRef) return;
     // Guard against Firebase "Write too large" — skip base64 payloads over ~768 KB
     if (typeof data === 'string' && data.length > 786432) return;
     _recentDataEdits[elId] = Date.now();
     var _doSync = function (id, d) {
+      if (!_active || !_sessionRef) return;
       _sessionRef.child('elements/' + id).update({
         data: d,
+        version: firebase.database.ServerValue.increment(1),
         lastEditBy: _userId,
         lastEditAt: firebase.database.ServerValue.TIMESTAMP,
       });
@@ -641,6 +695,7 @@ window.Collab = (function () {
     if (!_active || !_sessionRef) return;
     _sessionRef.child('elements/' + elId).update({
       style: styleObj,
+      version: firebase.database.ServerValue.increment(1),
       lastEditBy: _userId,
       lastEditAt: firebase.database.ServerValue.TIMESTAMP,
     });
@@ -705,7 +760,14 @@ window.Collab = (function () {
 
   function syncElementZ(elId, z) {
     if (!_active || !_sessionRef) return;
-    _sessionRef.child('elements/' + elId + '/z').set(z);
+    // lastEditBy est obligatoire : _onElementChanged ignore les snapshots dont
+    // lastEditBy est déjà le sien, donc un set() sur /z seul serait invisible
+    // pour le dernier éditeur de l'élément.
+    _sessionRef.child('elements/' + elId).update({
+      z: z,
+      lastEditBy: _userId,
+      lastEditAt: firebase.database.ServerValue.TIMESTAMP,
+    });
   }
 
   function syncConnection(connId, fromId, toId) {
@@ -740,6 +802,7 @@ window.Collab = (function () {
     } else {
       if (!_throttledCaptionPositionSync[capId]) {
         _throttledCaptionPositionSync[capId] = _makeThrottle(function (id, px, py) {
+          if (!_active || !_sessionRef) return;
           _sessionRef.child('captions/' + id).update({ x: px, y: py });
         }, DRAG_SYNC_INTERVAL);
       }
@@ -750,6 +813,7 @@ window.Collab = (function () {
   function syncCaptionText(capId, text, immediate) {
     if (!_active || !_sessionRef) return;
     var _doSync = function (id, t) {
+      if (!_active || !_sessionRef) return;
       _sessionRef.child('captions/' + id).update({ text: t || '' });
     };
     if (immediate) {
@@ -945,10 +1009,12 @@ window.Collab = (function () {
     const elId = snap.key;
     const data = snap.val();
     if (!data) return;
-    // Mettre à jour la version dans le cache
-    _elementVersions[elId] = data.version || 0;
     // Ignorer nos propres modifications
     if (data.lastEditBy === _userId) return;
+    // Ne compter que les éditions DISTANTES : pushAction capture elementVersion
+    // avant que notre propre sync ne l'incrémente, donc compter nos écritures ici
+    // ferait échouer wasModifiedSince sur nos propres actions et bloquerait notre undo.
+    _elementVersions[elId] = data.version || 0;
 
     // Suppression (soft-delete)
     if (data.deleted) {
@@ -1464,8 +1530,7 @@ window.Collab = (function () {
 
   // ── MERGE SESSION → LOCAL (owner only) ────────────────────────────────
 
-  async function _mergeSessionToLocal() {
-    const sessionRef = _sessionRef; // capturer avant tout await (évite race condition avec endSession)
+  async function _mergeSessionToLocal(sessionRef, boardId) {
     if (!sessionRef) return;
     try {
       const elemSnap = await sessionRef.child('elements').get();
@@ -1506,6 +1571,7 @@ window.Collab = (function () {
           const d = child.val();
           elements.push({
             type: 'caption',
+            capId: child.key,
             x: d.x,
             y: d.y,
             width: d.width,
@@ -1517,7 +1583,7 @@ window.Collab = (function () {
       }
       // Mettre à jour le board local via App
       if (typeof App !== 'undefined' && typeof App._collabMergeElements === 'function') {
-        App._collabMergeElements(_boardId, elements);
+        App._collabMergeElements(boardId, elements);
       }
     } catch (e) {
       console.warn('Collab merge error:', e);

@@ -179,34 +179,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await setCaptureState(tab.id, boardId);
   });
 
-  document.getElementById('figma-export-btn').addEventListener('click', async () => {
-    const statusEl = document.getElementById('figma-status');
-    const btn = document.getElementById('figma-export-btn');
-    statusEl.className = '';
-    statusEl.textContent = 'Recherche du Moodboard…';
-    btn.classList.add('loading');
-
-    const moodboardUrl = chrome.runtime.getURL('index.html');
-    const tabs = await chrome.tabs.query({ url: moodboardUrl });
-    if (tabs.length === 0) {
-      statusEl.className = 'err';
-      statusEl.textContent = '⚠ Ouvrez d\'abord le Moodboard.';
-      btn.classList.remove('loading');
-      return;
-    }
-
-    try {
-      await chrome.tabs.sendMessage(tabs[0].id, { type: 'MB_FIGMA_EXPORT' });
-      statusEl.className = 'ok';
-      statusEl.textContent = '✅ JSON téléchargé !';
-      setTimeout(() => { statusEl.textContent = ''; statusEl.className = ''; }, 3000);
-    } catch (e) {
-      statusEl.className = 'err';
-      statusEl.textContent = '⚠ ' + e.message;
-    }
-    btn.classList.remove('loading');
-  });
-
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'MB_BOARDS_MODIFIED') {
       populateBoardSelect();

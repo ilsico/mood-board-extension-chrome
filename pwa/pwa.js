@@ -63,6 +63,8 @@ document.getElementById('auth-google-btn').addEventListener('click', function ()
 });
 
 _auth.onAuthStateChanged(function (user) {
+  var boot = document.getElementById('pwa-boot');
+  if (boot) boot.classList.add('hidden');
   if (user && !user.isAnonymous) {
     _user = user;
     document.getElementById('screen-auth').style.display = 'none';
@@ -87,16 +89,23 @@ function _teardownListeners() {
   _inboxListeners = [];
   _activityListeners.forEach(function (fn) { fn(); });
   _activityListeners = [];
+  // Purger l'état du compte : sinon le compte suivant voit brièvement les boards du précédent
+  _pinnedBoards = {};
+  _activityDots = {};
+  _allActivity = [];
 }
 
 // ── Accueil — boards épinglés ──────────────────────────────────────────────
 function _loadPinnedBoards() {
   if (!_user) return;
-  _db.ref('users/' + _user.uid + '/pinned_boards').on('value', function (snap) {
+  var ref = _db.ref('users/' + _user.uid + '/pinned_boards');
+  var handler = ref.on('value', function (snap) {
     _pinnedBoards = snap.exists() ? snap.val() : {};
     _renderHomeGrid();
     _setupActivityListener();
   });
+  // Sans ça : permission_denied après signOut, et un 2e listener empilé à la reconnexion
+  _inboxListeners.push(function () { ref.off('value', handler); });
 }
 
 function _timeAgo(ts) {
@@ -141,6 +150,43 @@ function _renderHomeGrid() {
 
 function _esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Les notes sont du HTML réel (listes à puces, todos) — les échapper les casserait.
+// Allowlist stricte : class est le seul attribut conservé (todo-list / todo-item /
+// todo-done pilotent le CSS). Tout tag hors liste est dépaqueté plutôt que supprimé :
+// l'élément et ses attributs (donc ses handlers) disparaissent, son texte survit.
+var _NOTE_ALLOWED = { UL:1, OL:1, LI:1, SPAN:1, DIV:1, BR:1, B:1, STRONG:1, I:1, EM:1, U:1, P:1 };
+var _NOTE_DROP = { SCRIPT:1, STYLE:1 }; // leur contenu texte est du code, pas de la prose
+
+function _sanitizeNoteHtml(html) {
+  // <template> parse sans exécuter : ni script, ni chargement d'image, ni onerror.
+  var tpl = document.createElement('template');
+  tpl.innerHTML = String(html == null ? '' : html);
+  (function walk(node) {
+    var child = node.firstChild;
+    while (child) {
+      var next = child.nextSibling;
+      if (child.nodeType === 1) {
+        var tag = child.tagName;
+        walk(child);
+        if (_NOTE_DROP[tag]) {
+          child.remove();
+        } else if (!_NOTE_ALLOWED[tag]) {
+          while (child.firstChild) node.insertBefore(child.firstChild, child);
+          child.remove();
+        } else {
+          for (var i = child.attributes.length - 1; i >= 0; i--) {
+            if (child.attributes[i].name !== 'class') child.removeAttribute(child.attributes[i].name);
+          }
+        }
+      } else if (child.nodeType !== 3) {
+        child.remove();
+      }
+      child = next;
+    }
+  })(tpl.content);
+  return tpl.innerHTML;
 }
 
 // ── Profil ─────────────────────────────────────────────────────────────────
@@ -189,7 +235,9 @@ function _openBoardViewer(boardId, name) {
       snapImg.className = 'pwa-el snapshot-bg';
       snapImg.style.zIndex = '0';
 
-      if (isFinite(minL) && elements.length) {
+      // Sans bounding box exploitable, on ne peut dimensionner qu'une fois l'image chargée
+      var sizeFromNatural = !(isFinite(minL) && elements.length);
+      if (!sizeFromNatural) {
         var contentW = maxR - minL, contentH = maxB - minT;
         var marginX = contentW * 0.07, marginY = contentH * 0.07;
         snapImg.style.left = (minL - marginX) + 'px';
@@ -199,11 +247,16 @@ function _openBoardViewer(boardId, name) {
       } else {
         snapImg.style.left = '0px';
         snapImg.style.top = '0px';
-        snapImg.onload = function () {
+      }
+
+      // Un seul handler : deux affectations de .onload s'écraseraient l'une l'autre
+      snapImg.onload = function () {
+        if (sizeFromNatural) {
           snapImg.style.width = snapImg.naturalWidth + 'px';
           snapImg.style.height = snapImg.naturalHeight + 'px';
-        };
-      }
+        }
+        _viewerAutoFit();
+      };
 
       canvas.appendChild(snapImg);
       snapImg.src = data.snapshotUrl;
@@ -215,7 +268,6 @@ function _openBoardViewer(boardId, name) {
         if (node) canvas.appendChild(node);
       });
 
-      snapImg.onload = function () { _viewerAutoFit(); };
       setTimeout(_viewerAutoFit, 30);
       return;
     }
@@ -240,7 +292,7 @@ function _renderBoardElement(el) {
     var div = document.createElement('div');
     div.className = 'pwa-el note';
     div.style.cssText = style;
-    div.innerHTML = el.data || '';
+    div.innerHTML = _sanitizeNoteHtml(el.data);
     if (el.style) {
       if (el.style.fontFamily) div.style.fontFamily = el.style.fontFamily;
       if (el.style.fontSize) div.style.fontSize = el.style.fontSize;

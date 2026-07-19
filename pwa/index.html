@@ -8,9 +8,15 @@
   <meta name="theme-color" content="#111111">
   <title>Moodboard</title>
   <link rel="manifest" href="manifest.json">
+  <!-- iOS ignore les icons du manifest : sans ce lien, l'icône d'accueil est une capture d'écran -->
+  <link rel="apple-touch-icon" href="/icon%20extension/icon192.png">
   <link rel="stylesheet" href="pwa.css">
 </head>
 <body>
+  <!-- Écran de démarrage : visible tant que Firebase n'a pas résolu l'état de session.
+       Sans lui, l'écran est blanc entre le chargement et le 1er onAuthStateChanged. -->
+  <div id="pwa-boot"><div class="boot-spinner"></div></div>
+
   <!-- Écran auth (affiché si non connecté) -->
   <div id="screen-auth" class="screen">
     <h1>MOODBOARD</h1>

@@ -65,5 +65,9 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Secrets OAuth Google (fichiers téléchargés depuis la console Cloud)
+client_secret_*.json
+*.apps.googleusercontent.com.json
+
 # dataconnect generated files
 .dataconnect

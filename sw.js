@@ -55,10 +55,14 @@ self.addEventListener('install', e => {
   self.skipWaiting();
 });
 
+// caches est partagé par origine : le SW de /pwa/ possède les moodboard-pwa-*.
+// Un filtre sur k !== CACHE seul purgerait les siens à chaque activation, et lui les nôtres.
+const _owned = k => k.startsWith('moodboard-') && !k.startsWith('moodboard-pwa-');
+
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => _owned(k) && k !== CACHE).map(k => caches.delete(k)))
     )
   );
   self.clients.claim();

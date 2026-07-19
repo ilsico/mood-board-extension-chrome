@@ -277,9 +277,10 @@ const App = (function () {
         el.type === 'image' ? Object.assign({}, el, { data: '', origData: '' }) : el
       );
       const payload = { name: board.name, elements: fbElements, savedAt: board.savedAt };
+      // update() et pas set() : set() écraserait les enfants frères activity/ et snapshotUrl
       window._fbDb
         .ref('boards/' + currentBoardId)
-        .set(payload)
+        .update(payload)
         .catch((e) => console.warn('Firebase sync error:', e));
     }
   }
@@ -303,8 +304,9 @@ const App = (function () {
       return el.type === 'image' ? Object.assign({}, el, { data: '', origData: '' }) : el;
     });
     const payload = { name: board.name, elements: fbElements, savedAt: board.savedAt };
+    // update() et pas set() : set() écraserait snapshotUrl, seule source des images côté PWA
     window._fbDb.ref('users/' + _currentUser.uid + '/boards/' + boardId)
-      .set(payload)
+      .update(payload)
       .catch(function () {});
   }
 
@@ -519,7 +521,7 @@ const App = (function () {
       },
       true
     ); // capture pour intercepter avant les autres handlers
-    _setupHomeContextMenu();
+    _setupEditBoardModalButtons();
     _applyCustomCursor();
     setupPanelDrop();
     // Fermer les lightboxes au clic sur l'overlay
@@ -1529,7 +1531,9 @@ const App = (function () {
     const panel = document.getElementById('wheel-info-panel');
     if (!panel) return;
 
-    panel.querySelector('.wip-title').textContent = b.name || '';
+    const wipTitle = panel.querySelector('.wip-title');
+    wipTitle.textContent = b.name || '';
+    wipTitle.ondblclick = () => _startWipTitleEdit(wipTitle, b);
 
     const createdFmt = b.createdAt ? formatSavedAt(b.createdAt) : null;
     const createdStr = createdFmt ? createdFmt.date : b.created || '';
@@ -1594,6 +1598,49 @@ const App = (function () {
         overlay.src = b.snapshot;
       }
     });
+  }
+
+  // Renommage inline du board depuis le panneau d'infos (double-clic sur le titre).
+  // Met à jour la carte en place plutôt que d'appeler renderBoardsWheel, qui fermerait
+  // le panneau en cours de consultation via son hideWheelDetail initial.
+  function _startWipTitleEdit(titleEl, b) {
+    if (titleEl.querySelector('input')) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = b.name || '';
+    input.style.cssText =
+      'font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit;background:transparent;border:none;border-bottom:1px solid #1a1a1a;outline:none;width:100%;padding:0;box-sizing:border-box;';
+
+    titleEl.textContent = '';
+    titleEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    const save = () => {
+      const val = input.value.trim();
+      const name = val || b.name;
+      if (val && val !== b.name) {
+        b.name = name;
+        saveBoards();
+        const card = document.querySelector('.wheel-card[data-id="' + b.id + '"]');
+        const nameEl = card && card.querySelector('.wheel-name');
+        if (nameEl) nameEl.textContent = name;
+      }
+      titleEl.textContent = name;
+    };
+
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save();
+      }
+      if (e.key === 'Escape') {
+        titleEl.textContent = b.name || '';
+      }
+    });
+    input.addEventListener('blur', save);
   }
 
   function hideWheelDetail() {
@@ -10975,73 +11022,24 @@ const App = (function () {
     document.body.style.cursor = `url("data:image/svg+xml,${svg}") 3 1, default`;
   }
 
-  // ── HOME CONTEXT MENU ────────────────────────────────────────────────────
-  let _homeCtxBoardId = null;
+  // ── EDIT BOARD MODAL ──────────────────────────────────────────────────────
+  function _setupEditBoardModalButtons() {
+    const closeBtn = document.getElementById('edit-board-close-btn');
+    if (!closeBtn || closeBtn._ebBtnsReady) return;
+    closeBtn._ebBtnsReady = true;
 
-  function _setupHomeContextMenu() {
-    const menu = document.getElementById('home-ctx-menu');
-    if (!menu || menu._homeCtxReady) return;
-    menu._homeCtxReady = true;
-
-    menu.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-action]');
-      if (!btn || !_homeCtxBoardId) return;
-      const action = btn.dataset.action;
-      const targetId = _homeCtxBoardId; // sauvegarder avant hide (qui null-ify _homeCtxBoardId)
-      _hideHomeCtxMenu();
-      if (action === 'edit') openEditBoardModal(targetId);
-      if (action === 'delete') deleteBoard(targetId);
-    });
-
-    document.addEventListener(
-      'mousedown',
-      (e) => {
-        if (!e.target.closest('#home-ctx-menu')) _hideHomeCtxMenu();
-      },
-      true
-    );
-
-    // Boutons de la modale édition (pas de onclick= dans le HTML → CSP extension)
-    document.getElementById('edit-board-close-btn').addEventListener('click', closeEditBoardModal);
+    // Pas de onclick= dans le HTML → CSP extension
+    closeBtn.addEventListener('click', closeEditBoardModal);
     document.getElementById('edit-board-save-btn').addEventListener('click', confirmEditBoard);
   }
 
-  function _showHomeCtxMenu(e, boardId) {
-    _homeCtxBoardId = boardId;
-    const menu = document.getElementById('home-ctx-menu');
-    menu.style.display = 'block';
-    const mw = menu.offsetWidth,
-      mh = menu.offsetHeight;
-    const vw = window.innerWidth,
-      vh = window.innerHeight;
-    menu.style.left = Math.min(e.clientX, vw - mw - 6) + 'px';
-    menu.style.top = Math.min(e.clientY, vh - mh - 6) + 'px';
-  }
-
-  function _hideHomeCtxMenu() {
-    document.getElementById('home-ctx-menu').style.display = 'none';
-    _homeCtxBoardId = null;
-  }
-
-  // ── EDIT BOARD MODAL ──────────────────────────────────────────────────────
   let _editBoardId = null;
   let _editImg = { src: null, naturalW: 0, naturalH: 0, scale: 1, offsetX: 0, offsetY: 0 };
   let _editDrag = null;
 
-  function openEditBoardModal(id) {
-    _editBoardId = id;
-    const b = boards.find((b) => b.id === id);
-    if (!b) return;
-
-    document.getElementById('edit-board-name').value = b.name || '';
-    _editImg = { src: null, naturalW: 0, naturalH: 0, scale: 1, offsetX: 0, offsetY: 0 };
-    document.getElementById('edit-board-editor').style.display = 'none';
-    document.getElementById('edit-board-zoom').value = 1;
-
-    openModal('edit-board-modal');
-    _setupEditBoardImageEditor();
-    _setupEditBoardFileBtn();
-  }
+  // openEditBoardModal (modale complète nom + couverture) retirée : plus aucun point
+  // d'entrée depuis que le menu clic-droit a été remplacé par le panneau d'infos.
+  // La modale elle-même reste utilisée par openImagePickerForBoard (recadrage couverture).
 
   function closeEditBoardModal() {
     closeModal('edit-board-modal');
@@ -11107,21 +11105,6 @@ const App = (function () {
     closeEditBoardModal();
   }
 
-  function _setupEditBoardFileBtn() {
-    const btn = document.getElementById('edit-board-file-btn');
-    const input = document.getElementById('edit-board-file-input');
-    if (btn._ebfReady) return;
-    btn._ebfReady = true;
-    btn.addEventListener('click', () => input.click());
-    input.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => _loadEditBoardImage(ev.target.result);
-      reader.readAsDataURL(file);
-      input.value = '';
-    });
-  }
 
   function _loadEditBoardImage(src) {
     const img = document.getElementById('edit-board-img');
@@ -11377,9 +11360,10 @@ const App = (function () {
       if (window._fbDb) {
         const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
         if (board.thumbnail) payload.thumbnail = board.thumbnail;
+        // update() et pas set() : set() écraserait les enfants frères activity/ et snapshotUrl
         window._fbDb
           .ref('boards/' + boardId)
-          .set(payload)
+          .update(payload)
           .catch((e) => console.warn('Firebase sync error:', e));
       }
     }
@@ -11506,7 +11490,6 @@ const App = (function () {
     exportPNG,
     exportPDF,
     deactivatePaperFormat,
-    openEditBoardModal,
     closeEditBoardModal,
     confirmEditBoard,
     openVideoLightbox,
@@ -11560,11 +11543,6 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
         App.syncLibraryFromStorage();
         App.toast('Image ajoutée au Moodboard !');
       }
-    } else if (msg.type === 'MB_FIGMA_EXPORT') {
-      const s = document.createElement('script');
-      s.src = chrome.runtime.getURL('figma-export.js');
-      document.head.appendChild(s);
-      s.addEventListener('load', () => s.remove());
     }
   });
 }

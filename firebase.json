@@ -4,7 +4,21 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/.*/**",
+      "**/node_modules/**",
+      "**/client_secret_*.json",
+      "database.rules.json",
+      "storage.rules",
+      "server.js",
+      "package.json",
+      "package-lock.json",
+      "**/*.md",
+      "**/*.txt",
+      "backups/**",
+      "docs/**",
+      "figma/**",
+      "figma-plugin/**",
+      "graphify-out/**"
     ]
   },
   "database": {

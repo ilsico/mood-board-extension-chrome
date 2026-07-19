@@ -237,3 +237,17 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 /* ── Loading ── */
 .pwa-loading { display: flex; align-items: center; justify-content: center; flex: 1; color: var(--fg2); }
+
+/* ── Écran de démarrage ── */
+#pwa-boot {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+#pwa-boot.hidden { display: none; }
+.boot-spinner {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--fg2);
+  animation: pwa-boot-spin 0.8s linear infinite;
+}
+@keyframes pwa-boot-spin { to { transform: rotate(360deg); } }

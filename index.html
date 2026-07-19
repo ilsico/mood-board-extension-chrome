@@ -182,41 +182,6 @@
         width: 100%;
         pointer-events: none;
       }
-      /* ── Home context menu ── */
-      .home-ctx-menu {
-        display: none;
-        position: fixed;
-        z-index: 9999;
-        background: #fff;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
-        padding: 4px 0;
-        min-width: 180px;
-      }
-      .home-ctx-menu button {
-        display: block;
-        width: 100%;
-        text-align: left;
-        background: none;
-        border: none;
-        padding: 9px 16px;
-        font-size: 13px;
-        cursor: pointer;
-        color: #1a1a2e;
-        font-family: inherit;
-      }
-      .home-ctx-menu button:hover {
-        background: #f5f5fb;
-      }
-      .home-ctx-menu .ctx-sep {
-        border-top: 1px solid #eaeaf0;
-        margin: 4px 0;
-      }
-      .home-ctx-menu .ctx-danger {
-        color: #ff3c00;
-      }
-      .home-ctx-menu .ctx-danger:hover {
-        background: #fee2e2;
-      }
 
       /* ── Edit board modal image editor ── */
       #edit-board-preview {
@@ -3681,6 +3646,7 @@
         margin: 0 0 18px;
         line-height: 1.15;
         word-break: break-word;
+        cursor: text;
       }
       .wip-meta {
         display: flex;
@@ -3872,7 +3838,7 @@
       <div id="wheel-card-title"></div>
 
       <div id="wheel-info-panel">
-        <h2 class="wip-title"></h2>
+        <h2 class="wip-title" title="Double-cliquez pour renommer"></h2>
         <div class="wip-meta">
           <span data-field="created"></span>
           <span data-field="saved"></span>
@@ -4901,13 +4867,6 @@
           <button id="cover-save-btn" class="form-submit" disabled>Enregistrer</button>
         </div>
       </div>
-    </div>
-
-    <!-- Home right-click context menu -->
-    <div id="home-ctx-menu" class="home-ctx-menu">
-      <button data-action="edit">Modifier</button>
-      <div class="ctx-sep"></div>
-      <button data-action="delete" class="ctx-danger">Supprimer</button>
     </div>
 
     <!-- Edit board modal -->

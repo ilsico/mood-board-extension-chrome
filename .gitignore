@@ -71,3 +71,15 @@ client_secret_*.json
 
 # dataconnect generated files
 .dataconnect
+
+# Sauvegardes locales du projet (~240 Mo) — n'ont rien à faire dans le dépôt
+backups/
+
+# Exports et outils annexes, régénérables
+graphify-out/
+figma/
+figma-plugin/
+
+# Espaces de travail temporaires de l'assistant + réglages propres à la machine
+.claude/worktrees/
+.claude/settings.local.json

@@ -31,13 +31,21 @@ async function getBoardsFromDB() {
   }
 }
 
+// Attend la fin réelle de la transaction : le service worker MV3 peut être arrêté
+// dès que la fonction rend la main, ce qui perdrait une écriture non committée.
 async function saveBoardsToDB(boards) {
   try {
     const db = await getDB();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put(boards, 'mb_boards');
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(boards, 'mb_boards');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    return true;
   } catch (err) {
-    console.error('[MB-EXT] Erreur sauvegarde DB:', err);
+    return false;
   }
 }
 
@@ -113,8 +121,7 @@ async function addImageToBoardLibrary(boardId, imageUrl) {
     imageUrl.startsWith('file://') ||
     imageUrl.startsWith('edge://')
   ) {
-    console.warn('[MB-EXT] URL non téléchargeable (schéma interdit) :', imageUrl);
-    return;
+    return; // schéma non téléchargeable (chrome://, file://, edge://)
   }
 
   let base64Src;
@@ -146,8 +153,7 @@ async function addImageToBoardLibrary(boardId, imageUrl) {
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
       base64Src = `data:${mimeType};base64,${btoa(binary)}`;
     } catch (err) {
-      console.error('[MB-EXT] Erreur fetch image :', err);
-      return;
+      return; // image inaccessible (CORS, 404, réseau)
     }
   }
 
@@ -157,21 +163,44 @@ async function addImageToBoardLibrary(boardId, imageUrl) {
       : imageUrl.split('/').pop().split('?')[0] || 'image.jpg'
   );
 
-  const boards = await getBoardsFromDB();
-  const board = boards.find((b) => b.id === boardId);
-  if (!board) return;
-
-  if (!board.library) board.library = {};
-  if (!board.library.image) board.library.image = [];
-
-  board.library.image.push({
+  const libItem = {
     id: 'lib_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     name: fileName,
     src: base64Src,
-  });
+  };
 
-  await saveBoardsToDB(boards);
-  chrome.runtime.sendMessage({ type: 'MB_IMAGE_INJECTED' }).catch(() => {});
+  const ok = await pushLibraryImage(boardId, libItem);
+  if (ok) chrome.runtime.sendMessage({ type: 'MB_IMAGE_INJECTED' }).catch(() => {});
+}
+
+// Lecture + écriture dans UNE SEULE transaction : un get() suivi d'un put() séparé
+// écraserait les modifications faites par l'UI entre les deux (clic droit rapide
+// sur deux images, ou board ouvert pendant l'ajout).
+function pushLibraryImage(boardId, libItem) {
+  return getDB()
+    .then(
+      (db) =>
+        new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, 'readwrite');
+          const store = tx.objectStore(STORE_NAME);
+          const getReq = store.get('mb_boards');
+          let found = false;
+          getReq.onsuccess = () => {
+            const boards = getReq.result || [];
+            const board = boards.find((b) => b.id === boardId);
+            if (!board) return; // tx se termine sans écriture
+            found = true;
+            if (!board.library) board.library = {};
+            if (!board.library.image) board.library.image = [];
+            board.library.image.push(libItem);
+            store.put(boards, 'mb_boards');
+          };
+          tx.oncomplete = () => resolve(found);
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        })
+    )
+    .catch(() => false);
 }
 
 // ── CLIC SUR UN ITEM DU MENU CONTEXTUEL ──────────────────────────────────────

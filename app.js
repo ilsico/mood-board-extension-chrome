@@ -249,6 +249,9 @@ const App = (function () {
         // prochaine écriture Firebase remettrait data:'' et le lien de partage
         // reperdrait ses images.
         if (el.dataset.storageurl) _elemEntry.storageUrl = el.dataset.storageurl;
+        // Empreinte de l'image envoyée : persistée pour qu'un re-partage après
+        // rechargement n'ait pas à tout renvoyer.
+        if (el.dataset.storagesig) _elemEntry.storageSig = el.dataset.storagesig;
       }
       elements.push(_elemEntry);
     });
@@ -1985,15 +1988,38 @@ const App = (function () {
   };
 
   /**
+   * Empreinte bon marché d'une image, pour ne pas la renvoyer si rien n'a changé.
+   * Longueur + fin du base64 : deux images distinctes ne collident pas en pratique,
+   * et un remplacement d'image (même elId, contenu différent) est bien détecté.
+   */
+  function _imgSignature(src) {
+    return src.length + ':' + src.slice(-40);
+  }
+
+  // Envois simultanés. En série, un board de 30 images prenait des dizaines de
+  // secondes ; 4 en parallèle sature la liaison sans écrouler le navigateur.
+  const _UPLOAD_CONCURRENCY = 4;
+
+  /**
    * Envoie vers Firebase Storage les images du board courant et mémorise leur URL
    * dans `dataset.storageurl`. Les écritures Firebase retirent le base64 (sinon
    * « Write too large ») : sans ces URLs, un board partagé n'a aucune image.
-   * @returns {Promise<{ok:number, fail:number}>}
+   *
+   * Les images déjà envoyées et inchangées sont ignorées : re-partager un board
+   * est alors quasi instantané.
+   *
+   * @param {string} boardId
+   * @param {(fait:number, total:number)=>void} [onProgress] - progression des
+   *   seuls envois réellement nécessaires.
+   * @returns {Promise<{ok:number, fail:number, skipped:number, total:number}>}
    */
-  async function _uploadBoardImagesToStorage(boardId) {
-    if (!window._fbStorage || !boardId) return { ok: 0, fail: 0 };
+  async function _uploadBoardImagesToStorage(boardId, onProgress) {
+    const vide = { ok: 0, fail: 0, skipped: 0, total: 0 };
+    if (!window._fbStorage || !boardId) return vide;
     const els = [...document.querySelectorAll('#canvas .board-element[data-type="image"]')];
-    let ok = 0;
+
+    const todo = [];
+    let skipped = 0;
     let fail = 0;
     for (const el of els) {
       const id = el.dataset.id;
@@ -2005,52 +2031,91 @@ const App = (function () {
       // Déjà une URL distante (image collab par exemple) : rien à envoyer
       if (/^https?:/i.test(src)) {
         el.dataset.storageurl = src;
-        ok++;
+        skipped++;
         continue;
       }
       if (!src.startsWith('data:')) {
         fail++;
         continue;
       }
-      try {
-        const { blob, mime } = _dataUrlToBlob(src);
-        const ext = _STORAGE_EXT[mime] || 'jpg';
-        // Nom de fichier sur un seul segment : la règle Storage est
-        // match /boards/{boardId}/{filename}
-        const ref = window._fbStorage.ref('boards/' + boardId + '/img_' + id + '.' + ext);
-        const snap = await ref.put(blob, { contentType: mime });
-        el.dataset.storageurl = await snap.ref.getDownloadURL();
-        ok++;
-      } catch (_) {
-        fail++;
+      const sig = _imgSignature(src);
+      if (el.dataset.storageurl && el.dataset.storagesig === sig) {
+        skipped++;
+        continue;
+      }
+      todo.push({ el: el, id: id, src: src, sig: sig });
+    }
+
+    const total = todo.length;
+    if (onProgress) onProgress(0, total);
+    if (!total) return { ok: 0, fail: fail, skipped: skipped, total: 0 };
+
+    let ok = 0;
+    let done = 0;
+    let next = 0;
+    async function _worker() {
+      while (next < todo.length) {
+        const job = todo[next++];
+        try {
+          const { blob, mime } = _dataUrlToBlob(job.src);
+          const ext = _STORAGE_EXT[mime] || 'jpg';
+          // Nom de fichier sur un seul segment : la règle Storage est
+          // match /boards/{boardId}/{filename}
+          const ref = window._fbStorage.ref('boards/' + boardId + '/img_' + job.id + '.' + ext);
+          const snap = await ref.put(blob, { contentType: mime });
+          job.el.dataset.storageurl = await snap.ref.getDownloadURL();
+          job.el.dataset.storagesig = job.sig;
+          ok++;
+        } catch (_) {
+          fail++;
+        }
+        done++;
+        if (onProgress) onProgress(done, total);
       }
     }
-    return { ok, fail };
+    const workers = [];
+    for (let i = 0; i < Math.min(_UPLOAD_CONCURRENCY, total); i++) workers.push(_worker());
+    await Promise.all(workers);
+    return { ok: ok, fail: fail, skipped: skipped, total: total };
   }
+
+  // Empêche de relancer un envoi déjà en cours (double-clic sur partager)
+  let _sharing = false;
 
   /**
    * Prépare le partage : envoie les images vers Storage, sauvegarde (ce qui écrit
    * les URLs dans Firebase), puis copie le lien de lecture seule.
+   * Affiche la progression : l'envoi peut durer sur un gros board.
    */
   async function _shareBoardLink() {
     if (!currentBoardId) {
       toast('Aucun board ouvert');
       return;
     }
-    const nbImg = document.querySelectorAll('#canvas .board-element[data-type="image"]').length;
-    if (nbImg) toast('Préparation des images…');
-    const res = await _uploadBoardImagesToStorage(currentBoardId);
-    saveCurrentBoard(); // écrit les URLs fraîches dans boards/{id}
-    const shareUrl = SHARE_BASE_URL + '/?board=' + currentBoardId;
+    if (_sharing) {
+      toast('Envoi déjà en cours…');
+      return;
+    }
+    _sharing = true;
     try {
-      await navigator.clipboard.writeText(shareUrl);
-      toast(
-        res.fail
-          ? 'Lien copié — ' + res.fail + ' image(s) non envoyée(s)'
-          : 'Lien de lecture seule copié !'
-      );
-    } catch (_) {
-      toast('URL : ' + shareUrl);
+      const res = await _uploadBoardImagesToStorage(currentBoardId, (fait, total) => {
+        if (total) toast('Envoi des images… ' + fait + '/' + total, true);
+      });
+      saveCurrentBoard(); // écrit les URLs fraîches dans boards/{id}
+      const shareUrl = SHARE_BASE_URL + '/?board=' + currentBoardId;
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        // toast non sticky : referme la progression restée affichée
+        toast(
+          res.fail
+            ? 'Lien copié — ' + res.fail + ' image(s) non envoyée(s)'
+            : 'Lien de lecture seule copié !'
+        );
+      } catch (_) {
+        toast('URL : ' + shareUrl);
+      }
+    } finally {
+      _sharing = false;
     }
   }
 
@@ -6312,6 +6377,7 @@ const App = (function () {
       if (s.origData && !_imgOrigStore.has(el.dataset.id)) _imgOrigStore.set(el.dataset.id, s.origData);
       if (s.cropdata) el.dataset.cropdata = s.cropdata;
       if (s.storageUrl) el.dataset.storageurl = s.storageUrl;
+      if (s.storageSig) el.dataset.storagesig = s.storageSig;
     }
     return el;
   }
@@ -11260,7 +11326,13 @@ const App = (function () {
 
   // ── TOAST ─────────────────────────────────────────────────────────────────
   let toastTimer;
-  function toast(msg) {
+  /**
+   * @param {string} msg
+   * @param {boolean} [sticky] - true : reste affiché jusqu'au prochain toast.
+   *   Utilisé pour la progression d'une tâche longue, qui durerait plus que les
+   *   2,6 s d'affichage normales.
+   */
+  function toast(msg, sticky) {
     const t = document.getElementById('toast');
     // Effacer le zoom-toast s'il est visible
     const zt = document.getElementById('zoom-toast');
@@ -11270,7 +11342,7 @@ const App = (function () {
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+    if (!sticky) toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
   }
 
   // ── UTILITAIRES ───────────────────────────────────────────────────────────

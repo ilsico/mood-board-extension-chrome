@@ -1,4 +1,4 @@
-const CACHE = 'moodboard-v3';
+const CACHE = 'moodboard-v4';
 const ASSETS = [
   './index.html',
   './pwa-init.js',
@@ -7,6 +7,7 @@ const ASSETS = [
   './firebase-app-compat.js',
   './firebase-auth-compat.js',
   './firebase-database-compat.js',
+  './firebase-storage-compat.js',
   './firebase-init.js',
   './html2canvas.min.js',
   './jspdf.umd.min.js',
@@ -49,8 +50,12 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
+  // Précache tolérant aux erreurs : addAll est atomique, un seul 404 ferait
+  // échouer toute l'install et le SW ne s'activerait jamais.
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS))
+    caches.open(CACHE).then(c =>
+      Promise.all(ASSETS.map(u => c.add(u).catch(() => {})))
+    )
   );
   self.skipWaiting();
 });
@@ -68,11 +73,37 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// Le code (HTML/JS/CSS) doit passer par le réseau en priorité : en cache-first,
+// une mise à jour déployée n'atteint jamais les utilisateurs tant que CACHE n'est
+// pas renommé. Les assets figés (images, polices) restent en cache-first.
+const _isCode = url => /\.(html|js|css)(\?|$)/.test(url) || url.endsWith('/');
+
 self.addEventListener('fetch', e => {
   // Ne pas intercepter les requêtes Firebase (réseau uniquement)
   if (e.request.url.includes('firebaseio.com') || e.request.url.includes('googleapis.com')) {
     return;
   }
+
+  if (_isCode(e.request.url)) {
+    // Réseau d'abord, cache en secours hors ligne ; on rafraîchit le cache au passage.
+    e.respondWith(
+      fetch(e.request)
+        .then(resp => {
+          if (resp && resp.ok) {
+            const copy = resp.clone();
+            caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+          }
+          return resp;
+        })
+        .catch(() =>
+          caches.match(e.request).then(
+            hit => hit || new Response('', { status: 504, statusText: 'Hors ligne' })
+          )
+        )
+    );
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request).then(r => r || fetch(e.request))
   );

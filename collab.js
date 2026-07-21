@@ -29,6 +29,11 @@ window.Collab = (function () {
   let _recentDataEdits = {}; // elId -> timestamp du dernier syncElementData local
   let _heartbeatTimer = null;
   let _staleCleanupTimer = null;
+  // Décalage horloge locale ↔ serveur Firebase. Les timestamps de présence sont
+  // écrits avec ServerValue.TIMESTAMP : les comparer à un Date.now() local fait
+  // disparaître des collaborateurs bien connectés si la machine est mal réglée.
+  let _serverTimeOffset = 0;
+  let _serverOffsetRef = null;
 
   
   const COLORS = ['#0b36ed'];
@@ -176,16 +181,37 @@ window.Collab = (function () {
 
   // ── HEARTBEAT & STALE PRESENCE CLEANUP ─────────────────────────────────
 
+  /** Heure serveur estimée, à utiliser pour comparer des ServerValue.TIMESTAMP. */
+  function _serverNow() {
+    return Date.now() + _serverTimeOffset;
+  }
+
+  function _watchServerTimeOffset() {
+    if (_serverOffsetRef || !window._fbDb) return;
+    _serverOffsetRef = window._fbDb.ref('.info/serverTimeOffset');
+    _serverOffsetRef.on('value', function (snap) {
+      const v = snap.val();
+      if (typeof v === 'number') _serverTimeOffset = v;
+    });
+  }
+
   function _startHeartbeat() {
     clearInterval(_heartbeatTimer);
     clearInterval(_staleCleanupTimer);
+    _watchServerTimeOffset();
 
-    // Rafraîchir notre propre timestamp toutes les 30s
+    // Rafraîchir notre présence toutes les 30 s.
+    // On réécrit la couleur en même temps que le timestamp : si le nœud de présence
+    // a été supprimé entre-temps (coupure réseau qui déclenche onDisconnect, ou
+    // nettoyage des présences fantômes par un autre client), écrire le seul
+    // timestamp le recréerait sans couleur. Les autres recevraient alors un
+    // child_added avec color undefined → fill="undefined" → curseur noir.
     _heartbeatTimer = setInterval(function () {
       if (!_active || !_sessionRef) return;
-      _sessionRef.child('presence/' + _userId + '/timestamp').set(
-        firebase.database.ServerValue.TIMESTAMP
-      );
+      _sessionRef.child('presence/' + _userId).update({
+        color: _userColor,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+      });
     }, 30000);
 
     // Nettoyer les présences fantômes toutes les 60s
@@ -198,7 +224,7 @@ window.Collab = (function () {
     if (!_active || !_sessionRef) return;
     _sessionRef.child('presence').get().then(function (snap) {
       if (!snap.exists()) return;
-      var now = Date.now();
+      var now = _serverNow();
       snap.forEach(function (child) {
         if (child.key === _userId) return;
         var pData = child.val();
@@ -231,9 +257,10 @@ window.Collab = (function () {
     _boardId = boardId;
     _isOwner = isOwner;
     _userId = window._fbUid ? 'u_' + window._fbUid : _genUUID();
-    _userId = window._fbUid ? 'u_' + window._fbUid : _genUUID();
     _active = true;
     _sessionRef = window._fbDb.ref('collabSessions/' + boardId);
+    // Avant le premier _serverNow() du nettoyage des présences ci-dessous
+    _watchServerTimeOffset();
 
     try {
       // Choisir couleur en vérifiant celles déjà prises
@@ -250,7 +277,7 @@ window.Collab = (function () {
 
       // Nettoyer les présences périmées (> 90s = 3 heartbeats manqués)
       if (presenceSnap.exists()) {
-        var now = Date.now();
+        var now = _serverNow();
         presenceSnap.forEach(function (child) {
           if (child.key === _userId) return;
           var pData = child.val();
@@ -302,7 +329,6 @@ window.Collab = (function () {
             try {
               imgUrls[imgEl.id] = await _uploadImageToStorage(imgEl.id, base64);
             } catch (storageErr) {
-              console.warn('[Collab Storage] upload failed for', imgEl.id, storageErr);
               // Fallback : écrire base64 directement dans RTDB pour les petites images
               if (base64 && base64.length <= 786432) {
                 imgUrls[imgEl.id] = base64;
@@ -435,6 +461,10 @@ window.Collab = (function () {
     clearInterval(_staleCleanupTimer);
     _heartbeatTimer = null;
     _staleCleanupTimer = null;
+    if (_serverOffsetRef) {
+      _serverOffsetRef.off();
+      _serverOffsetRef = null;
+    }
 
     // Arrêter le RAF des curseurs
     if (_cursorRAFId) cancelAnimationFrame(_cursorRAFId);
@@ -733,7 +763,6 @@ window.Collab = (function () {
           });
         })
         .catch(function (storageErr) {
-          console.warn('[Collab Storage] upload failed for', elId, storageErr);
           // Fallback : écrire base64 directement dans RTDB pour les petites images
           if (!_active || !_sessionRef) return;
           if (data && data.length <= 786432) {
@@ -891,6 +920,16 @@ window.Collab = (function () {
 
   // ── PRÉSENCE HANDLERS ──────────────────────────────────────────────────
 
+  /**
+   * Couleur d'une présence, toujours valide.
+   * Une présence peut arriver sans couleur (nœud recréé par un heartbeat après
+   * suppression). Laisser passer un undefined donnerait fill="undefined",
+   * borderColor="undefined" ou la chaîne "undefined15" côté rendu — soit du noir.
+   */
+  function _presenceColor(uid, data) {
+    return (data && data.color) || COLORS[_hashStr(uid) % COLORS.length];
+  }
+
   function _onPresenceAdded(snap) {
     const uid = snap.key;
     if (uid === _userId) return; // ignorer soi-même
@@ -898,8 +937,10 @@ window.Collab = (function () {
     // Ignorer les présences fantômes (heartbeat absent depuis > 90s)
     // Les règles Firebase empêchent souvent de supprimer l'entrée d'un autre user,
     // on les filtre donc côté client plutôt que de tenter un remove.
-    if (data.timestamp && Date.now() - data.timestamp > 90000) return;
-    _createRemoteCursor(uid, data.color);
+    // _serverNow() et pas Date.now() : data.timestamp vient de ServerValue.TIMESTAMP,
+    // une horloge locale décalée ferait disparaître des collaborateurs bien présents.
+    if (data.timestamp && _serverNow() - data.timestamp > 90000) return;
+    _createRemoteCursor(uid, _presenceColor(uid, data));
     _updateStatusBar();
   }
 
@@ -907,6 +948,7 @@ window.Collab = (function () {
     const uid = snap.key;
     if (uid === _userId) return;
     const data = snap.val();
+    const color = _presenceColor(uid, data);
 
     // Cursor update
     if (data.cursor) {
@@ -914,11 +956,11 @@ window.Collab = (function () {
     }
 
     // Selection update
-    _updateRemoteSelection(uid, Array.isArray(data.selection) ? data.selection : [], data.color);
+    _updateRemoteSelection(uid, Array.isArray(data.selection) ? data.selection : [], color);
 
     // Selection rectangle
     if (data.selectionRect) {
-      _updateRemoteSelRect(uid, data.selectionRect, data.color);
+      _updateRemoteSelRect(uid, data.selectionRect, color);
     }
   }
 
@@ -1306,6 +1348,9 @@ window.Collab = (function () {
   function _createRemoteCursor(uid, color) {
     const container = document.getElementById('collab-cursors');
     if (!container) return;
+    // Filet : une présence sans couleur donnerait fill="undefined", que le SVG
+    // interprète comme noir. On retombe sur la couleur déterministe du user.
+    if (!color) color = COLORS[_hashStr(uid) % COLORS.length];
     const div = document.createElement('div');
     div.className = 'collab-cursor';
     div.dataset.userId = uid;
@@ -1586,7 +1631,7 @@ window.Collab = (function () {
         App._collabMergeElements(boardId, elements);
       }
     } catch (e) {
-      console.warn('Collab merge error:', e);
+      // Merge best-effort : la copie locale reste la source de vérité
     }
   }
 

@@ -27,12 +27,10 @@ const App = (function () {
   let isTouchPanning = false;
   let isPanningMode = false;
   let panStart = { x: 0, y: 0 };
-  let history = [];
-  let historySelections = [];
-  let historyIndex = -1;
   let selectedEl = null; // élément unique sélectionné
   let multiSelected = new Set(); // sélection multiple
-  let _keyObjectMode = false;
+  // Élément de référence pour l'alignement, défini en cliquant un élément
+  // d'une multi-sélection sans le déplacer (voir _setKeyObject).
   let _keyObject = null;
   let libSelectedIds = new Set();
   let _libLastClickedId = null; // dernier item cliqué (pour Shift range)
@@ -104,18 +102,46 @@ const App = (function () {
     });
   }
 
+  // Anti-spam : saveBoards() est appelé à chaque action, on ne prévient qu'une
+  // fois toutes les 10 s en cas d'échec répété.
+  let _saveFailNotifiedAt = 0;
+  function _notifySaveFailure(err) {
+    const now = Date.now();
+    if (now - _saveFailNotifiedAt < 10000) return;
+    _saveFailNotifiedAt = now;
+    const quota = err && (err.name === 'QuotaExceededError' || err.code === 22);
+    toast(
+      quota
+        ? 'Stockage saturé — sauvegarde impossible, libère de la place'
+        : 'Sauvegarde impossible — tes dernières modifications ne sont pas enregistrées'
+    );
+  }
+
+  /**
+   * Sauvegarde les boards dans IndexedDB.
+   * Attend la fin réelle de la transaction : sans ça la promesse se résout avant
+   * l'écriture, et un échec (quota dépassé) passait totalement inaperçu.
+   * @returns {Promise<boolean>} true si l'écriture est bien committée.
+   */
   async function saveBoards() {
     try {
       const db = await getDB();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put(boards, 'mb_boards');
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put(boards, 'mb_boards');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
 
       // Force le menu clic droit à se mettre à jour
       if (typeof chrome !== 'undefined' && chrome.runtime) {
         chrome.runtime.sendMessage({ type: 'MB_BOARDS_MODIFIED' }).catch(() => {});
       }
+      return true;
     } catch (e) {
-      console.warn('Erreur sauvegarde IndexedDB:', e);
+      _notifySaveFailure(e);
+      return false;
     }
   }
 
@@ -218,6 +244,11 @@ const App = (function () {
         const _origSrc = _imgOrigStore.get(el.dataset.id);
         if (_origSrc) _elemEntry.origData = _origSrc;
         if (el.dataset.cropdata) _elemEntry.cropdata = el.dataset.cropdata;
+        // URL Firebase Storage de l'image, posée par _uploadBoardImagesToStorage.
+        // Persistée avec le board pour survivre à un rechargement : sans elle, la
+        // prochaine écriture Firebase remettrait data:'' et le lien de partage
+        // reperdrait ses images.
+        if (el.dataset.storageurl) _elemEntry.storageUrl = el.dataset.storageurl;
       }
       elements.push(_elemEntry);
     });
@@ -271,17 +302,20 @@ const App = (function () {
         at: Date.now(),
       }).catch(function () {});
     }
-    // Sync Firebase (fire-and-forget, silencieux) — strip base64 image data pour éviter "Write too large"
+    // Sync Firebase — le base64 est remplacé par l'URL Storage de l'image (posée
+    // par _uploadBoardImagesToStorage au partage), sinon "Write too large".
     if (window._fbDb) {
       const fbElements = board.elements.map((el) =>
-        el.type === 'image' ? Object.assign({}, el, { data: '', origData: '' }) : el
+        el.type === 'image'
+          ? Object.assign({}, el, { data: el.storageUrl || '', origData: '' })
+          : el
       );
       const payload = { name: board.name, elements: fbElements, savedAt: board.savedAt };
       // update() et pas set() : set() écraserait les enfants frères activity/ et snapshotUrl
       window._fbDb
         .ref('boards/' + currentBoardId)
         .update(payload)
-        .catch((e) => console.warn('Firebase sync error:', e));
+        .catch(() => {});
     }
   }
 
@@ -301,7 +335,9 @@ const App = (function () {
     if (!board || !board.elements) return;
     // Strip image base64 — les images sont affichées via snapshotUrl dans la PWA
     const fbElements = board.elements.map(function (el) {
-      return el.type === 'image' ? Object.assign({}, el, { data: '', origData: '' }) : el;
+      return el.type === 'image'
+        ? Object.assign({}, el, { data: el.storageUrl || '', origData: '' })
+        : el;
     });
     const payload = { name: board.name, elements: fbElements, savedAt: board.savedAt };
     // update() et pas set() : set() écraserait snapshotUrl, seule source des images côté PWA
@@ -436,7 +472,10 @@ const App = (function () {
         req.onerror = () => resolve(null);
       });
 
-      if (data && Array.isArray(data) && data.length > 0) {
+      // Un tableau vide est une réponse valide : l'utilisateur a supprimé tous ses
+      // boards. Retomber sur la migration localStorage dans ce cas ressusciterait
+      // les boards effacés au rechargement suivant.
+      if (Array.isArray(data)) {
         boards = data;
         boards.forEach((b) => {
           if (b.thumbnail && !b.coverImage) b.coverImage = b.thumbnail;
@@ -447,7 +486,7 @@ const App = (function () {
         return;
       }
     } catch (e) {
-      console.warn('Erreur chargement IndexedDB:', e);
+      // IndexedDB indisponible : on retombe sur la migration localStorage ci-dessous
     }
 
     // 2. Migration automatique de vos anciennes données limitées
@@ -461,7 +500,10 @@ const App = (function () {
           if (!b.snapshot) b.snapshot = '';
           delete b.thumbnail;
         });
-        saveBoards(); // Transfère vos anciens boards vers le stockage illimité
+        // Transfère vos anciens boards vers le stockage illimité, puis purge la clé
+        // legacy — mais seulement si l'écriture a réellement réussi, sinon on
+        // perdrait les données au lieu de les migrer.
+        if (await saveBoards()) localStorage.removeItem('mb_boards');
       } catch {
         boards = [];
       }
@@ -702,20 +744,6 @@ const App = (function () {
       });
     }
 
-    const inboxBtn = document.getElementById('inbox-btn');
-    const inboxPanel = document.getElementById('inbox-panel');
-    const inboxCloseBtn = document.getElementById('inbox-close-btn');
-    if (inboxBtn && inboxPanel) {
-      inboxBtn.addEventListener('click', function () {
-        inboxPanel.classList.toggle('open');
-      });
-    }
-    if (inboxCloseBtn && inboxPanel) {
-      inboxCloseBtn.addEventListener('click', function () {
-        inboxPanel.classList.remove('open');
-      });
-    }
-
     // Guard mousedown pour garder sb-text actif quand on clique ses boutons
     const _sbText = document.querySelector('.sb-text');
     if (_sbText) {
@@ -907,12 +935,7 @@ const App = (function () {
         if (menu) menu.classList.toggle('hidden');
         return;
       }
-      saveCurrentBoard();
-      const shareUrl = SHARE_BASE_URL + '/?board=' + currentBoardId;
-      navigator.clipboard
-        .writeText(shareUrl)
-        .then(() => toast('Lien de lecture seule copié !'))
-        .catch(() => toast('URL : ' + shareUrl));
+      _shareBoardLink();
     });
     addEvt('share-copy-id', 'click', (e) => {
       e.stopPropagation();
@@ -927,12 +950,7 @@ const App = (function () {
     addEvt('share-copy-url', 'click', (e) => {
       e.stopPropagation();
       if (!currentBoardId) return;
-      saveCurrentBoard();
-      const shareUrl = SHARE_BASE_URL + '/?board=' + currentBoardId;
-      navigator.clipboard
-        .writeText(shareUrl)
-        .then(() => toast('Lien de lecture seule copié !'))
-        .catch(() => toast('URL : ' + shareUrl));
+      _shareBoardLink();
       const menu = document.getElementById('share-menu');
       if (menu) menu.classList.add('hidden');
     });
@@ -1152,16 +1170,6 @@ const App = (function () {
     addEvt('align-bottom', 'click', () => alignElements('bottom'));
     addEvt('distrib-h', 'click', () => distributeElements('h'));
     addEvt('distrib-v', 'click', () => distributeElements('v'));
-    addEvt('key-object-toggle', 'click', () => {
-      _keyObjectMode = !_keyObjectMode;
-      const toggle = document.getElementById('key-object-toggle');
-      if (toggle) toggle.classList.toggle('active', _keyObjectMode);
-      if (!_keyObjectMode && _keyObject) {
-        _keyObject.classList.remove('key-object');
-        _keyObject = null;
-      }
-    });
-
     // Panneau bibliothèque
     addEvt('lib-toggle-btn', 'click', () => toggleLibPanel());
     addEvt('lib-add-btn', 'click', () => uploadImages());
@@ -1347,7 +1355,7 @@ const App = (function () {
 
       const imgSrc = b.coverImage || b.snapshot;
       if (imgSrc) {
-        card.innerHTML = `<img class="wheel-thumb" src="${imgSrc}" alt="">`;
+        card.innerHTML = `<img class="wheel-thumb" src="${escHtml(imgSrc)}" alt="">`;
       } else {
         card.innerHTML = `<div class="wheel-name">${escHtml(b.name)}</div>`;
       }
@@ -1794,9 +1802,6 @@ const App = (function () {
         panX = 0;
         panY = 0;
         nextZ = 100;
-        history = [];
-        historySelections = [];
-        historyIndex = -1;
         _actionHistory = [];
         _actionIndex = -1;
         selectedEl = null;
@@ -1811,10 +1816,10 @@ const App = (function () {
           // Attendre le rendu (les images sont asynchrones), puis centrer
           setTimeout(() => {
             fitElementsToScreen(true);
-            pushHistory();
+            syncDomToDataset();
           }, 120);
         } else {
-          pushHistory();
+          syncDomToDataset();
         }
         renderPanelLib();
         setTimeout(_updateBrokenBanner, 200);
@@ -1843,7 +1848,7 @@ const App = (function () {
     try {
       saveCurrentBoard();
     } catch (e) {
-      console.warn('Erreur sauvegarde:', e);
+      // Un échec d'écriture IndexedDB est déjà signalé par saveBoards() (toast)
     }
     const _snapId = currentBoardId;
     if (_snapId && _isPinned(_snapId)) _captureAndUploadSnapshot(_snapId);
@@ -1854,8 +1859,6 @@ const App = (function () {
     if (shareWrap) shareWrap.style.display = 'none';
     const pinBtn = document.getElementById('pin-mobile-btn');
     if (pinBtn) pinBtn.classList.remove('visible', 'active');
-    const inboxPanel = document.getElementById('inbox-panel');
-    if (inboxPanel) inboxPanel.classList.remove('open');
     const _hbHome = document.getElementById('history-btn');
     if (_hbHome) _hbHome.style.display = 'none';
     const _hpHome = document.getElementById('history-panel');
@@ -1960,6 +1963,95 @@ const App = (function () {
     return ref.put(blob, { contentType: mimeType }).then(function (snap) {
       return snap.ref.getDownloadURL();
     });
+  }
+
+  /** Convertit une data URL base64 en { blob, mime } pour Firebase Storage. */
+  function _dataUrlToBlob(dataUrl) {
+    const comma = dataUrl.indexOf(',');
+    const mime = (dataUrl.slice(0, comma).match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+    const bin = atob(dataUrl.slice(comma + 1));
+    const ab = new ArrayBuffer(bin.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < bin.length; i++) ia[i] = bin.charCodeAt(i);
+    return { blob: new Blob([ab], { type: mime }), mime };
+  }
+
+  const _STORAGE_EXT = {
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/svg+xml': 'svg',
+    'image/avif': 'avif',
+  };
+
+  /**
+   * Envoie vers Firebase Storage les images du board courant et mémorise leur URL
+   * dans `dataset.storageurl`. Les écritures Firebase retirent le base64 (sinon
+   * « Write too large ») : sans ces URLs, un board partagé n'a aucune image.
+   * @returns {Promise<{ok:number, fail:number}>}
+   */
+  async function _uploadBoardImagesToStorage(boardId) {
+    if (!window._fbStorage || !boardId) return { ok: 0, fail: 0 };
+    const els = [...document.querySelectorAll('#canvas .board-element[data-type="image"]')];
+    let ok = 0;
+    let fail = 0;
+    for (const el of els) {
+      const id = el.dataset.id;
+      const src = _imgStore.get(id) || el.dataset.savedata || '';
+      if (!src) {
+        fail++;
+        continue;
+      }
+      // Déjà une URL distante (image collab par exemple) : rien à envoyer
+      if (/^https?:/i.test(src)) {
+        el.dataset.storageurl = src;
+        ok++;
+        continue;
+      }
+      if (!src.startsWith('data:')) {
+        fail++;
+        continue;
+      }
+      try {
+        const { blob, mime } = _dataUrlToBlob(src);
+        const ext = _STORAGE_EXT[mime] || 'jpg';
+        // Nom de fichier sur un seul segment : la règle Storage est
+        // match /boards/{boardId}/{filename}
+        const ref = window._fbStorage.ref('boards/' + boardId + '/img_' + id + '.' + ext);
+        const snap = await ref.put(blob, { contentType: mime });
+        el.dataset.storageurl = await snap.ref.getDownloadURL();
+        ok++;
+      } catch (_) {
+        fail++;
+      }
+    }
+    return { ok, fail };
+  }
+
+  /**
+   * Prépare le partage : envoie les images vers Storage, sauvegarde (ce qui écrit
+   * les URLs dans Firebase), puis copie le lien de lecture seule.
+   */
+  async function _shareBoardLink() {
+    if (!currentBoardId) {
+      toast('Aucun board ouvert');
+      return;
+    }
+    const nbImg = document.querySelectorAll('#canvas .board-element[data-type="image"]').length;
+    if (nbImg) toast('Préparation des images…');
+    const res = await _uploadBoardImagesToStorage(currentBoardId);
+    saveCurrentBoard(); // écrit les URLs fraîches dans boards/{id}
+    const shareUrl = SHARE_BASE_URL + '/?board=' + currentBoardId;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast(
+        res.fail
+          ? 'Lien copié — ' + res.fail + ' image(s) non envoyée(s)'
+          : 'Lien de lecture seule copié !'
+      );
+    } catch (_) {
+      toast('URL : ' + shareUrl);
+    }
   }
 
   function _captureAndUploadSnapshot(boardId) {
@@ -2896,7 +2988,7 @@ const App = (function () {
         isResizing = false;
         resizeEl = null;
         clearSnapGuides();
-        pushHistory();
+        syncDomToDataset();
         updateCornerHandles();
       }
       if (isSelecting) {
@@ -2968,12 +3060,12 @@ const App = (function () {
           const ne = createNoteElement('', x - 115, y - 80, 290, 75);
           _collabSyncCreatedEl(ne);
           if (ne) pushAction({ type: 'create', elId: ne.dataset.id, after: _captureElState(ne) });
-          pushHistory();
+          syncDomToDataset();
         } else if (type === 'color') {
           const ce = createColorElement('#000000', x - 65, y - 64, 130, 127);
           _collabSyncCreatedEl(ce);
           if (ce) pushAction({ type: 'create', elId: ce.dataset.id, after: _captureElState(ce) });
-          pushHistory();
+          syncDomToDataset();
         } else if (type === 'link') {
           // Stocker la position pour après la saisie de l'URL
           pendingToolDropPos = { x: x - 135, y: y - 110 };
@@ -2999,7 +3091,7 @@ const App = (function () {
             elId: validEls.map((el) => el.dataset.id),
             after: validEls.map((el) => _captureElState(el)),
           });
-          pushHistory();
+          syncDomToDataset();
         };
         items.forEach((libItem, i) => {
           const tmpImg = new Image();
@@ -3055,7 +3147,7 @@ const App = (function () {
             elId: previewImgEl.dataset.id,
             after: _captureElState(previewImgEl),
           });
-        pushHistory();
+        syncDomToDataset();
 
         return;
       }
@@ -3076,7 +3168,7 @@ const App = (function () {
           _collabSyncCreatedEl(linkEl);
           if (linkEl)
             pushAction({ type: 'create', elId: linkEl.dataset.id, after: _captureElState(linkEl) });
-          pushHistory();
+          syncDomToDataset();
         });
         return;
       }
@@ -3105,7 +3197,7 @@ const App = (function () {
                     elId: droppedImgEl.dataset.id,
                     after: _captureElState(droppedImgEl),
                   });
-                pushHistory();
+                syncDomToDataset();
               };
               tmpImg.onerror = () => {
                 const x = (e.clientX - rect.left - panX) / zoomLevel - 110 + i * 24;
@@ -3119,7 +3211,7 @@ const App = (function () {
                     elId: droppedImgEl.dataset.id,
                     after: _captureElState(droppedImgEl),
                   });
-                pushHistory();
+                syncDomToDataset();
               };
               tmpImg.src = src;
             };
@@ -3402,7 +3494,7 @@ const App = (function () {
         before: { data: oldSrc, w: oldW, h: oldH },
         after:  { data: rotatedSrc, w: currentW, h: newH },
       });
-      pushHistory();
+      syncDomToDataset();
 
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementData(elId, rotatedSrc);
@@ -3480,7 +3572,7 @@ const App = (function () {
         before: { data: oldSrc, w: oldW, h: oldH, cropdata: oldCropdata },
         after:  { data: croppedSrc, w: currentW, h: newH, cropdata: el.dataset.cropdata },
       });
-      pushHistory();
+      syncDomToDataset();
 
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementData(elId, croppedSrc);
@@ -3642,7 +3734,7 @@ const App = (function () {
                   elId: pastedImgEl.dataset.id,
                   after: _captureElState(pastedImgEl),
                 });
-              pushHistory();
+              syncDomToDataset();
             };
             tmpImg.onerror = () => {
               var pastedImgEl = createImageElement(src, c.x - 110, c.y - 85, 220, 170);
@@ -3653,7 +3745,7 @@ const App = (function () {
                   elId: pastedImgEl.dataset.id,
                   after: _captureElState(pastedImgEl),
                 });
-              pushHistory();
+              syncDomToDataset();
             };
             tmpImg.src = src;
             // Ajouter aussi à la bibliothèque
@@ -3685,38 +3777,35 @@ const App = (function () {
   }
 
   // ── HISTORIQUE ───────────────────────────────────────────────────────────
-  // Système dual : innerHTML (mode solo) + actions (mode collab)
+  // Undo/redo par actions structurées, dans les deux modes (solo et collab).
   let _actionHistory = [];
   let _actionIndex = -1;
   const MAX_ACTIONS = 100;
 
-  function pushHistory() {
-    // Synchroniser les valeurs des hex inputs couleur (innerHTML ne capture pas .value dynamique)
+  /**
+   * Recopie dans le DOM sérialisable l'état que seul le JS connaît, pour que
+   * la sauvegarde le voie : `.value` d'un input et l'innerHTML d'un
+   * contenteditable ne sont pas des attributs.
+   *
+   * Anciennement `pushHistory()`, qui empilait en plus un snapshot complet de
+   * `canvas.innerHTML` (images base64 comprises) dans un tableau `history[]`
+   * que plus rien ne relisait depuis le passage à l'undo par actions.
+   * Seule la synchronisation ci-dessous était encore utile.
+   */
+  function syncDomToDataset() {
+    // Valeur des hex inputs couleur (l'attribut ne suit pas la propriété .value)
     document
       .querySelectorAll('#canvas .board-element[data-type="color"] .color-hex-input')
       .forEach((inp) => {
         if (inp.value) inp.setAttribute('value', inp.value);
       });
-    // Synchroniser dataset.savedata des notes (le innerHTML du contenteditable est déjà dans le DOM)
+    // dataset.savedata des notes : source de vérité lue par saveCurrentBoard()
     document
       .querySelectorAll('#canvas .board-element[data-type="note"] .el-note-content')
       .forEach((div) => {
         const el = div.closest('.board-element');
         if (el) el.dataset.savedata = div.innerHTML;
       });
-    const snap = document.getElementById('canvas').innerHTML;
-    const selSnap = [...multiSelected].map((el) => el.dataset.id).filter(Boolean);
-    if (historyIndex < history.length - 1) {
-      history = history.slice(0, historyIndex + 1);
-      historySelections = historySelections.slice(0, historyIndex + 1);
-    }
-    history.push(snap);
-    historySelections.push(selSnap);
-    if (history.length > 50) {
-      history.shift();
-      historySelections.shift();
-    }
-    historyIndex = history.length - 1;
   }
 
   /**
@@ -4252,31 +4341,26 @@ const App = (function () {
         'captionCreate', 'captionDelete', 'captionEdit',
         'editImage', 'editFile', 'zIndex',
       ]);
-      let skipped = 0;
-      while (_actionIndex >= 0 && skipped < 5) {
-        const action = _actionHistory[_actionIndex];
-        if (!NO_CONFLICT_CHECK.has(action.type)) {
-          const elId = Array.isArray(action.elId) ? action.elId[0] : action.elId;
-          if (elId && Collab.isLockedByOther(elId)) {
-            _actionIndex--;
-            skipped++;
-            continue;
-          }
-          if (elId && Collab.wasModifiedSince(elId, action.elementVersion || 0)) {
-            _actionIndex--;
-            skipped++;
-            continue;
-          }
+      if (_actionIndex < 0) return;
+      const action = _actionHistory[_actionIndex];
+      // On refuse l'annulation au lieu de sauter l'action : avancer _actionIndex
+      // sans appeler _applyReverse laisserait le redo réappliquer une action
+      // jamais annulée, ce qui désynchronise le board.
+      if (!NO_CONFLICT_CHECK.has(action.type)) {
+        const elId = Array.isArray(action.elId) ? action.elId[0] : action.elId;
+        if (elId && Collab.isLockedByOther(elId)) {
+          toast("Impossible d'annuler : élément en cours d'édition");
+          return;
         }
-        _applyReverse(action);
-        _actionIndex--;
-        updateCornerHandles();
-        renderHistoryPanel();
-        return;
+        if (elId && Collab.wasModifiedSince(elId, action.elementVersion || 0)) {
+          toast("Impossible d'annuler : élément modifié par quelqu'un d'autre");
+          return;
+        }
       }
-      if (skipped > 0) {
-        toast("Impossible d'annuler : éléments modifiés par d'autres");
-      }
+      _applyReverse(action);
+      _actionIndex--;
+      updateCornerHandles();
+      renderHistoryPanel();
       return;
     }
 
@@ -4390,14 +4474,6 @@ const App = (function () {
     renderHistoryPanel();
   }
 
-  function reattachAllEvents() {
-    document.querySelectorAll('#canvas .board-element').forEach((el) => {
-      attachElementEvents(el);
-      if (el.dataset.type === 'color') reattachColorEvents(el);
-      if (el.dataset.type === 'note') reattachNoteEvents(el);
-      if (el.dataset.type === 'file') reattachFileEvents(el);
-    });
-  }
   function _resyncImgStore() {
     document.querySelectorAll('#canvas .board-element[data-type="image"] img').forEach((img) => {
       if (img.src && img.src.startsWith('data:')) {
@@ -4495,7 +4571,7 @@ const App = (function () {
       el.remove();
       if (selectedEl === el) selectedEl = null;
       multiSelected.delete(el);
-      pushHistory();
+      syncDomToDataset();
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementDelete(el.dataset.id);
       }
@@ -4513,7 +4589,7 @@ const App = (function () {
           before: { data: noteValueOnFocus, style: noteStyleOnFocus },
           after: { data: ta.innerHTML, style: ta.style.cssText },
         });
-        pushHistory();
+        syncDomToDataset();
       }
     }
   }
@@ -4568,6 +4644,38 @@ const App = (function () {
       });
     }
   }
+  // Le dblclick d'un lien est posé sur .el-link, pas sur .board-element : cloneNode
+  // ne le recopie pas. Sans ça, un lien dupliqué n'ouvre plus son URL.
+  function reattachLinkEvents(el) {
+    if (el._linkEventsAttached) return;
+    el._linkEventsAttached = true;
+    const wrap = el.querySelector('.el-link');
+    if (!wrap) return;
+    wrap.addEventListener('dblclick', () => {
+      let d = {};
+      try {
+        d = JSON.parse(el.dataset.savedata || '{}');
+      } catch (_) {}
+      if (d.url) window.open(d.url, '_blank');
+    });
+  }
+
+  // Même problème que reattachLinkEvents : le dblclick vit sur .el-video.
+  function reattachVideoEvents(el) {
+    if (el._videoEventsAttached) return;
+    el._videoEventsAttached = true;
+    const wrap = el.querySelector('.el-video');
+    if (!wrap) return;
+    wrap.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      let d = {};
+      try {
+        d = JSON.parse(el.dataset.savedata || '{}');
+      } catch (_) {}
+      if (d.src) openVideoLightbox(d.src, d.isEmbed);
+    });
+  }
+
   function reattachColorEvents(el) {
     // Guard : ne pas attacher les events plusieurs fois sur le même élément
     // Utiliser une propriété JS (pas dataset) pour ne pas être sérialisé dans innerHTML
@@ -4767,7 +4875,7 @@ const App = (function () {
         }
         done++;
         if (done === toDelete.length) {
-          pushHistory();
+          syncDomToDataset();
         }
       })
     );
@@ -4778,7 +4886,7 @@ const App = (function () {
     document.getElementById('canvas').innerHTML = '';
     selectedEl = null;
     multiSelected.clear();
-    pushHistory();
+    syncDomToDataset();
   }
 
   // ── SNAP ─────────────────────────────────────────────────────────────────
@@ -5069,7 +5177,7 @@ const App = (function () {
           });
         }
         pushAction({ type: 'groupResize', elId: group.map((e) => e.dataset.id), before: beforeStates, after: afterStates });
-        pushHistory();
+        syncDomToDataset();
       };
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
@@ -5187,6 +5295,8 @@ const App = (function () {
         if (copy.dataset.type === 'color') reattachColorEvents(copy);
         if (copy.dataset.type === 'note') reattachNoteEvents(copy);
         if (copy.dataset.type === 'file') reattachFileEvents(copy);
+        if (copy.dataset.type === 'link') reattachLinkEvents(copy);
+        if (copy.dataset.type === 'video') reattachVideoEvents(copy);
         // Marquer la copie comme "en cours de création" pour bloquer les .update() de position
         copy._collabPendingCreate = true;
         dragEl = copy;
@@ -5465,7 +5575,7 @@ const App = (function () {
               detail: _dupeLabels[d.dataset.type] || 'Élément dupliqué',
             });
           }
-          pushHistory();
+          syncDomToDataset();
           // Collab: sync la création si duplication (avec la position finale)
           if (duplicated && typeof Collab !== 'undefined' && Collab.isActive()) {
             delete dragEl._collabPendingCreate;
@@ -5637,6 +5747,8 @@ const App = (function () {
         if (copy.dataset.type === 'color') reattachColorEvents(copy);
         if (copy.dataset.type === 'note') reattachNoteEvents(copy);
         if (copy.dataset.type === 'file') reattachFileEvents(copy);
+        if (copy.dataset.type === 'link') reattachLinkEvents(copy);
+        if (copy.dataset.type === 'video') reattachVideoEvents(copy);
         copy._collabPendingCreate = true;
         copies.add(copy);
       });
@@ -5884,7 +5996,7 @@ const App = (function () {
       clearSnapGuides();
       if (!moved && !duplicated && clickedEl) _setKeyObject(clickedEl);
       if (moved || duplicated) {
-        pushHistory();
+        syncDomToDataset();
         // Action-based undo: enregistrer le groupMove
         if (moved && !duplicated) {
           const ids = [];
@@ -6199,6 +6311,7 @@ const App = (function () {
     if (s.type === 'image' && el) {
       if (s.origData && !_imgOrigStore.has(el.dataset.id)) _imgOrigStore.set(el.dataset.id, s.origData);
       if (s.cropdata) el.dataset.cropdata = s.cropdata;
+      if (s.storageUrl) el.dataset.storageurl = s.storageUrl;
     }
     return el;
   }
@@ -6287,7 +6400,7 @@ const App = (function () {
       }
 
       setTimeout(() => fitElementsToScreen(), 150);
-      pushHistory();
+      syncDomToDataset();
 
       // Démarrer la session collab en tant que guest
       currentBoardId = boardId;
@@ -6303,7 +6416,6 @@ const App = (function () {
 
       setupUIEvents();
     } catch (e) {
-      console.warn('Collab board load error:', e);
       errPage('Erreur lors du chargement de la session collaborative.');
     }
   }
@@ -6366,7 +6478,6 @@ const App = (function () {
       toast('Board rejoint ! Ouverture en cours…');
       openBoard(boardId);
     } catch (e) {
-      console.error('joinBoardById error:', e);
       toast('Erreur lors de la connexion au board');
     }
   }
@@ -6406,9 +6517,6 @@ const App = (function () {
         panX = 0;
         panY = 0;
         nextZ = 100;
-        history = [];
-        historySelections = [];
-        historyIndex = -1;
         _actionHistory = [];
         _actionIndex = -1;
         selectedEl = null;
@@ -6469,7 +6577,7 @@ const App = (function () {
         }
 
         setTimeout(() => fitElementsToScreen(), 150);
-        pushHistory();
+        syncDomToDataset();
         loadLibraryForBoard(board.id);
         renderPanelLib();
 
@@ -6535,9 +6643,6 @@ const App = (function () {
         panX = 0;
         panY = 0;
         nextZ = 100;
-        history = [];
-        historySelections = [];
-        historyIndex = -1;
         _actionHistory = [];
         _actionIndex = -1;
         selectedEl = null;
@@ -6550,10 +6655,10 @@ const App = (function () {
           });
           setTimeout(function () {
             fitElementsToScreen();
-            pushHistory();
+            syncDomToDataset();
           }, 120);
         } else {
-          pushHistory();
+          syncDomToDataset();
         }
         loadLibraryForBoard(board.id);
         renderPanelLib();
@@ -6570,7 +6675,6 @@ const App = (function () {
         setTimeout(_updateBrokenBanner, 200);
       }
     } catch (e) {
-      console.warn('_openCollabBoard error:', e);
       toast('Erreur de connexion — copie locale chargée');
       _openCollabBoardLocal(board);
     }
@@ -6590,9 +6694,6 @@ const App = (function () {
     panX = 0;
     panY = 0;
     nextZ = 100;
-    history = [];
-    historySelections = [];
-    historyIndex = -1;
     _actionHistory = [];
     _actionIndex = -1;
     selectedEl = null;
@@ -6603,10 +6704,10 @@ const App = (function () {
       board.elements.forEach((e) => restoreElement(e));
       setTimeout(() => {
         fitElementsToScreen();
-        pushHistory();
+        syncDomToDataset();
       }, 120);
     } else {
-      pushHistory();
+      syncDomToDataset();
     }
     renderPanelLib();
     const shareWrap = document.getElementById('share-wrap');
@@ -6675,7 +6776,7 @@ const App = (function () {
         setTimeout(function () {
           fitElementsToScreen();
         }, 150);
-        pushHistory();
+        syncDomToDataset();
         return;
       }
       const boardData = snap.val();
@@ -6782,7 +6883,7 @@ const App = (function () {
       before: { data: oldSrc, w: oldW, h: oldH },
       after: { data: base64, w: parseFloat(el.style.width) || null, h: parseFloat(el.style.height) || null },
     });
-    pushHistory();
+    syncDomToDataset();
     _updateBrokenBanner();
     toast('Image restaurée');
   }
@@ -6885,7 +6986,7 @@ const App = (function () {
       if (imgEl) _collabSyncCreatedEl(imgEl);
       if (imgEl)
         pushAction({ type: 'create', elId: imgEl.dataset.id, after: _captureElState(imgEl) });
-      pushHistory();
+      syncDomToDataset();
     };
     tmpImg.onerror = () => {
       const c = getCenter();
@@ -6893,7 +6994,7 @@ const App = (function () {
       if (imgEl) _collabSyncCreatedEl(imgEl);
       if (imgEl)
         pushAction({ type: 'create', elId: imgEl.dataset.id, after: _captureElState(imgEl) });
-      pushHistory();
+      syncDomToDataset();
     };
     tmpImg.src = src;
   }
@@ -7108,7 +7209,7 @@ const App = (function () {
           after: { data: ta.innerHTML, style: ta.style.cssText },
           detail: check.checked ? 'Todo coché' : 'Todo décoché',
         });
-        pushHistory();
+        syncDomToDataset();
       }
       _checkBeforeHtml = null;
     });
@@ -7119,7 +7220,7 @@ const App = (function () {
     const el = createNoteElement('', c.x - 110, c.y - 75, 290, 75);
     _collabSyncCreatedEl(el);
     if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
-    pushHistory();
+    syncDomToDataset();
   }
   function _noteDataToHtml(data) {
     if (!data) return '';
@@ -7204,7 +7305,7 @@ const App = (function () {
     const el = createColorElement('#000000', c.x - 65, c.y - 70, 130, 140);
     _collabSyncCreatedEl(el);
     if (el) pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
-    pushHistory();
+    syncDomToDataset();
   }
   function createColorElement(hex, x, y, w, h) {
     w = w || 130;
@@ -7287,7 +7388,7 @@ const App = (function () {
             Collab.syncElementData(colorEl.dataset.id, hex);
             Collab.releaseLock(colorEl.dataset.id);
           }
-          pushHistory();
+          syncDomToDataset();
         })
         .catch(() => {
           // annulé par l'utilisateur — libérer le lock
@@ -7353,7 +7454,7 @@ const App = (function () {
             Collab.syncElementData(colorEl.dataset.id, hex);
             Collab.releaseLock(colorEl.dataset.id);
           }
-          pushHistory();
+          syncDomToDataset();
         })
         .catch(() => {
           canvasDiv.style.transform = savedTf;
@@ -7677,7 +7778,7 @@ const App = (function () {
           before: { data: prevColor },
           after: { data: currentHex },
         });
-        pushHistory();
+        syncDomToDataset();
       }
       if (typeof Collab !== 'undefined' && Collab.isActive())
         Collab.releaseLock(colorEl.dataset.id);
@@ -7756,7 +7857,7 @@ const App = (function () {
     _collabSyncCreatedEl(linkEl);
     if (linkEl)
       pushAction({ type: 'create', elId: linkEl.dataset.id, after: _captureElState(linkEl) });
-    pushHistory();
+    syncDomToDataset();
 
     closeLinkModal();
     ['link-url-input', 'link-title-input', 'link-img-input'].forEach(
@@ -7799,64 +7900,6 @@ const App = (function () {
     body.innerHTML = `<div class="link-title">${escHtml(title)}</div><div class="link-url"><svg class="link-url-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>${escHtml(_shortUrl(url))}</span></div>`;
     wrap.appendChild(body);
     wrap.addEventListener('dblclick', () => window.open(url, '_blank'));
-    el.insertBefore(wrap, el.querySelector('.element-toolbar'));
-    return el;
-  }
-
-  // ── VIDÉO ─────────────────────────────────────────────────────────────────
-  function createVideoElement(src, isEmbed, x, y, w, h) {
-    w = w || 360;
-    h = h || 202;
-    const el = makeElement('video', x || 100, y || 100, w, h);
-    el.dataset.savedata = JSON.stringify({ src, isEmbed });
-
-    const wrap = document.createElement('div');
-    wrap.className = 'el-video';
-    wrap.style.position = 'relative';
-    wrap.style.cursor = 'pointer';
-
-    // Image de fond statique
-    const img = document.createElement('img');
-    img.style.width = '100%';
-    img.style.height = '100%';
-    img.style.objectFit = 'cover';
-    img.style.display = 'block';
-    img.style.pointerEvents = 'none';
-
-    if (isEmbed) {
-      const ytMatch = src.match(/youtube\.com\/embed\/([^&\s?]+)/);
-      if (ytMatch) {
-        img.src = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
-      } else {
-        img.style.background = '#111';
-      }
-    } else {
-      img.style.background = '#111';
-    }
-
-    // Indicateur Play central (styles codés en dur pour s'affranchir d'éditer le CSS)
-    const hint = document.createElement('div');
-    hint.style.position = 'absolute';
-    hint.style.top = '50%';
-    hint.style.left = '50%';
-    hint.style.transform = 'translate(-50%,-50%)';
-    hint.style.width = '44px';
-    hint.style.height = '44px';
-    hint.style.background = 'rgba(255,255,255,0.18)';
-    hint.style.borderRadius = '50%';
-    hint.style.backdropFilter = 'blur(2px)';
-    hint.style.pointerEvents = 'none';
-    hint.innerHTML =
-      '<div style="position:absolute;top:50%;left:50%;transform:translate(-38%,-50%);width:0;height:0;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:15px solid rgba(255,255,255,0.9);"></div>';
-
-    wrap.appendChild(img);
-    wrap.appendChild(hint);
-
-    wrap.addEventListener('dblclick', (e) => {
-      e.stopPropagation();
-      openVideoLightbox(src, isEmbed);
-    });
-
     el.insertBefore(wrap, el.querySelector('.element-toolbar'));
     return el;
   }
@@ -7932,7 +7975,7 @@ const App = (function () {
               true
             );
           }
-          pushHistory();
+          syncDomToDataset();
         });
       } else {
         const beforeSavedata = target.dataset.savedata || '';
@@ -7973,7 +8016,7 @@ const App = (function () {
         if (typeof Collab !== 'undefined' && Collab.isActive()) {
           Collab.syncElementData(newEl.dataset.id, newEl.dataset.savedata);
         }
-        pushHistory();
+        syncDomToDataset();
       }
       e.target.value = '';
       return;
@@ -8004,7 +8047,7 @@ const App = (function () {
           if (el) {
             pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
           }
-          pushHistory();
+          syncDomToDataset();
         });
       } else {
         const icns = {
@@ -8036,7 +8079,7 @@ const App = (function () {
               _collabSyncCreatedEl(targetEl);
             }
             pushAction({ type: 'create', elId: targetEl.dataset.id, after: _captureElState(targetEl) });
-            pushHistory();
+            syncDomToDataset();
           });
         })(fileEl, file.name, size, icon);
       }
@@ -8171,6 +8214,7 @@ const App = (function () {
     return el;
   }
 
+  // ── VIDÉO ─────────────────────────────────────────────────────────────────
   function createVideoElement(src, isEmbed, x, y, w, h) {
     w = w || 360;
     h = h || 202;
@@ -8179,6 +8223,7 @@ const App = (function () {
     const wrap = document.createElement('div');
     wrap.className = 'el-video';
     wrap.style.position = 'relative';
+    wrap.style.cursor = 'pointer';
 
     // Remplacement strict par une image
     const img = document.createElement('img');
@@ -8274,7 +8319,7 @@ const App = (function () {
         animateRemove(e, () => {
           done++;
           if (done === toDelete.length) {
-            pushHistory();
+            syncDomToDataset();
           }
         });
       });
@@ -8289,7 +8334,7 @@ const App = (function () {
       removeCaptionsForEl(el);
       selectedEl = null;
       animateRemove(el, () => {
-        pushHistory();
+        syncDomToDataset();
       });
     }
   }
@@ -8320,7 +8365,7 @@ const App = (function () {
       });
       if (dupIds.length) {
         pushAction({ type: 'groupCreate', elId: dupIds, after: dupAfters });
-        pushHistory();
+        syncDomToDataset();
       }
       return;
     }
@@ -8340,7 +8385,7 @@ const App = (function () {
       if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(newEl);
       selectEl(newEl);
       pushAction({ type: 'create', elId: newEl.dataset.id, after: _captureElState(newEl) });
-      pushHistory();
+      syncDomToDataset();
     }
   }
 
@@ -8501,7 +8546,7 @@ const App = (function () {
               before: { data: oldSrc, w: oldW, h: oldH },
               after: { data: src, w: currentW, h: newH },
             });
-            pushHistory();
+            syncDomToDataset();
             // Collab: sync la nouvelle image et les nouvelles dimensions
             if (typeof Collab !== 'undefined' && Collab.isActive()) {
               Collab.syncElementData(replaceTargetEl.dataset.id, src);
@@ -8554,7 +8599,7 @@ const App = (function () {
     }
     if (connections.length) {
       pushAction({ type: 'connection', connections });
-      pushHistory();
+      syncDomToDataset();
     }
   }
 
@@ -8586,7 +8631,7 @@ const App = (function () {
       svg.remove();
     });
     pushAction({ type: 'disconnection', connections });
-    pushHistory();
+    syncDomToDataset();
   }
 
   function createConnection(fromId, toId, connId) {
@@ -8737,7 +8782,7 @@ const App = (function () {
           Collab.syncConnection(connId, fromId, toId);
         }
         pushAction({ type: 'connection', connections: [{ fromId, toId, connId }] });
-        pushHistory();
+        syncDomToDataset();
       }
     });
   }
@@ -8816,13 +8861,10 @@ const App = (function () {
       if (toolbar && sbText && sbText.classList.contains('sb-disabled')) {
         toolbar.style.display = '';
       }
-      _keyObjectMode = false;
       if (_keyObject) {
         _keyObject.classList.remove('key-object');
         _keyObject = null;
       }
-      const toggle = document.getElementById('key-object-toggle');
-      if (toggle) toggle.classList.remove('active');
     }
   }
 
@@ -8889,7 +8931,7 @@ const App = (function () {
     });
     const _alignLabels = { 'left': 'Aligné à gauche', 'center-h': 'Centré horizontalement', 'right': 'Aligné à droite', 'top': 'Aligné en haut', 'center-v': 'Centré verticalement', 'bottom': 'Aligné en bas' };
     pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr, detail: _alignLabels[type] || 'Alignement' });
-    pushHistory();
+    syncDomToDataset();
     updateMultiResizeHandle();
   }
 
@@ -8962,7 +9004,7 @@ const App = (function () {
       afterArr.push({ x: newX, y: newY });
     });
     pushAction({ type: 'groupMove', elId: ids, before: beforeArr, after: afterArr, detail: axis === 'h' ? 'Distribution horizontale' : 'Distribution verticale' });
-    pushHistory();
+    syncDomToDataset();
     updateMultiResizeHandle();
   }
 
@@ -9038,7 +9080,7 @@ const App = (function () {
         Collab.syncCaptionDelete(capId);
       }
       cap.remove();
-      pushHistory();
+      syncDomToDataset();
     } else if (cap.dataset.isNew) {
       // Nouvelle caption avec texte → captionCreate
       delete cap.dataset.isNew;
@@ -9050,7 +9092,7 @@ const App = (function () {
       if (typeof Collab !== 'undefined' && Collab.isActive() && capId) {
         Collab.syncCaption(capId, parentId, x, y, width, currentText);
       }
-      pushHistory();
+      syncDomToDataset();
     } else if (currentText !== _capValueOnFocus) {
       // Edition texte existant → captionEdit
       pushAction({
@@ -9062,7 +9104,7 @@ const App = (function () {
       if (typeof Collab !== 'undefined' && Collab.isActive() && capId) {
         Collab.syncCaption(capId, parentId, x, y, width, currentText);
       }
-      pushHistory();
+      syncDomToDataset();
     }
   }
   function applyTextFont(family, preview) {
@@ -9752,7 +9794,7 @@ const App = (function () {
         after: { data: afterHtml, style: ta.style.cssText },
         detail: type === 'bullet' ? 'Liste à puces' : 'Todo liste',
       });
-      pushHistory();
+      syncDomToDataset();
     }
 
     _updateListBtns();
@@ -9790,7 +9832,7 @@ const App = (function () {
     if (!textEditTarget || _styleEditBeforeHtml === null) {
       if (!isCollab) {
         clearTimeout(_saveStyleTimer);
-        _saveStyleTimer = setTimeout(() => { saveCurrentBoard(); pushHistory(); }, 300);
+        _saveStyleTimer = setTimeout(() => { saveCurrentBoard(); syncDomToDataset(); }, 300);
       }
       return;
     }
@@ -9809,14 +9851,14 @@ const App = (function () {
       pushAction(actionObj);
       _styleEditBeforeHtml = afterHtml;
       _styleEditBeforeStyle = afterStyle;
-      pushHistory();
+      syncDomToDataset();
     }
     if (isCollab) {
       saveCurrentBoard();
       return;
     }
     clearTimeout(_saveStyleTimer);
-    _saveStyleTimer = setTimeout(() => { saveCurrentBoard(); pushHistory(); }, 300);
+    _saveStyleTimer = setTimeout(() => { saveCurrentBoard(); syncDomToDataset(); }, 300);
   }
 
   function ctxBringFront() {
@@ -9829,7 +9871,7 @@ const App = (function () {
         before: { z: oldZ },
         after: { z: nextZ },
       });
-      pushHistory();
+      syncDomToDataset();
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementZ(ctxTargetEl.dataset.id, nextZ);
       }
@@ -9846,7 +9888,7 @@ const App = (function () {
         before: { z: oldZ },
         after: { z: 1 },
       });
-      pushHistory();
+      syncDomToDataset();
       if (typeof Collab !== 'undefined' && Collab.isActive()) {
         Collab.syncElementZ(ctxTargetEl.dataset.id, 1);
       }
@@ -9889,7 +9931,7 @@ const App = (function () {
           elId: copies.map((e) => e.dataset.id),
           after: copies.map((e) => _captureElState(e)),
         });
-        pushHistory();
+        syncDomToDataset();
       }
     } else {
       const s = {
@@ -9913,7 +9955,7 @@ const App = (function () {
         if (typeof Collab !== 'undefined' && Collab.isActive()) _collabSyncCreatedEl(el);
         selectEl(el);
         pushAction({ type: 'create', elId: el.dataset.id, after: _captureElState(el) });
-        pushHistory();
+        syncDomToDataset();
       }
     }
     hideContextMenu();
@@ -10376,7 +10418,7 @@ const App = (function () {
     renderPanelLib();
     if (removed.length) {
       pushAction({ type: 'libDelete', before: removed });
-      pushHistory();
+      syncDomToDataset();
     }
   }
 
@@ -11358,13 +11400,20 @@ const App = (function () {
       board.savedAt = Date.now();
       saveBoards();
       if (window._fbDb) {
-        const payload = { name: board.name, elements: board.elements, savedAt: board.savedAt };
+        // Comme saveCurrentBoard et _syncBoardElements : on écrit l'URL Storage de
+        // l'image, jamais son base64, sinon l'écriture Firebase est trop grosse.
+        const fbElements = board.elements.map((el) =>
+          el.type === 'image'
+            ? Object.assign({}, el, { data: el.storageUrl || '', origData: '' })
+            : el
+        );
+        const payload = { name: board.name, elements: fbElements, savedAt: board.savedAt };
         if (board.thumbnail) payload.thumbnail = board.thumbnail;
         // update() et pas set() : set() écraserait les enfants frères activity/ et snapshotUrl
         window._fbDb
           .ref('boards/' + boardId)
           .update(payload)
-          .catch((e) => console.warn('Firebase sync error:', e));
+          .catch(() => {});
       }
     }
   }

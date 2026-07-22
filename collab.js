@@ -15,6 +15,12 @@ window.Collab = (function () {
   let _boardId = null;
   let _listeners = []; // {ref, event, cb} pour cleanup
   let _lockCache = {}; // elId -> userId (miroir local)
+  // Acquisitions de lock en vol (transaction Firebase non encore résolue).
+  // acquireLock est asynchrone : si releaseLock survient avant sa résolution
+  // (drag ou resize rapide, mouseup avant le retour réseau), on note la demande
+  // ici pour relâcher le lock dès qu'il est réellement posé — sinon il reste
+  // orphelin et bloque tous les autres collaborateurs sur cet élément.
+  let _pendingLock = {}; // elId -> { release: bool }
   let _elementVersions = {}; // elId -> version
   let _remoteCursors = {}; // userId -> {el, targetX, targetY, curX, curY, color, visible}
   let _remoteSelections = {}; // userId -> {elIds:[], color}
@@ -558,6 +564,7 @@ window.Collab = (function () {
     if (_lockCache[elementId] === _userId) return Promise.resolve(true);
 
     const lockRef = _sessionRef.child('locks/' + elementId);
+    _pendingLock[elementId] = { release: false };
     return lockRef
       .transaction((current) => {
         if (current === null) {
@@ -567,18 +574,37 @@ window.Collab = (function () {
         return; // abort — quelqu'un d'autre a le lock
       })
       .then((result) => {
+        const pending = _pendingLock[elementId];
+        delete _pendingLock[elementId];
         if (result.committed) {
-          lockRef.onDisconnect().remove();
           _lockCache[elementId] = _userId;
+          // Libération demandée pendant l'acquisition (mouseup avant la résolution
+          // de la transaction) : le lock vient d'être posé, on le retire aussitôt
+          // via la ref capturée, sans dépendre de l'état de session courant.
+          if (pending && pending.release) {
+            lockRef.remove().catch(() => {});
+            delete _lockCache[elementId];
+            return false;
+          }
+          lockRef.onDisconnect().remove();
           return true;
         }
         return false;
       })
-      .catch(() => false);
+      .catch(() => {
+        delete _pendingLock[elementId];
+        return false;
+      });
   }
 
   function releaseLock(elementId) {
     if (!_active || !_sessionRef) return;
+    // Acquisition encore en vol : demander la libération à sa résolution, sinon le
+    // lock serait posé juste après ce release et resterait orphelin.
+    if (_pendingLock[elementId]) {
+      _pendingLock[elementId].release = true;
+      return;
+    }
     if (_lockCache[elementId] !== _userId) return;
     _sessionRef.child('locks/' + elementId).remove();
     _sessionRef
@@ -590,6 +616,10 @@ window.Collab = (function () {
 
   function releaseAllMyLocks() {
     if (!_sessionRef) return;
+    // Acquisitions en vol comprises : les relâcher dès qu'elles se posent.
+    Object.keys(_pendingLock).forEach((elId) => {
+      _pendingLock[elId].release = true;
+    });
     Object.keys(_lockCache).forEach((elId) => {
       if (_lockCache[elId] === _userId) {
         _sessionRef.child('locks/' + elId).remove();

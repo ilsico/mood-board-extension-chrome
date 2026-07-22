@@ -5350,6 +5350,11 @@ const App = (function () {
       // Collab: acquérir le lock de manière optimiste au premier mouvement
       let _collabLockAcquired = false;
       let _collabLockPending = false;
+      // Passe à true quand le drag se termine. Si le lock est encore en vol à ce
+      // moment (drag très rapide, mouseup avant le retour réseau), sa finalisation
+      // — sync de la position finale + libération — est reportée dans le .then de
+      // l'acquisition, une fois qu'on sait si le lock est acquis ou refusé.
+      let _dragEnded = false;
 
       function doDuplicate() {
         if (duplicated) return;
@@ -5487,6 +5492,16 @@ const App = (function () {
             _collabLockPending = false;
             if (ok) {
               _collabLockAcquired = true;
+              // Drag déjà terminé (mouseup avant la résolution du lock) : finaliser
+              // ici, maintenant que le lock est confirmé acquis. Sinon le lock
+              // resterait pris (il bloquerait les autres) et la position finale ne
+              // serait jamais synchronisée.
+              if (_dragEnded && !duplicated) {
+                const fx = parseFloat(dragEl.style.left) || 0;
+                const fy = parseFloat(dragEl.style.top) || 0;
+                Collab.syncElementPosition(dragEl.dataset.id, fx, fy, true);
+                Collab.releaseLock(dragEl.dataset.id);
+              }
             } else {
               // Lock échoué: annuler le drag
               dragActive = false;
@@ -5584,6 +5599,7 @@ const App = (function () {
 
       const onUp = () => {
         dragActive = false;
+        _dragEnded = true;
         document.body.classList.remove('is-dragging-el'); // <-- RETRAIT ICI
         dragEl.classList.remove('is-dragging');
         dragEl.classList.remove('is-solo-dragging');
@@ -5658,7 +5674,11 @@ const App = (function () {
             delete dragEl._collabPendingCreate;
             _collabSyncCreatedEl(dragEl);
           }
-          // Collab: sync position finale + libérer le lock (seulement pour un move, pas une duplication)
+          // Collab: sync position finale + libérer le lock (move seul, pas duplication).
+          // Lock confirmé acquis : on finalise ici. S'il est encore en vol, la
+          // finalisation est reportée dans le .then de l'acquisition (voir plus haut),
+          // pour ne pas relâcher un lock non posé ni synchroniser une position qui
+          // serait annulée en cas d'échec de l'acquisition.
           if (
             !duplicated &&
             typeof Collab !== 'undefined' &&

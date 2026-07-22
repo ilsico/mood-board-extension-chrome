@@ -1628,7 +1628,13 @@ const App = (function () {
     input.focus();
     input.select();
 
+    // Escape et Enter/blur retirent tous deux l'input, ce qui déclenche un blur :
+    // ce drapeau garantit qu'une seule des deux issues s'applique (sinon Escape
+    // annulerait puis le blur rappellerait save() et persisterait quand même la saisie).
+    let _settled = false;
     const save = () => {
+      if (_settled) return;
+      _settled = true;
       const val = input.value.trim();
       const name = val || b.name;
       if (val && val !== b.name) {
@@ -1640,6 +1646,11 @@ const App = (function () {
       }
       titleEl.textContent = name;
     };
+    const cancel = () => {
+      if (_settled) return;
+      _settled = true;
+      titleEl.textContent = b.name || '';
+    };
 
     input.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -1648,7 +1659,8 @@ const App = (function () {
         save();
       }
       if (e.key === 'Escape') {
-        titleEl.textContent = b.name || '';
+        e.preventDefault();
+        cancel();
       }
     });
     input.addEventListener('blur', save);
@@ -11468,6 +11480,34 @@ const App = (function () {
   function _collabMergeElements(boardId, elements) {
     const board = boards.find((b) => b.id === boardId);
     if (board) {
+      // Reporter storageUrl/storageSig des images inchangées vers les éléments
+      // fusionnés. Ceux-ci portent le base64 dans .data mais aucun storageUrl :
+      // sans ce report, l'écriture Firebase plus bas mettrait data:'' et un board
+      // déjà partagé perdrait les images de son lien jusqu'au prochain partage.
+      // L'empreinte est fiable ici : le base64 fusionné vient du même _imgStore que
+      // celui du partage. On ne reporte que si elle correspond — une image modifiée
+      // pendant la session sera renvoyée au prochain clic sur Partager plutôt que
+      // d'afficher un ancien contenu.
+      const _prevImg = {};
+      (board.elements || []).forEach((el) => {
+        if (el.type === 'image' && el.storageUrl && el.storageSig) {
+          _prevImg[el.id] = { url: el.storageUrl, sig: el.storageSig };
+        }
+      });
+      elements.forEach((el) => {
+        if (el.type !== 'image') return;
+        const prev = _prevImg[el.id];
+        if (
+          prev &&
+          typeof el.data === 'string' &&
+          el.data.startsWith('data:') &&
+          _imgSignature(el.data) === prev.sig
+        ) {
+          el.storageUrl = prev.url;
+          el.storageSig = prev.sig;
+        }
+      });
+
       board.elements = elements;
       board.savedAt = Date.now();
       saveBoards();

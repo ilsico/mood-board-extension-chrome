@@ -31,24 +31,6 @@ async function getBoardsFromDB() {
   }
 }
 
-// Attend la fin réelle de la transaction : le service worker MV3 peut être arrêté
-// dès que la fonction rend la main, ce qui perdrait une écriture non committée.
-async function saveBoardsToDB(boards) {
-  try {
-    const db = await getDB();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put(boards, 'mb_boards');
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
-    });
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
-
 // ── RECONSTRUCTION COMPLÈTE DU MENU ──────────────────────────────────────────
 async function rebuildMenus(boards) {
   if (rebuilding) return;

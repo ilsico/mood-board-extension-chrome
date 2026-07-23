@@ -2162,13 +2162,43 @@ const App = (function () {
 
   function deleteBoard(id) {
     if (!id) return;
-    const board = boards.find((b) => b.id === id);
     boards = boards.filter((b) => b.id !== id);
     saveBoards();
     renderBoardsWheel();
+    // Nettoyage Firebase : sans ça, un board « supprimé » restait lisible en base et
+    // via son lien de partage. Best-effort (.catch) — la copie locale (IndexedDB)
+    // reste la référence, ces suppressions ne touchent que le distant.
+    if (window._fbDb) {
+      window._fbDb.ref('boards/' + id).remove().catch(() => {});
+      if (_currentUser) {
+        window._fbDb.ref('users/' + _currentUser.uid + '/boards/' + id).remove().catch(() => {});
+        window._fbDb
+          .ref('users/' + _currentUser.uid + '/pinned_boards/' + id)
+          .remove()
+          .catch(() => {});
+      }
+    }
+    _deleteBoardStorage(id);
     if (typeof Collab !== 'undefined') {
       Collab.deleteSession(id);
     }
+  }
+
+  // Supprime les fichiers Storage d'un board : images partagées et snapshot
+  // (boards/{id}/…) et images de session collab (collabImages/{id}/…). listAll puis
+  // delete, best-effort : si ça échoue, seul le coût de stockage subsiste — les
+  // fichiers ne sont de toute façon plus atteignables une fois boards/{id} effacé.
+  function _deleteBoardStorage(id) {
+    if (!window._fbStorage) return;
+    ['boards/' + id, 'collabImages/' + id].forEach((path) => {
+      window._fbStorage
+        .ref(path)
+        .listAll()
+        .then((res) => {
+          res.items.forEach((item) => item.delete().catch(() => {}));
+        })
+        .catch(() => {});
+    });
   }
 
   function renameBoardPrompt(id) {
